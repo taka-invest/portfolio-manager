@@ -752,14 +752,22 @@
         </select>
       </div>
     </div>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+      <span style="font-size:12px;color:var(--muted);">入力通貨：</span>
+      <div style="display:flex;background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:2px;gap:2px;">
+        <button id="price-cur-jpy" onclick="setPriceCurrency('jpy')" style="padding:3px 12px;border-radius:4px;border:none;cursor:pointer;font-size:12px;font-weight:600;background:var(--accent);color:#fff;">¥ 円</button>
+        <button id="price-cur-usd" onclick="setPriceCurrency('usd')" style="padding:3px 12px;border-radius:4px;border:none;cursor:pointer;font-size:12px;font-weight:600;background:transparent;color:var(--muted);">$ ドル</button>
+      </div>
+      <span id="price-rate-hint" style="font-size:11px;color:var(--muted);"></span>
+    </div>
     <div class="field-row">
       <div class="field">
-        <label>平均取得単価 (¥)</label>
-        <input type="number" id="f-buy-price" placeholder="12357" step="1">
+        <label id="f-buy-price-label">平均取得単価 (¥)</label>
+        <input type="number" id="f-buy-price" placeholder="12357" step="0.01">
       </div>
       <div class="field">
-        <label>現在値 (¥)</label>
-        <input type="number" id="f-cur-price" placeholder="22918" step="1">
+        <label id="f-cur-price-label">現在値 (¥)</label>
+        <input type="number" id="f-cur-price" placeholder="22918" step="0.01">
       </div>
     </div>
     <div class="field-row">
@@ -1132,6 +1140,7 @@ function fmtPnl(p) {
 // ── Modal ──────────────────────────────────────────
 function openModal(id) {
   editId = id || null;
+  setPriceCurrency('jpy'); // デフォルトは円入力にリセット
   document.getElementById('modal-title').textContent = id ? '銘柄を編集' : '銘柄を追加';
   if (id) {
     const p = positions.find(x => x.id === id);
@@ -1151,11 +1160,31 @@ function openModal(id) {
 function closeModal() { document.getElementById('modal').style.display = 'none'; editId = null; }
 function closeModalOutside(e) { if (e.target.id === 'modal') closeModal(); }
 
+let modalPriceCurrency = 'jpy'; // 'jpy' or 'usd'
+
+function setPriceCurrency(cur) {
+  modalPriceCurrency = cur;
+  const rate = lastUsdJpy || 150;
+  document.getElementById('price-cur-jpy').style.background = cur === 'jpy' ? 'var(--accent)' : 'transparent';
+  document.getElementById('price-cur-jpy').style.color = cur === 'jpy' ? '#fff' : 'var(--muted)';
+  document.getElementById('price-cur-usd').style.background = cur === 'usd' ? 'var(--accent)' : 'transparent';
+  document.getElementById('price-cur-usd').style.color = cur === 'usd' ? '#fff' : 'var(--muted)';
+  const hint = cur === 'usd' ? `（1ドル = ${rate.toFixed(1)}円 で自動換算）` : '';
+  document.getElementById('price-rate-hint').textContent = hint;
+  document.getElementById('f-buy-price-label').textContent = cur === 'usd' ? '平均取得単価 ($)' : '平均取得単価 (¥)';
+  document.getElementById('f-cur-price-label').textContent = cur === 'usd' ? '現在値 ($)' : '現在値 (¥)';
+  document.getElementById('f-buy-price').placeholder = cur === 'usd' ? '77.73' : '12357';
+  document.getElementById('f-cur-price').placeholder = cur === 'usd' ? '108.03' : '22918';
+}
+
 function savePosition() {
   const ticker = document.getElementById('f-ticker').value.trim().toUpperCase();
   const layer = parseInt(document.getElementById('f-layer').value);
-  const buyPrice = parseFloat(document.getElementById('f-buy-price').value);
-  const curPrice = parseFloat(document.getElementById('f-cur-price').value);
+  const rate = lastUsdJpy || 150;
+  const rawBuy = parseFloat(document.getElementById('f-buy-price').value);
+  const rawCur = parseFloat(document.getElementById('f-cur-price').value);
+  const buyPrice = modalPriceCurrency === 'usd' ? Math.round(rawBuy * rate) : rawBuy;
+  const curPrice = modalPriceCurrency === 'usd' ? Math.round(rawCur * rate) : rawCur;
   const shares = parseFloat(document.getElementById('f-shares').value);
   const note = document.getElementById('f-note').value.trim();
 
