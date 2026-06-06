@@ -1397,10 +1397,17 @@ async function fetchFRED(seriesId, minVal, maxVal) {
 
 async function fetchSentiment() {
   try {
-    // CNN Fear & Greed（corsproxy.io経由でHTTPS化）
+    // CNN Fear & Greed（複数プロキシ自動フォールバック）
     const fgUrl = 'https://production.dataviz.cnn.io/index/fearandgreed/graphdata/';
-    const fgProxied = 'https://corsproxy.io/?' + encodeURIComponent(fgUrl);
-    const fgRes = await fetch(fgProxied, { cache: 'no-cache' });
+    const fgProxies = [
+      'https://api.allorigins.win/raw?url=' + encodeURIComponent(fgUrl),
+      'https://corsproxy.io/?' + encodeURIComponent(fgUrl),
+      'https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(fgUrl),
+    ];
+    let fgRes = null;
+    for (const p of fgProxies) {
+      try { const r = await fetch(p, { signal: AbortSignal.timeout(8000) }); if (r.ok) { fgRes = r; break; } } catch(e) {}
+    }
     if (fgRes.ok) {
       const fgData = await fgRes.json();
       const fg = Math.round(fgData.fear_and_greed?.score ?? fgData.fear_and_greed_historical?.data?.[0]?.x ?? 0);
