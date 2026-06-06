@@ -1311,22 +1311,19 @@ function setFetchStatus(msg, color) {
   el.style.color = color;
 }
 
-// ── Financial Modeling Prep（FMP）VIX / VXN 取得 ──
-// CORS対応済み・プロキシ不要・無料枠250リクエスト/日
-// https://financialmodelingprep.com/register で無料登録
+// ── Yahoo Finance 経由 VIX / VXN 取得（corsproxy.io）──
+// GitHub Pages（HTTPS）から動作。プロキシ不要・APIキー不要
 async function fetchVixQuote(symbol) {
-  const key = localStorage.getItem('pm_fmp_key') || '';
-  if (!key) throw new Error('APIキー未設定');
   // ^VIX → %5EVIX のようにURLエンコード
   const encoded = encodeURIComponent(symbol);
-  const url = `https://financialmodelingprep.com/api/v3/quote/${encoded}?apikey=${key}`;
-  const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encoded}?interval=1d&range=1d`;
+  const proxyUrl = 'https://corsproxy.io/?' + encodeURIComponent(url);
+  const res = await fetch(proxyUrl, { signal: AbortSignal.timeout(12000) });
   if (!res.ok) throw new Error('HTTP ' + res.status);
   const data = await res.json();
-  if (!Array.isArray(data) || data.length === 0) throw new Error('データなし');
-  const price = parseFloat(data[0].price);
-  if (isNaN(price) || price <= 0) throw new Error('無効なデータ');
-  return price;
+  const price = data?.chart?.result?.[0]?.meta?.regularMarketPrice;
+  if (!price || isNaN(price) || price <= 0) throw new Error('データなし');
+  return parseFloat(price);
 }
 
 // ── 市場センチメント（F&G + VIX） ──────────────────
@@ -1392,8 +1389,10 @@ async function fetchFRED(seriesId, minVal, maxVal) {
 
 async function fetchSentiment() {
   try {
-    // CNN Fear & Greed（非公式エンドポイント）
-    const fgRes = await fetch('https://production.dataviz.cnn.io/index/fearandgreed/graphdata/', { cache: 'no-cache' });
+    // CNN Fear & Greed（corsproxy.io経由でHTTPS化）
+    const fgUrl = 'https://production.dataviz.cnn.io/index/fearandgreed/graphdata/';
+    const fgProxied = 'https://corsproxy.io/?' + encodeURIComponent(fgUrl);
+    const fgRes = await fetch(fgProxied, { cache: 'no-cache' });
     if (fgRes.ok) {
       const fgData = await fgRes.json();
       const fg = Math.round(fgData.fear_and_greed?.score ?? fgData.fear_and_greed_historical?.data?.[0]?.x ?? 0);
