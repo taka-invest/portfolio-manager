@@ -1311,19 +1311,27 @@ function setFetchStatus(msg, color) {
   el.style.color = color;
 }
 
-// ── Yahoo Finance 経由 VIX / VXN 取得（corsproxy.io）──
-// GitHub Pages（HTTPS）から動作。プロキシ不要・APIキー不要
+// ── Yahoo Finance 経由 VIX / VXN 取得（複数プロキシ自動フォールバック）──
 async function fetchVixQuote(symbol) {
-  // ^VIX → %5EVIX のようにURLエンコード
   const encoded = encodeURIComponent(symbol);
   const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encoded}?interval=1d&range=1d`;
-  const proxyUrl = 'https://corsproxy.io/?' + encodeURIComponent(url);
-  const res = await fetch(proxyUrl, { signal: AbortSignal.timeout(12000) });
-  if (!res.ok) throw new Error('HTTP ' + res.status);
-  const data = await res.json();
-  const price = data?.chart?.result?.[0]?.meta?.regularMarketPrice;
-  if (!price || isNaN(price) || price <= 0) throw new Error('データなし');
-  return parseFloat(price);
+  const proxies = [
+    'https://api.allorigins.win/raw?url=' + encodeURIComponent(url),
+    'https://corsproxy.io/?' + encodeURIComponent(url),
+    'https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(url),
+  ];
+  let lastErr;
+  for (const proxyUrl of proxies) {
+    try {
+      const res = await fetch(proxyUrl, { signal: AbortSignal.timeout(10000) });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const data = await res.json();
+      const price = data?.chart?.result?.[0]?.meta?.regularMarketPrice;
+      if (!price || isNaN(price) || price <= 0) throw new Error('データなし');
+      return parseFloat(price);
+    } catch(e) { lastErr = e; }
+  }
+  throw lastErr;
 }
 
 // ── 市場センチメント（F&G + VIX） ──────────────────
