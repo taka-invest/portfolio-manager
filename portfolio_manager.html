@@ -1049,11 +1049,17 @@ function render() {
       ? `<div class="earnings-cell${earningsInfo.urgent ? ' earnings-urgent' : ''}">${earningsInfo.label}</div>`
       : '';
 
+    const tech = technicalsCache[p.ticker];
+    const techHtml = tech
+      ? `<div style="margin-top:3px;">${rsiChip(tech.rsi)}${maDevChip(tech.maDev)}</div>`
+      : '';
+
     return `<tr>
       <td>
         <div class="ticker-cell">${p.ticker}</div>
         <div class="note-cell">${p.note || ''}</div>
         ${earningsHtml}
+        ${techHtml}
       </td>
       <td><span class="badge ${p.layer === 1 ? 'badge-l1' : 'badge-l2'}">L${p.layer}</span></td>
       <td>
@@ -1266,7 +1272,8 @@ async function fetchPrices() {
   save();
   render();
   btn.disabled = false;
-  fetchEarnings(); // 決算日を非同期で取得（24時間キャッシュ）
+  fetchEarnings();    // 決算日を非同期で取得（24時間キャッシュ）
+  fetchAllTechnicals(); // RSI・MA乖離率を非同期で取得
 
   if (failed.length === 0) {
     const now = new Date().toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
@@ -1274,6 +1281,89 @@ async function fetchPrices() {
   } else {
     setFetchStatus(`⚠️ ${updated}件成功 / ${failed.join(',')} 失敗`, 'var(--yellow)');
   }
+}
+
+// ── テクニカル指標（RSI14・MA20乖離率） ──────────────
+// キャッシュキー: pm_technicals = { PLTR: { rsi: 72, maDev: 18.5, t: timestamp }, ... }
+// TTL: 4時間
+let technicalsCache = JSON.parse(localStorage.getItem('pm_technicals') || '{}');
+
+function calcRSI(closes, period = 14) {
+  if (closes.length < period + 1) return null;
+  let gains = 0, losses = 0;
+  for (let i = closes.length - period; i < closes.length; i++) {
+    const diff = closes[i] - closes[i - 1];
+    if (diff > 0) gains += diff; else losses -= diff;
+  }
+  const avgGain = gains / period;
+  const avgLoss = losses / period;
+  if (avgLoss === 0) return 100;
+  const rs = avgGain / avgLoss;
+  return Math.round(100 - 100 / (1 + rs));
+}
+
+function calcMADev(closes, period = 20) {
+  if (closes.length < period) return null;
+  const ma = closes.slice(-period).reduce((a, b) => a + b, 0) / period;
+  const last = closes[closes.length - 1];
+  return parseFloat(((last - ma) / ma * 100).toFixed(1));
+}
+
+async function fetchTechnicals(ticker) {
+  const TTL = 4 * 60 * 60 * 1000;
+  const cached = technicalsCache[ticker];
+  if (cached && Date.now() - cached.t < TTL) return cached;
+
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1d&range=3mo`;
+  const proxies = [
+    'https://api.allorigins.win/raw?url=' + encodeURIComponent(url),
+    'https://corsproxy.io/?' + encodeURIComponent(url),
+  ];
+  let closes = null;
+  for (const proxy of proxies) {
+    try {
+      const res = await fetch(proxy, { signal: AbortSignal.timeout(10000) });
+      if (!res.ok) continue;
+      const json = await res.json();
+      closes = json?.chart?.result?.[0]?.indicators?.quote?.[0]?.close?.filter(v => v != null);
+      if (closes && closes.length >= 20) break;
+    } catch(e) {}
+  }
+  if (!closes || closes.length < 20) return null;
+
+  const result = { rsi: calcRSI(closes), maDev: calcMADev(closes), t: Date.now() };
+  technicalsCache[ticker] = result;
+  localStorage.setItem('pm_technicals', JSON.stringify(technicalsCache));
+  return result;
+}
+
+async function fetchAllTechnicals() {
+  const tickers = [...new Set(positions.map(p => p.ticker))];
+  for (const ticker of tickers) {
+    await fetchTechnicals(ticker);
+    render(); // 1銘柄取得するたびに即時反映
+  }
+}
+
+function rsiChip(rsi) {
+  if (rsi === null || rsi === undefined) return '';
+  let color, label;
+  if (rsi >= 70)      { color = '#e55'; label = `RSI ${rsi} 🔴`; }
+  else if (rsi >= 60) { color = '#f90'; label = `RSI ${rsi} 🟡`; }
+  else if (rsi <= 30) { color = '#58f'; label = `RSI ${rsi} 🔵`; }
+  else                { color = 'var(--green)'; label = `RSI ${rsi}`; }
+  return `<span style="font-size:10px;color:${color};font-weight:600;margin-right:6px;">${label}</span>`;
+}
+
+function maDevChip(dev) {
+  if (dev === null || dev === undefined) return '';
+  const sign = dev >= 0 ? '+' : '';
+  let color;
+  if (dev >= 20)      color = '#e55';
+  else if (dev >= 10) color = '#f90';
+  else if (dev <= -10) color = '#58f';
+  else                color = 'var(--muted)';
+  return `<span style="font-size:10px;color:${color};font-weight:600;">MA乖離 ${sign}${dev}%</span>`;
 }
 
 // ── 決算日取得 ──────────────────────────────────────
