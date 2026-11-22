@@ -78,3 +78,29 @@ test('retains old data as reference, updates on refresh and handles format chang
   await expect(page.locator('#fg-status')).toContainText('古いデータ');
   await expect(page.locator('#fg-value')).toHaveText('22');
 });
+
+test('manual score is local-only, survives reload and never enters trading signals', async ({ page }) => {
+  await page.clock.setFixedTime(new Date('2026-11-22T12:00:00Z'));
+  const upstream = await mock(page);
+  upstream.status = 404;
+  await page.goto(url);
+  await page.locator('.fg-manual summary').click();
+  await page.locator('#fg-manual-score').fill('0');
+  await page.getByRole('button', { name: '参考値を保存' }).click();
+  await expect(page.locator('#fg-value')).toHaveText('0');
+  await expect(page.locator('#fg-label')).toHaveText('Extreme Fear');
+  await expect(page.locator('#fg-status')).toContainText('手動入力の参考値');
+  await expect(page.locator('#market-signal')).toContainText('VIX高（F&G利用不可）');
+  await expect(page.locator('#fg-chart')).toBeHidden();
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('pm_fg_manual_v1')).score)).toBe(0);
+  await page.reload();
+  await expect(page.locator('#fg-value')).toHaveText('0');
+  await expect(page.locator('#fg-status')).toContainText('手動入力の参考値');
+
+  upstream.status = 200;
+  await page.locator('.sentiment-panel').getByRole('button', { name: '🔄 更新' }).click();
+  await expect(page.locator('#fg-value')).toHaveText('22');
+  await expect(page.locator('#fg-status')).toHaveText('利用可');
+  await page.locator('#fg-manual-clear').click();
+  expect(await page.evaluate(() => localStorage.getItem('pm_fg_manual_v1'))).toBe(null);
+});
