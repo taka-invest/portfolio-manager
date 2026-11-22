@@ -296,7 +296,7 @@
         '。左メニュー「保有資産」のロット一覧から「編集」してください。対象資産は概算を表示していますが、売買計算は保留中です。' :
       !state.confirmed ? (dirty.has('cash-form') ?
         '現金を保存し、証券口座の残高と照合してから「実保有・現金を確認」を押してください。' :
-        '保有株数と現金を証券口座と照合したら「実保有・現金を確認」を押してください。対象資産は確認前の概算表示です。') :
+        '保有ロットと現金を入力し、証券口座と照合したら「実保有・現金を確認」を押してください。対象資産は確認前の概算表示です。') :
         '実保有・現金確認済み' + (marketConfirmed ? '' : '（株価・為替の鮮度は要確認）'));
     $('trust-status').dataset.warn = Boolean(storageError) || !state.confirmed;
     $('confirm-holdings').disabled = Boolean(storageError) || dirty.has('cash-form') || state.confirmed ||
