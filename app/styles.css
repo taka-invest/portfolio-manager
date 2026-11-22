@@ -201,3 +201,6 @@ body.light { color-scheme: light; }
   .pm-target-preview { padding: 12px; }
   .pm-ideal-card, .pm-trade-kpi { padding: 11px; }
 }
+
+/* Ideal preview status spans the entire four-column desktop summary. */
+.pm-ideal-summary > .pm-callout { grid-column: 1 / -1; margin: 0; }

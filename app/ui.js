@@ -307,7 +307,7 @@
       (limitedUntil > Date.now() ? ' ｜ API制限により再試行は ' + stamp(limitedUntil) + ' JST 以降' : '');
     updateDraftTargets();
     renderHoldings(out.assets);
-    renderOrders(out);
+    renderOrders(out, R.ideal(state, market));
     root.renderPerformance(S.read('pm_spy_return')?.pct ?? null);
   }
 
@@ -344,25 +344,43 @@
       }).join(''), '個別株や対象外の投信をロット単位で登録できます。');
   }
 
-  function renderOrders(out) {
+  function renderOrders(out, preview) {
+    // ② Ideal allocation is an independent, reference-only calculation.
+    // Confirmed broker/tax-lot fields are NOT required for this section.
+    if (preview.errors.length) {
+      $('ideal-summary').innerHTML = '<p class="pm-callout" data-warn="true">' +
+        escape('理想配分を計算できません：' + preview.errors.join(' ')) + '</p>';
+      $('ideal-table').innerHTML = '';
+    } else {
+      const stockBudget = preview.total * (100 - state.cashTarget) / 100;
+      const headline = [
+        ['対象資産総額', yen(preview.total), state.confirmed ? '保有株式＋対象現金' : '参考値（保有確認前）'],
+        ['目標株式枠', yen(stockBudget), '税引き前の理想額'],
+        ['目標現金', yen(preview.total * state.cashTarget / 100), pct(state.cashTarget)],
+        ['USD/JPY', number(preview.fx.rate, 4), preview.fx.date + ' 参考レート']
+      ];
+      const status = !state.confirmed
+        ? '参考計算です。保有ロット・現金の確認前でも目標金額と理想株数を表示します。売買指示ではありません。'
+        : '税引き前の理想配分です。実際の買付余力と注文株数は③で別途算出します。';
+      const unsaved = dirty.has('targets-form')
+        ? ' 目標比率の未保存変更は含まれません。「配分を保存」を押してください。' : '';
+      const notices = preview.warnings.length
+        ? ' ' + preview.warnings.join(' ') : '';
+      $('ideal-summary').innerHTML =
+        '<p class="pm-callout" role="status">' + escape(status + unsaved + notices) + '</p>' +
+        headline.map(([label, value, note]) =>
+          '<div class="pm-ideal-card"><small>' + label + '</small><strong>' + value +
+          '</strong><span>' + note + '</span></div>').join('');
+      $('ideal-table').innerHTML = V.ideal(preview);
+    }
+
+    // ③ Trade recommendations remain strictly gated on verified lots/cash,
+    // clean saved forms and valid quote/fx data.
     const errors = out.errors;
     if (errors.length) {
-      $('ideal-summary').innerHTML = '<p class="pm-callout" data-warn="true">対象資産総額・株価・為替・保有残高の確認が済むと理想株数を計算できます。</p>';
-      $('ideal-table').innerHTML = '';
       $('trade-board').innerHTML = '';
       $('allocation-charts').innerHTML = '';
     } else {
-      const stockBudget = out.total * (100 - state.cashTarget) / 100;
-      const headline = [
-        ['対象資産総額', yen(out.total), '保有株式＋対象現金'],
-        ['目標株式枠', yen(stockBudget), '税引き前の参考値'],
-        ['目標現金', yen(out.total * state.cashTarget / 100), pct(state.cashTarget)],
-        ['USD/JPY', number(out.fx.rate, 4), out.fx.date + ' 参考レート']
-      ];
-      $('ideal-summary').innerHTML = headline.map(([label, value, note]) =>
-        '<div class="pm-ideal-card"><small>' + label + '</small><strong>' + value +
-        '</strong><span>' + note + '</span></div>').join('');
-      $('ideal-table').innerHTML = V.ideal(out);
       $('trade-board').innerHTML = V.trades(out);
       $('allocation-charts').innerHTML = V.comparison(out, state);
     }
