@@ -139,3 +139,27 @@ test('fully satisfied target never unnecessarily sells PLTR', () => {
   assert.equal(out.sale.shares, 0);
   assert.ok(out.rows.every(r => r.qty === 0));
 });
+
+
+test('keyless FX endpoint provides timestamped quote; timestamp-free hourly fallback never authorizes staged trades', async () => {
+  const Market = require('../app/market.js');
+  const now = Date.now();
+  const spot = await Market.fetchFx(async url => {
+    assert.ok(url.endsWith('/rates'));
+    return { ok: true, json: async () => [
+      { currency: 'USD/JPY', bid: '159.40', ask: '159.42', timestamp: String(now) }
+    ] };
+  });
+  assert.equal(spot.kind, 'spot');
+  assert.ok(Math.abs(spot.rate - 159.41) < 0.000001);
+  assert.equal(Market.fxStatus(spot), 'ready');
+
+  const fallback = await Market.fetchFx(async url => {
+    if (url.endsWith('/rates')) throw new Error('quota');
+    if (url.includes('exchangerate.fun')) return { ok: true, json: async () =>
+      ({ base: 'USD', date: new Date().toISOString().slice(0, 10), rates: { JPY: 159.43 } }) };
+    throw new Error('unexpected');
+  });
+  assert.equal(fallback.kind, 'reference');
+  assert.ok(Stage.calc(state(), { ...market(), fx: fallback }, 1, NOW).errors.length);
+});
