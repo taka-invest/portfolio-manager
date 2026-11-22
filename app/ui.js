@@ -277,7 +277,7 @@
         '米国個別株 ＋ 対象現金' + (marketConfirmed ? ' ・実保有確認済み' : ' ・参考表示（売買計算は要確認）')],
       ['対象個別株', yen(equity), `${out.assets.length} 銘柄${marketConfirmed ? '' : ' ・参考表示'}`],
       ['既存現金', `${yen(state.cash.jpy)} / ${usd(state.cash.usd)}`, state.cash.extraIncluded ? '追加資金の別計上なし' : `未計上資金 ${yen(state.cash.extraJpy)}`],
-      ['USD/JPY', market.fx?.rate ? number(market.fx.rate, 4) : '—', market.fx?.date ? `ECB参考レート ・ ${market.fx.date}` : 'ECB参考レート（Frankfurter）']
+      ['USD/JPY', market.fx?.rate ? number(market.fx.rate, 4) : '—', market.fx?.date ? `${market.fx.source || 'ECB日次参考'} ・ ${market.fx.date}${market.fx.at ? ' / 取得 ' + stamp(market.fx.at) : ''}` : 'USD/JPY 未取得']
     ];
     $('summary-row').innerHTML = cards.map(([label, value, sub]) =>
       `<div class="summary-card"><div class="label">${label}</div><div class="value">${value}</div><div class="sub">${sub}</div></div>`).join('');
@@ -303,11 +303,12 @@
       state.positions.some(p => !D.readyLot(p)) ||
       (active.length === 0 && !(R.cashValue(state.cash, 1) > 0));
     $('market-status').textContent = updating ? '株価・為替を更新中…' :
-      `株価 Finnhub ｜ 為替 ECB・Frankfurter（日次参考） ${names[M.fxStatus(market.fx)]} ｜ 更新試行 ${stamp(lastAttempt)} JST` +
+      `株価 Finnhub ｜ 為替 ${market.fx?.source || '未取得'} ${names[M.fxStatus(market.fx)]} ｜ 更新試行 ${stamp(lastAttempt)} JST` +
       (limitedUntil > Date.now() ? ' ｜ API制限により再試行は ' + stamp(limitedUntil) + ' JST 以降' : '');
     updateDraftTargets();
     renderHoldings(out.assets);
     renderOrders(out, R.ideal(state, market));
+    root.PMStagedFunding?.render(state, market);
     root.renderPerformance(S.read('pm_spy_return')?.pct ?? null);
   }
 
@@ -672,6 +673,7 @@
     if (!localStorage.getItem(D.KEY) && ['pm_positions', 'pm_plans', 'pm_trade_log', 'pm_watchlist'].some(k => localStorage.getItem(k) != null)) {
       showNotice('旧ブラウザー保存を移行できます。「旧ブラウザーデータを確認」から差分を確認してください。');
     }
+    root.PMStagedFunding?.init();
     refreshPrices();
     setInterval(refreshPrices, 30 * 60 * 1000);
     setInterval(() => {
@@ -681,5 +683,5 @@
     }, 60 * 1000);
   }
 
-  root.PMApp = { init, state: () => state, commit, render, renderCompany, result, freshPrice, fxRate, refreshPrices, escape, id, showNotice };
+  root.PMApp = { init, state: () => state, market: () => market, commit, render, renderCompany, result, freshPrice, fxRate, refreshPrices, escape, id, showNotice };
 })(globalThis);
