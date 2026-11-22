@@ -3,7 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Portfolio Manager V2.3</title>
+<title>Portfolio Manager V2.4.1</title>
+<link rel="icon" type="image/svg+xml" href="./favicon.svg">
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   :root {
@@ -281,7 +282,7 @@
 <aside class="pm-side-nav" id="pm-side-nav" aria-label="Portfolio Managerのナビゲーション">
   <div class="pm-side-brand">
     <span class="pm-side-mark" aria-hidden="true">PM</span>
-    <span class="pm-side-brand-name"><strong>Portfolio Manager</strong><small>V2.4</small></span>
+    <span class="pm-side-brand-name"><strong>Portfolio Manager</strong><small>V2.4.1</small></span>
     <button type="button" id="pm-nav-close" class="pm-nav-close" aria-label="メニューを閉じる">×</button>
   </div>
   <nav class="pm-side-links" aria-label="主要機能">
@@ -304,7 +305,7 @@
   <div class="pm-top-inner">
     <div class="pm-top-identity">
       <button type="button" class="btn btn-ghost pm-mobile-trigger" id="pm-nav-open" aria-controls="pm-side-nav" aria-expanded="false" aria-label="メニューを開く">☰</button>
-      <div><strong>Portfolio Manager <span class="pm-muted">V2.4</span></strong><div class="pm-header-view" id="pm-current-page">ダッシュボード</div></div>
+      <div><strong>Portfolio Manager <span class="pm-muted">V2.4.1</span></strong><div class="pm-header-view" id="pm-current-page">ダッシュボード</div></div>
     </div>
     <button class="btn btn-ghost" id="theme-toggle" onclick="toggleTheme()" aria-label="テーマを切り替える">☀️</button>
   </div>
@@ -329,6 +330,13 @@
     </form>
     <details class="pm-card" id="data-settings">
       <summary>データ管理・取得設定</summary>
+<div class="pm-settings-source" id="pm-sentiment-settings"><strong>市場センチメントの許諾済み配信</strong>
+<label for="s-volatility-feed">VIX/VXNの配信JSONパス（このサイト内のみ）</label>
+<input type="text" id="s-volatility-feed" placeholder="./market-data/volatility.json" autocomplete="off">
+<label class="pm-check"><input id="s-fg-enabled" type="checkbox"> 許諾済みCNN Fear &amp; Greed配信を使用する（market-dataブランチ）</label>
+<button type="button" id="s-sentiment-save" class="btn btn-ghost" onclick="saveSentimentSettings()">配信設定を保存</button>
+<p id="s-sentiment-msg" class="pm-muted pm-small">未設定ではプロキシへ接続しません。数値は手動参考値のみ利用できます。</p>
+</div>
       <div class="pm-settings-grid">
         <div>
           <h3>ブラウザー保存・JSON</h3>
@@ -348,7 +356,7 @@
             <label>FMP APIキー（VIX・VXN用）<input type="password" id="s-fmp-key" autocomplete="off"></label>
           </div>
           <div class="pm-actions pm-spaced">
-            <button class="btn btn-ghost" onclick="PMApp.refreshPrices()">Finnhubキーを保存して更新</button>
+            <button class="btn btn-ghost" onclick="PMApp.refreshPrices({ force: true })">Finnhubキーを保存して更新</button>
             <button class="btn btn-ghost" onclick="saveFmpKey()">FMPキーを保存</button>
             <button class="btn btn-ghost" id="btn-jpy" onclick="setCurrency('jpy')">¥</button>
             <button class="btn btn-ghost" id="btn-usd" onclick="setCurrency('usd')">$</button>
@@ -444,22 +452,56 @@
       </button>
       <div class="ac-body">
       <div class="sentiment-grid">
-        <div class="sentiment-card">
-          <div class="s-label">Fear & Greed</div>
+        <div class="sentiment-card fg-panel">
+          <div class="s-label">CNN Fear &amp; Greed Index（0〜100）</div>
           <div class="s-value" id="fg-value">—</div>
-          <div class="s-sub" id="fg-label" style="color:var(--muted);">取得中…</div>
+          <div class="s-sub" id="fg-label">—</div>
+          <p id="fg-status" class="pm-muted pm-small" role="status">公開データを確認中…</p>
+          <p id="fg-asof" class="pm-muted pm-small"></p>
+          <p id="fg-attempt" class="pm-muted pm-small"></p>
+          <dl class="fg-comparisons">
+            <div><dt>前営業日</dt><dd id="fg-previous">—</dd></div>
+            <div><dt>1週間前</dt><dd id="fg-week">—</dd></div>
+            <div><dt>1か月前</dt><dd id="fg-month">—</dd></div>
+          </dl>
+          <div id="fg-range" class="pm-actions" role="group" aria-label="Fear &amp; Greed のグラフ期間">
+            <button type="button" class="btn btn-ghost" data-days="30" aria-pressed="true">1か月</button>
+            <button type="button" class="btn btn-ghost" data-days="90" aria-pressed="false">3か月</button>
+            <button type="button" class="btn btn-ghost" data-days="365" aria-pressed="false">1年</button>
+          </div>
+          <div id="fg-chart" hidden role="img" aria-label="Fear &amp; Greed の推移">
+            <svg viewBox="0 0 312 130" width="100%" height="auto" aria-hidden="true">
+              <path d="M34 8H300 M34 62H300 M34 116H300" fill="none" stroke="var(--border)"/>
+              <g fill="var(--muted)" font-size="10"><text x="6" y="12">100</text><text x="11" y="66">50</text><text x="16" y="120">0</text></g>
+              <polyline id="fg-line" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round"/>
+            </svg>
+          </div>
+          <p id="fg-chart-range" class="pm-muted pm-small" hidden></p>
+          <p id="fg-chart-empty" class="pm-muted pm-small">表示できる履歴がありません。</p>
+          <details class="fg-manual">
+            <summary>自動取得できない場合：参考値を手動登録</summary>
+            <form id="fg-manual-form" class="pm-actions">
+              <label for="fg-manual-score">CNN公式ページで確認したスコア（0〜100）
+                <input id="fg-manual-score" type="number" min="0" max="100" step="0.1" inputmode="decimal" required>
+              </label>
+              <button type="submit" class="btn btn-ghost">参考値を保存</button>
+              <button type="button" id="fg-manual-clear" class="btn btn-ghost">手動値を削除</button>
+            </form>
+            <p id="fg-manual-note" class="pm-muted pm-small">手動値はブラウザ内にのみ保存し、売買シグナル・自動取得の履歴には使用しません。</p>
+          </details>
+          <p class="pm-muted pm-small"><a href="https://www.cnn.com/markets/fear-and-greed" target="_blank" rel="noopener noreferrer">出典 CNN Business</a> · 投資判断の参考指標</p>
         </div>
         <div class="sentiment-card">
           <div class="s-label">VIX <span style="font-size:9px;opacity:0.6;">S&amp;P500</span></div>
           <div class="s-value" id="vix-value">—</div>
-          <div class="s-sub" id="vix-label" style="color:var(--muted);">取得中…</div>
+          <div class="s-sub" id="vix-label" style="color:var(--muted);">—</div><p id="vix-status" class="pm-reference-note">許諾済み配信元未設定</p>
         </div>
         <div class="sentiment-card" style="grid-column:1/-1;">
           <div style="display:flex;align-items:center;justify-content:space-between;">
             <div>
               <div class="s-label">VXN <span style="font-size:9px;opacity:0.6;">NASDAQ-100</span></div>
               <div class="s-value" id="vxn-value">—</div>
-              <div class="s-sub" id="vxn-label" style="color:var(--muted);">取得中…</div>
+              <div class="s-sub" id="vxn-label" style="color:var(--muted);">—</div><p id="vxn-status" class="pm-reference-note">許諾済み配信元未設定</p>
             </div>
             <div id="vxn-ratio-wrap" style="text-align:right;display:none;">
               <div style="font-size:9px;color:var(--muted);">VXN/VIX比率</div>
@@ -548,7 +590,8 @@
 
     </div>
     <details class="pm-card">
-      <summary>VIX・VXNを手動入力</summary>
+      <summary>VIX・VXNを手動入力（参考値）</summary>
+<p class="pm-muted pm-small">入力値はこのPCだけに保存し、売買シグナル・確度計算には使用しません。<a href="https://www.cboe.com/tradable_products/vix/vix_historical_data/" target="_blank" rel="noopener noreferrer">VIX公式</a>／<a href="https://fred.stlouisfed.org/series/VXNCLS" target="_blank" rel="noopener noreferrer">VXN公式</a></p>
       <div class="pm-form">
         <label>VIX<input type="number" id="s-vix-manual" step="0.1"></label>
         <label>VXN<input type="number" id="s-vxn-manual" step="0.1"></label>
@@ -879,6 +922,9 @@
 
 <script src="app/data.js"></script>
 <script src="app/market.js"></script>
+<script src="app/volatility.js"></script>
+<script src="app/fear-greed.js"></script>
+<script src="app/fear-greed-ui.js"></script>
 <script src="app/rebalance.js"></script>
 <script src="app/storage.js"></script>
 <script src="app/ui.js"></script>
@@ -967,39 +1013,14 @@ function calcMADev(closes, period = 20) {
 }
 
 async function fetchTechnicals(ticker) {
-  const TTL = 4 * 60 * 60 * 1000;
-  const cached = technicalsCache[ticker];
-  if (cached && Date.now() - cached.t < TTL) return cached;
-
-  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1d&range=3mo`;
-  const proxies = [
-    'https://api.allorigins.win/raw?url=' + encodeURIComponent(url),
-    'https://corsproxy.io/?' + encodeURIComponent(url),
-  ];
-  let closes = null;
-  for (const proxy of proxies) {
-    try {
-      const res = await fetch(proxy, { signal: AbortSignal.timeout(10000) });
-      if (!res.ok) continue;
-      const json = await res.json();
-      closes = json?.chart?.result?.[0]?.indicators?.quote?.[0]?.close?.filter(v => v != null);
-      if (closes && closes.length >= 20) break;
-    } catch(e) {}
-  }
-  if (!closes || closes.length < 20) return null;
-
-  const result = { rsi: calcRSI(closes), maDev: calcMADev(closes), t: Date.now() };
-  technicalsCache[ticker] = result;
-  localStorage.setItem('pm_technicals', JSON.stringify(technicalsCache));
-  return result;
+  const previous = technicalsCache[ticker];
+  return previous && Number.isFinite(previous.t) &&
+    Date.now() >= previous.t && Date.now() - previous.t < 4 * 3600000 ? previous : null;
 }
-
 async function fetchAllTechnicals() {
-  const tickers = [...new Set(positions.filter(p => p.kind === 'stock').map(p => p.ticker))];
-  for (const ticker of tickers) {
-    await fetchTechnicals(ticker);
-    render(); // 1銘柄取得するたびに即時反映
-  }
+  // The former Yahoo public proxy returned 403/CORS. Do not scrape or repeat failing calls.
+  // Previously saved indicators remain display-only if still within their validity window.
+  return;
 }
 
 function rsiChip(rsi) {
@@ -1039,10 +1060,17 @@ async function fetchEarnings() {
   const from = today.toISOString().slice(0, 10);
   const to = new Date(today.getTime() + 120 * 86400000).toISOString().slice(0, 10);
   const earnings = pmRead('pm_earnings_v3', {});
+  const now = Date.now();
+  // At most four background earnings lookups per two hours across page reloads.
+  if (now < Number(localStorage.getItem('pm_earnings_next_batch_v1') || 0) ||
+      PMMarket.cooldownUntil()) return;
   updatingEarnings = true;
+  let attempted = 0;
   try {
     for (const ticker of tickers) {
       if (Date.now() - (earnings[ticker]?.at ?? 0) < 86400000) continue;
+      if (PMMarket.cooldownUntil() || attempted >= 4) break;
+      attempted++;
       try {
         const data = await PMMarket.finnhub('calendar/earnings', { from, to, symbol: ticker }, apiKey);
         const date = (data.earningsCalendar || []).map(e => e.date).filter(d => PMData.date(d) && d >= from).sort()[0];
@@ -1052,6 +1080,7 @@ async function fetchEarnings() {
       }
     }
     localStorage.setItem('pm_earnings_v3', JSON.stringify(earnings));
+    if (attempted) localStorage.setItem('pm_earnings_next_batch_v1', String(Date.now() + 2 * 3600000));
     PMApp.renderCompany();
   } finally { updatingEarnings = false; }
 }
@@ -1442,8 +1471,15 @@ function applyIndexUI(symbol, drawdownPct, curPrice) {
 
 async function fetchMarketIndex(symbol) {
   const apiKey = localStorage.getItem('pm_api_key') || '';
-  if (!apiKey) return;
+  if (!apiKey || PMMarket.cooldownUntil()) return;
   const prefix = symbol.toLowerCase();
+  const cached = pmRead('pm_' + prefix, null);
+  const now = Date.now();
+  // Quote + metric = two Finnhub requests. Skip repeated attempts after errors.
+  if (cached && now - cached.t >= 0 && now - cached.t < 2 * 3600000) return;
+  const lastAttempt = Number(localStorage.getItem('pm_index_attempt_' + prefix) || 0);
+  if (now - lastAttempt >= 0 && now - lastAttempt < 60 * 60000) return;
+  localStorage.setItem('pm_index_attempt_' + prefix, String(now));
   try {
     const [quoteData, metricData] = await Promise.all([
       PMMarket.finnhub('quote', { symbol }, apiKey),
