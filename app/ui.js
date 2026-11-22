@@ -47,7 +47,7 @@
         quoteFetchedAt = saved.quoteFetchedAt && typeof saved.quoteFetchedAt === 'object'
           ? saved.quoteFetchedAt : {};
         if (saved.fx && Number.isFinite(saved.fx.rate) && saved.fx.rate > 0 &&
-            /^\\d{4}-\\d{2}-\\d{2}$/.test(saved.fx.date)) market.fx = saved.fx;
+            /^\d{4}-\d{2}-\d{2}$/.test(saved.fx.date)) market.fx = saved.fx;
         fxFetchedAt = Number.isFinite(saved.fxFetchedAt) ? saved.fxFetchedAt : 0;
         lastAttempt = Number.isFinite(saved.lastAttempt) ? saved.lastAttempt : null;
         spaceX = saved.spaceX === true;
