@@ -277,13 +277,35 @@
 </head>
 <body>
 
+<div class="pm-app-frame" id="pm-app-frame">
+<aside class="pm-side-nav" id="pm-side-nav" aria-label="Portfolio Managerのナビゲーション">
+  <div class="pm-side-brand">
+    <span class="pm-side-mark" aria-hidden="true">PM</span>
+    <span class="pm-side-brand-name"><strong>Portfolio Manager</strong><small>V2.4</small></span>
+    <button type="button" id="pm-nav-close" class="pm-nav-close" aria-label="メニューを閉じる">×</button>
+  </div>
+  <nav class="pm-side-links" aria-label="主要機能">
+    <p class="pm-nav-caption">PORTFOLIO</p>
+    <a href="#overview" data-pm-view="overview" title="ダッシュボード"><span class="pm-nav-symbol" aria-hidden="true">▦</span><span class="pm-nav-label">ダッシュボード</span></a>
+    <a href="#holdings" data-pm-view="holdings" title="保有資産"><span class="pm-nav-symbol" aria-hidden="true">▤</span><span class="pm-nav-label">保有資産</span></a>
+    <a href="#allocation" data-pm-view="rebalance" title="リバランス"><span class="pm-nav-symbol" aria-hidden="true">⇄</span><span class="pm-nav-label">リバランス</span></a>
+    <p class="pm-nav-caption">ANALYTICS</p>
+    <a href="#market" data-pm-view="market" title="市場分析"><span class="pm-nav-symbol" aria-hidden="true">◉</span><span class="pm-nav-label">市場分析</span></a>
+    <a href="#companies" data-pm-view="companies" title="企業評価"><span class="pm-nav-symbol" aria-hidden="true">◈</span><span class="pm-nav-label">企業評価</span></a>
+    <a href="#history" data-pm-view="history" title="取引・購入計画"><span class="pm-nav-symbol" aria-hidden="true">◷</span><span class="pm-nav-label">取引・購入計画</span></a>
+  </nav>
+  <div class="pm-side-footer">
+    <a href="#data-settings" data-pm-view="overview" title="設定・データ管理"><span class="pm-nav-symbol" aria-hidden="true">⚙</span><span class="pm-nav-label">設定・データ管理</span></a>
+    <button type="button" id="pm-nav-collapse" class="pm-nav-collapse" aria-expanded="true"><span class="pm-nav-symbol" aria-hidden="true">«</span><span class="pm-nav-label">折りたたむ</span></button>
+  </div>
+</aside>
+<div class="pm-workspace">
 <header class="pm-top">
   <div class="pm-top-inner">
-    <strong>Portfolio Manager <span class="pm-muted">V2.3</span></strong>
-    <nav aria-label="ページ内ナビゲーション">
-      <a href="#holdings">保有資産</a><a href="#allocation">目標配分</a><a href="#rebalance">売買計画</a>
-      <a href="#market">市場</a><a href="#companies">企業評価</a>
-    </nav>
+    <div class="pm-top-identity">
+      <button type="button" class="btn btn-ghost pm-mobile-trigger" id="pm-nav-open" aria-controls="pm-side-nav" aria-expanded="false" aria-label="メニューを開く">☰</button>
+      <div><strong>Portfolio Manager <span class="pm-muted">V2.4</span></strong><div class="pm-header-view" id="pm-current-page">ダッシュボード</div></div>
+    </div>
     <button class="btn btn-ghost" id="theme-toggle" onclick="toggleTheme()" aria-label="テーマを切り替える">☀️</button>
   </div>
 </header>
@@ -357,6 +379,12 @@
     <div class="pm-card"><h3>口座・ロット別明細</h3><div id="holdings-lots" class="pm-wrap" tabindex="0" aria-label="ロット別明細"></div></div>
   </section>
 
+  <nav class="pm-rebalance-subnav" id="pm-rebalance-subnav" aria-label="リバランス内の移動" hidden>
+    <span class="pm-muted pm-small">売買の流れ</span>
+    <a href="#allocation">① 目標配分</a>
+    <a href="#rebalance">② 売買計画</a>
+    <a href="#after">③ 売買後構成</a>
+  </nav>
   <section id="allocation" aria-labelledby="allocation-title">
     <div class="pm-heading"><h2 id="allocation-title">目標ポートフォリオ配分</h2></div>
     <form id="targets-form" class="pm-card">
@@ -601,6 +629,9 @@
     </div>
   </section>
 </main>
+</div>
+</div>
+<button type="button" id="pm-nav-scrim" class="pm-nav-scrim" aria-label="メニューを閉じる" hidden></button>
 <!-- ウォッチリスト追加モーダル -->
 <div class="modal-overlay" id="watch-modal" style="display:none;" onclick="closeWatchModalOutside(event)">
   <div class="modal">
@@ -851,6 +882,7 @@
 <script src="app/rebalance.js"></script>
 <script src="app/storage.js"></script>
 <script src="app/ui.js"></script>
+<script src="app/navigation.js"></script>
 <script>
 
 const pmEscape = PMApp.escape;
@@ -2126,6 +2158,7 @@ PMApp.init(() => {
   renderWatchlist();
   renderTradeLog();
 });
+PMNavigation.init();
 restoreSentimentCache();
 restoreIndexCache();
 fetchSentiment();

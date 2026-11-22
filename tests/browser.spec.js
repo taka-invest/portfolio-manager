@@ -37,6 +37,11 @@ async function verifyNoOverflow(page) {
   );
 }
 
+async function show(page, id) {
+  await page.evaluate(target => { window.location.hash = '#' + target; }, id);
+  await expect(page.locator('#' + id)).toBeVisible();
+}
+
 async function addLot(page, details) {
   await page.getByRole('button', { name: '＋ ロットを登録' }).click();
   const form = page.locator('#lot-form');
@@ -72,12 +77,14 @@ test('fresh start, market updates, verified lots, exports and responsive layout'
   await expect(page.locator('#target-rows')).toContainText('発行体未確認');
   await page.locator('#data-settings summary').first().click();
 
+  await show(page, 'holdings');
   await addLot(page, { ticker: 'NVDA', shares: '5', account: '口座A' });
   await addLot(page, { ticker: 'NVDA', shares: '2', account: '口座B', type: 'nisa', cost: '30000' });
   await addLot(page, { ticker: 'FUND01', shares: '10000', account: '投信', type: 'nisa', kind: 'fund' });
   await expect(page.locator('#holdings-aggregate tbody tr')).toHaveCount(1);
   await expect(page.locator('#holdings-aggregate tbody tr td').nth(1)).toHaveText('7');
   await expect(page.locator('#holdings-lots')).toContainText('積立NISA投信');
+  await show(page, 'overview');
   await page.locator('#cash-jpy').fill('250000');
   await page.locator('#cash-usd').fill('100');
   await page.locator('#cash-extra').fill('40000');
@@ -86,6 +93,7 @@ test('fresh start, market updates, verified lots, exports and responsive layout'
   await page.locator('#confirm-holdings').click();
   await expect(page.locator('#trust-status')).toHaveText('実保有・現金確認済み');
   await expect(page.locator('#summary-row')).toContainText('¥370,000');
+  await show(page, 'rebalance');
   await expect(page.locator('#rebalance-table')).toContainText('監視・価格待ち');
   await expect(page.locator('#post-table')).toContainText('現金');
   await verifyNoOverflow(page);
@@ -95,9 +103,11 @@ test('fresh start, market updates, verified lots, exports and responsive layout'
   const before = await page.evaluate(key => localStorage.getItem(key), D.KEY);
   settings.rate = 160;
   settings.price = 105;
+  await show(page, 'overview');
   await page.locator('#price-update').click();
   await expect(page.locator('#holdings-aggregate')).toContainText('¥117,600');
   expect(await page.evaluate(key => localStorage.getItem(key), D.KEY)).toEqual(before);
+  await show(page, 'rebalance');
 
   const fileEvent = page.waitForEvent('download');
   await page.locator('#csv-export').click();
@@ -109,6 +119,7 @@ test('fresh start, market updates, verified lots, exports and responsive layout'
   await page.evaluate(() => window.scrollTo(0, 0));
   await page.screenshot({ path: testInfo.outputPath('portfolio.png'), fullPage: true });
   settings.failFx = true;
+  await show(page, 'overview');
   await page.locator('#price-update').click();
   await expect(page.locator('#rebalance-state')).toContainText('USD/JPYの有効な参考レートがありません');
   await expect(page.locator('#csv-export')).toBeDisabled();
@@ -161,6 +172,7 @@ test('old browser and cloud data require explicit preview, and replacement can b
 test('valuation scenarios and typed observations persist across reload', async ({ page }) => {
   await mockMarket(page);
   await page.goto(url);
+  await show(page, 'companies');
   await page.locator('#company-edit').click();
   await page.locator('#company-form [name=thesis]').fill('架空の保有仮説');
   await page.locator('#company-form [name=base]').fill('架空の標準シナリオ');
