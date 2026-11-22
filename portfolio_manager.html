@@ -439,6 +439,7 @@
   <section id="after" aria-labelledby="after-title">
     <div class="pm-heading"><h2 id="after-title">③ 必要売買・売買後構成</h2></div>
     <p class="pm-muted pm-small">必要な売却株数・購入株数・米ドル換算・円換算を並べて確認できます。概算税・現金目標を先に確保します。</p>
+    <div id="rebalance-audit" aria-live="polite" aria-label="目標配分の達成可否判定"></div>
     <div id="trade-board" aria-live="polite"></div>
     <h3 class="pm-subheading">売買前・売買後の構成比</h3>
     <div id="allocation-charts" aria-live="polite"></div>
@@ -892,6 +893,7 @@
 <script src="app/market.js"></script>
 <script src="app/rebalance.js"></script>
 <script src="app/rebalance-view.js"></script>
+<script src="app/rebalance-audit.js"></script>
 <script src="app/storage.js"></script>
 <script src="app/ui.js"></script>
 <script src="app/navigation.js"></script>
