@@ -233,7 +233,18 @@
       '必要株数の売買可能性、実際の手数料・為替差・税額・約定価格は証券会社で確認してください。</p></section>';
   }
 
-  const api = { ideal, idealTotals, trades, comparison, audit, color };
+  function auditSummary(report) {
+    const detail = report.status === 'pending'
+      ? '保有ロット・現金などの確認前です。②の理論差分は上で確認できます。'
+      : report.status === 'achieved'
+        ? '株数と現金の目標を、概算税引後で許容範囲内に再現する試算です。'
+        : '未達成理由 ' + report.count + '件。下の「未達成の理由」を開くと原因と対応策を確認できます。';
+    return '<div class="pm-audit-brief pm-audit-brief-' + safe(report.status) +
+      '" role="status"><div><small>税引後の達成見込み</small><strong>' +
+      safe(report.label) + '</strong></div><p>' + safe(detail) + '</p></div>';
+  }
+
+  const api = { ideal, idealTotals, trades, comparison, audit, auditSummary, color };
   if (typeof module === 'object' && module.exports) module.exports = api;
   else root.PMRebalanceView = api;
 })(globalThis);
