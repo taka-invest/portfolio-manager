@@ -28,6 +28,46 @@
   let lastAttempt = null;
   let limitedUntil = 0;
   let spaceX = false;
+  // Public market data only; account balances, API keys and lots are never cached here.
+  const marketCacheKey = 'pm_market_quote_cache_v1';
+  const quoteTtl = 30 * 60 * 1000;
+  const fxTtl = 60 * 60 * 1000;
+  const quoteBatchLimit = 32; // reserve API quota for optional index/earnings calls
+  let quoteFetchedAt = {};
+  let fxFetchedAt = 0;
+
+  function restoreQuoteCache() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(marketCacheKey) || 'null');
+      if (saved && typeof saved === 'object') {
+        for (const [ticker, quote] of Object.entries(saved.quotes ?? {})) {
+          if (D.ticker(ticker) && Number.isFinite(quote?.usd) && quote.usd > 0 &&
+              Number.isFinite(quote.at) && quote.at > 0) market.quotes[ticker] = { usd: quote.usd, at: quote.at };
+        }
+        quoteFetchedAt = saved.quoteFetchedAt && typeof saved.quoteFetchedAt === 'object'
+          ? saved.quoteFetchedAt : {};
+        if (saved.fx && Number.isFinite(saved.fx.rate) && saved.fx.rate > 0 &&
+            /^\\d{4}-\\d{2}-\\d{2}$/.test(saved.fx.date)) market.fx = saved.fx;
+        fxFetchedAt = Number.isFinite(saved.fxFetchedAt) ? saved.fxFetchedAt : 0;
+        lastAttempt = Number.isFinite(saved.lastAttempt) ? saved.lastAttempt : null;
+        spaceX = saved.spaceX === true;
+      }
+    } catch { /* malformed cache: revalidate by fetching prices */ }
+    limitedUntil = M.cooldownUntil();
+  }
+
+  function saveQuoteCache() {
+    try {
+      const quotes = Object.fromEntries(Object.entries(market.quotes).filter(([, q]) =>
+        Number.isFinite(q.usd) && q.usd > 0 && Number.isFinite(q.at) && q.at > 0)
+        .map(([ticker, q]) => [ticker, { usd: q.usd, at: q.at }]));
+      localStorage.setItem(marketCacheKey, JSON.stringify({
+        quotes, quoteFetchedAt, fx: market.fx?.rate > 0 && market.fx?.date
+          ? { rate: market.fx.rate, date: market.fx.date } : null,
+        fxFetchedAt, lastAttempt, spaceX
+      }));
+    } catch { /* private browsing / full storage: fall back to session state */ }
+  }
   let afterChange = () => {};
   const dirty = new Set();
   const formLabels = { 'cash-form': '現金残高', 'targets-form': '目標配分', 'tax-form': '税設定' };
@@ -210,27 +250,55 @@
     return M.fxStatus(market.fx) === 'ready' ? market.fx.rate : null;
   }
 
-  async function refreshPrices({ indicators = true } = {}) {
+  async function refreshPrices({ indicators = true, force = false } = {}) {
     if (updating) { queued = true; return; }
+    // Read persisted cooldown on *every* entry, including after a browser reload.
+    limitedUntil = M.cooldownUntil();
     if (limitedUntil > Date.now()) return render();
     const key = $('s-api-key').value.trim();
     if (key) localStorage.setItem('pm_api_key', key);
     else if (localStorage.getItem('pm_api_key')) localStorage.removeItem('pm_api_key');
+
+    const now = Date.now();
+    const tickers = key ? marketTickerList().filter(ticker =>
+      force || !(Number.isFinite(quoteFetchedAt[ticker]) &&
+        now - quoteFetchedAt[ticker] >= 0 && now - quoteFetchedAt[ticker] < quoteTtl))
+      .slice(0, quoteBatchLimit) : [];
+    const needsFx = force || !Number.isFinite(fxFetchedAt) ||
+      now - fxFetchedAt < 0 || now - fxFetchedAt >= fxTtl || M.fxStatus(market.fx) !== 'ready';
+    if (!tickers.length && !needsFx) { render(); return; }
+
     updating = true;
-    lastAttempt = Date.now();
+    lastAttempt = now;
     $('price-update').disabled = true;
     render();
     root.renderPlans();
     root.renderWatchlist();
     try {
-      const [fx, batch] = await Promise.all([M.fetchFx(), M.fetchQuotes(marketTickerList(), key, undefined, spaceX)]);
-      market.fx = fx.error ? { ...market.fx, error: fx.error } : fx;
+      const [fx, batch] = await Promise.all([
+        needsFx ? M.fetchFx() : Promise.resolve(null),
+        tickers.length ? M.fetchQuotes(tickers, key, undefined, spaceX) :
+          Promise.resolve({ quotes: {}, spaceX, limited: false, retryMs: 0 })
+      ]);
+      if (fx) {
+        if (fx.error) market.fx = { ...market.fx, error: fx.error };
+        else { market.fx = fx; fxFetchedAt = Date.now(); }
+      }
       for (const [ticker, quote] of Object.entries(batch.quotes)) {
-        market.quotes[ticker] = quote.error ? { ...market.quotes[ticker], error: quote.error } : quote;
+        if (!quote.error) {
+          market.quotes[ticker] = quote;
+          quoteFetchedAt[ticker] = Date.now();
+        } else {
+          // 429 should not reclassify all unattempted tickers as fetched.
+          if (['missing', 'unverified', 'denied'].includes(quote.error)) quoteFetchedAt[ticker] = Date.now();
+          market.quotes[ticker] = { ...market.quotes[ticker], error: quote.error };
+        }
       }
       spaceX = batch.spaceX;
-      if (batch.limited) limitedUntil = Date.now() + batch.retryMs;
-      if (key && indicators && !batch.limited) {
+      if (batch.limited) limitedUntil = M.cooldownUntil();
+      saveQuoteCache();
+      if (key && indicators && !batch.limited && tickers.length) {
+        // Helpers enforce their own separate TTL/budgets, and never block stock quotes.
         root.fetchBothIndexes();
         root.fetchEarnings();
         root.fetchAllTechnicals();
@@ -441,7 +509,8 @@
         render();
       }
     });
-    $('price-update').onclick = () => refreshPrices();
+    restoreQuoteCache();
+    $('price-update').onclick = () => refreshPrices({ force: true });
     $('confirm-holdings').onclick = () => {
       if (confirm('証券口座と照合して、保有株数・口座区分・円とドルの現金を確認しましたか？')) {
         commit({ ...state, confirmed: true });
