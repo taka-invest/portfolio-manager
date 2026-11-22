@@ -209,3 +209,33 @@ body.light { color-scheme: light; }
 #lot-stock-type[hidden], #lot-other-type[hidden] { display: none !important; }
 #lot-stock-type input[readonly] { opacity: 0.9; cursor: default; }
 .pm-static-field { color: var(--muted); font-size: 13px; }
+
+
+/* Post-trade feasibility audit: always visible before the suggested orders. */
+.pm-audit-box { border: 1px solid var(--border); border-radius: 12px;
+  background: var(--bg2); padding: 17px; margin: 12px 0 18px; }
+.pm-audit-header, .pm-audit-heading { display: flex; align-items: center;
+  gap: 12px; flex-wrap: wrap; }
+.pm-audit-header { justify-content: space-between; }
+.pm-audit-heading > strong { font-size: 15px; }
+.pm-audit-pill { display: inline-block; font-size: 12px; font-weight: 800;
+  padding: 6px 11px; border-radius: 7px; border: 1px solid var(--border); }
+.pm-audit-achieved { color: var(--green); background: rgba(46,170,119,.11); }
+.pm-audit-partial { color: var(--yellow); background: rgba(229,161,41,.12); }
+.pm-audit-blocked { color: var(--red); background: rgba(239,83,109,.10); }
+.pm-audit-pending { color: var(--muted); background: var(--bg3); }
+.pm-audit-message { margin: 12px 0; font-size: 13px; }
+.pm-audit-stats { display: flex; flex-wrap: wrap; gap: 14px 26px;
+  font-size: 12px; padding: 10px 0 15px; font-variant-numeric: tabular-nums; }
+.pm-audit-stats strong { margin-left: 5px; }
+.pm-audit-table { width: 100%; min-width: 780px; }
+.pm-audit-table td, .pm-audit-table th { vertical-align: top; }
+.pm-audit-table td:nth-child(2), .pm-audit-table td:nth-child(3),
+.pm-audit-table td:nth-child(4) { text-align: right; white-space: nowrap;
+  font-variant-numeric: tabular-nums; }
+.pm-audit-table td:last-child { min-width: 280px; max-width: 510px; }
+.pm-audit-blocker { color: var(--red); }
+.pm-audit-partial { color: var(--yellow); }
+.pm-audit-action { margin-top: 6px; line-height: 1.55; }
+.pm-audit-jump { display: inline-flex; margin-top: 14px; font-size: 13px; }
+.pm-audit-footnote { margin: 13px 0 0; line-height: 1.55; }

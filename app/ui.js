@@ -6,6 +6,7 @@
   const M = root.PMMarket;
   const R = root.PMRebalance;
   const V = root.PMRebalanceView;
+  const A = root.PMRebalanceAudit;
   const $ = id => document.getElementById(id);
   const escape = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
   const number = (value, digits = 2) => value == null ? '—' : value.toLocaleString('ja-JP', { maximumFractionDigits: digits });
@@ -375,7 +376,11 @@
 
     // ③ Trade recommendations remain strictly gated on verified lots/cash,
     // clean saved forms and valid quote/fx data.
-    const errors = out.errors;
+    const auditPending = Boolean(storageError) ||
+      ['targets-form', 'cash-form', 'tax-form'].some(id => dirty.has(id));
+    const audit = A.assess(auditPending ? { ...out, errors: ['保存していない変更があります。'] } : out, state);
+    $('rebalance-audit').innerHTML = V.audit(audit);
+    const errors = auditPending ? ['未保存の変更を保存してから、売買計画を再計算してください。'] : out.errors;
     if (errors.length) {
       $('trade-board').innerHTML = '';
       $('allocation-charts').innerHTML = '';
