@@ -28,6 +28,56 @@
     });
   }
 
+  // Reference-only allocation model. It depends on verified market prices and
+  // saved target weights, NOT broker/account/tax-lot verification. Never returns orders.
+  function ideal(state, market, now = Date.now()) {
+    const errors = [], warnings = [];
+    const quotes = market.quotes ?? {};
+    const fx = market.fx;
+    const pctSum = totalOf(state.targets, t => t.pct) + state.cashTarget;
+    if (Math.abs(pctSum - 100) > 1e-6) errors.push('目標配分の合計を100%にしてください。');
+    if (Market.fxStatus(fx, now) !== 'ready')
+      errors.push('USD/JPYの有効な参考レートが必要です。');
+
+    // An incomplete broker/account field is permitted: the price and share count
+    // can still establish a provisional portfolio valuation.
+    const assets = aggregate(state.positions, quotes, fx?.rate);
+    for (const a of assets) {
+      if (Market.quoteStatus(quotes[a.ticker], now) !== 'ready')
+        errors.push(a.ticker + 'の保有株の有効な株価がありません。');
+    }
+    const equity = assets.some(a => a.value == null) ? null : totalOf(assets, a => a.value);
+    const cash = cashValue(state.cash, fx?.rate);
+    const total = equity == null || cash == null ? null : equity + cash;
+    if (!(total > 0)) errors.push('評価可能な個別株または対象現金を登録してください。');
+    if (errors.length) return { errors, warnings, assets, equity, cash, total, rows: [], pctSum, provisional: !state.confirmed };
+
+    const assetMap = new Map(assets.map(a => [a.ticker, a]));
+    const targets = new Map(state.targets.map(t => [t.ticker, t]));
+    const tickers = [...new Set([...targets.keys(), ...assetMap.keys()])];
+    const rows = tickers.map(ticker => {
+      const t = targets.get(ticker);
+      const holding = assetMap.get(ticker);
+      const ready = Market.quoteStatus(quotes[ticker], now) === 'ready';
+      const usd = ready ? quotes[ticker].usd : null;
+      const jpy = usd == null ? null : usd * fx.rate;
+      if (!ready && (t?.pct ?? 0) > 0)
+        warnings.push(ticker + 'は株価未確認のため理想株数を表示できません。');
+      const target = total * (t?.pct ?? 0) / 100;
+      return {
+        ticker, t, shares: holding?.shares ?? 0, value: holding?.value ?? 0,
+        usd, jpy, target, targetUsd: target / fx.rate,
+        targetShares: jpy ? target / jpy : null,
+        idealWholeShares: jpy ? Math.floor(target / jpy + EPS) : null,
+        // Pricing of a nonheld watchlist/target stock is optional for the reference
+        // amount, but no hypothetical execution can follow from this preview.
+        status: !ready && (t?.pct ?? 0) > 0 ? 'watch' : 'none'
+      };
+    });
+    return { errors, warnings, assets, equity, cash, total, rows, pctSum, fx,
+      provisional: !state.confirmed };
+  }
+
   function liquidate(row, required, cap) {
     const accounts = new Map();
     for (const lot of row.lots) {
@@ -265,7 +315,7 @@
     return '\uFEFF' + [header, ...rows].map(row => row.map(v => '"' + String(v).replaceAll('"', '""') + '"').join(',')).join('\r\n');
   }
 
-  const api = { cashValue, aggregate, simulate, csv, statusText };
+  const api = { cashValue, aggregate, ideal, simulate, csv, statusText };
   if (typeof module === 'object' && module.exports) module.exports = api;
   else root.PMRebalance = api;
 })(globalThis);
