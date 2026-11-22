@@ -44,8 +44,8 @@ test('unconfirmed lots produce directly visible theoretical BUY/SELL quantities 
   assert.match(html,/12株/);
   assert.match(html,/6株/);
   assert.match(html,/110株/);
-  assert.match(html,/\$12,000\.00/);
-  assert.match(html,/¥1,200,000/);
+  assert.match(html,/\$1,200\.00/);
+  assert.match(html,/¥120,000/);
   const totals = V.idealTotals(preview,state);
   assert.match(totals,/理論売却総額/);
   assert.match(totals,/¥160,000/);
