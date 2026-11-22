@@ -4,6 +4,8 @@
   const day = 86400000;
   const quoteEndpoint = 'https://finnhub.io/api/v1';
   const fxEndpoint = 'https://api.frankfurter.dev/v2/providers/ecb/rate/usd/jpy';
+  const spotEndpoint = 'https://www.live-rates.com/api/price?rate=USDJPY';
+  const hourlyEndpoint = 'https://api.exchangerate.fun/latest?base=USD';
   const formatters = new Map();
   const utcDate = t => new Date(t).toISOString().slice(0, 10);
   const shift = (date, days) => utcDate(Date.parse(date) + days * day);
@@ -92,12 +94,17 @@
     if (usClosed(ny.date) || ny.minutes < 570) return priorClose ? 'ready' : 'stale';
     if (ny.minutes < 585 && priorClose) return 'ready';
     if (time.date !== ny.date || time.minutes < 570) return 'stale';
-    if (ny.minutes <= close + 15) return now - quote.at <= 90 * 60000 ? 'ready' : 'stale';
+    if (ny.minutes <= close + 15) return now - quote.at <= 20 * 60000 ? 'ready' : 'stale';
     return time.minutes >= close - 15 ? 'ready' : 'stale';
   }
 
   function fxStatus(fx, now = Date.now()) {
     if (fx?.error) return fx.error;
+    if (fx?.kind === 'spot' || fx?.kind === 'hourly') {
+      if (!(fx.rate > 0) || !Number.isFinite(fx.at) ||
+          fx.at > now + 60000 || fx.at <= 0) return 'missing';
+      return now - fx.at <= (fx.kind === 'spot' ? 20 : 90) * 60000 ? 'ready' : 'stale';
+    }
     if (!(fx?.rate > 0) || !Number.isFinite(fx.rate) || !/^\d{4}-\d{2}-\d{2}$/.test(fx.date) ||
       !Number.isFinite(Date.parse(fx.date))) return 'missing';
     const berlin = zoned(now, 'Europe/Berlin');
@@ -131,11 +138,36 @@
   const errCode = e => e.status === 429 ? 'limited' : [401, 403].includes(e.status) ? 'denied' : 'failed';
 
   async function fetchFx(fetcher) {
+    // A source-provided timestamp is required for intraday spot data.
+    // Live-Rates allows three unauthenticated calls/hour; never treat an
+    // old market quote as live merely because the request just succeeded.
+    try {
+      const data = await json(spotEndpoint, fetcher);
+      const rows = Array.isArray(data) ? data : [data];
+      const q = rows.find(row => String(row.currency || '').replace('/', '') === 'USDJPY');
+      const at = Number(q?.timestamp);
+      const bid = Number(q?.bid), ask = Number(q?.ask);
+      const spot = bid > 0 && ask >= bid ? (bid + ask) / 2 : Number(q?.rate);
+      const moment = at < 1e11 ? at * 1000 : at;
+      if (spot > 0 && Number.isFinite(moment) && moment > Date.now() - 20 * 60000 &&
+          moment <= Date.now() + 60000) {
+        return { rate: spot, date: utcDate(moment), at: moment, kind: 'spot', source: 'Live-Rates (bid/ask中値)' };
+      }
+    } catch (_) { /* Fall back to a clearly labeled hourly reference rate. */ }
+    try {
+      const v = await json(hourlyEndpoint, fetcher);
+      const rate = Number(v?.rates?.JPY);
+      if (v.base === 'USD' && rate > 0 && /^\d{4}-\d{2}-\d{2}$/.test(v.date) &&
+          Math.abs(Date.now() - Date.parse(v.date)) <= 3 * day) {
+        return { rate, date: v.date, at: Date.now(), kind: 'hourly',
+          source: 'ExchangeRate.fun (時間更新・供給元の正確な時刻なし)' };
+      }
+    } catch (_) { /* Last resort is daily ECB reference, not executable FX. */ }
     try {
       const v = await json(fxEndpoint, fetcher);
       if (v.base !== 'USD' || v.quote !== 'JPY' || !Number.isFinite(v.rate) || v.rate <= 0 ||
         !/^\d{4}-\d{2}-\d{2}$/.test(v.date)) return { error: 'missing' };
-      return { rate: v.rate, date: v.date };
+      return { rate: v.rate, date: v.date, kind: 'reference', source: 'ECB・Frankfurter（日次）' };
     } catch (e) {
       return { error: errCode(e) };
     }
