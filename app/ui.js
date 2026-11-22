@@ -29,6 +29,8 @@
   let limitedUntil = 0;
   let spaceX = false;
   let afterChange = () => {};
+  const dirty = new Set();
+  const formLabels = { 'cash-form': '現金残高', 'targets-form': '目標配分', 'tax-form': '税設定' };
 
   function marketTickerList() {
     return [...new Set([...state.positions.filter(p => p.kind === 'stock').map(p => p.ticker),
@@ -37,8 +39,10 @@
 
   function result() {
     const computed = R.simulate(state, market);
-    if (storageError || updating) {
-      computed.errors.unshift(storageError || '株価と為替を更新中です。');
+    if (storageError || updating || dirty.size) {
+      if (storageError) computed.errors.unshift(storageError);
+      if (updating) computed.errors.unshift('株価と為替を更新中です。');
+      if (dirty.size) computed.errors.unshift([...dirty].map(key => formLabels[key]).join('・') + 'の変更を保存してください。');
       computed.rows = [];
     }
     return computed;
@@ -145,6 +149,7 @@
   }
 
   function fillSettings() {
+    dirty.clear();
     $('cash-jpy').value = state.cash.jpy;
     $('cash-usd').value = state.cash.usd;
     $('cash-extra').value = state.cash.extraJpy;
@@ -261,7 +266,8 @@
       state.positions.some(p => !D.readyLot(p)) ? 'ロットの資産区分と口座を設定し、実残高を確認してください。' :
         '保有ロットと現金を入力し、証券口座の残高と照合してください。');
     $('trust-status').dataset.warn = Boolean(storageError) || !state.confirmed;
-    $('confirm-holdings').disabled = Boolean(storageError) || state.confirmed || state.positions.some(p => !D.readyLot(p)) ||
+    $('confirm-holdings').disabled = Boolean(storageError) || dirty.has('cash-form') || state.confirmed ||
+      state.positions.some(p => !D.readyLot(p)) ||
       (active.length === 0 && !(R.cashValue(state.cash, 1) > 0));
     $('market-status').textContent = updating ? '株価・為替を更新中…' :
       `株価 Finnhub ｜ 為替 ECB・Frankfurter（日次参考） ${names[M.fxStatus(market.fx)]} ｜ 更新試行 ${stamp(lastAttempt)} JST` +
@@ -407,6 +413,20 @@
     $('observation-dialog').showModal();
   }
 
+  function markEdited(form) {
+    if (dirty.has(form)) return;
+    dirty.add(form);
+    render();
+    root.renderPlans();
+  }
+
+  function saveForm(form, next) {
+    const edited = dirty.delete(form);
+    if (commit(next)) return true;
+    if (edited) dirty.add(form);
+    return false;
+  }
+
   function init(changed) {
     afterChange = changed;
     try { state = S.load(); }
@@ -427,30 +447,42 @@
         commit({ ...state, confirmed: true });
       }
     };
+    for (const form of Object.keys(formLabels)) {
+      $(form).oninput = () => {
+        if (form === 'targets-form') updateDraftTargets();
+        markEdited(form);
+      };
+    }
     $('cash-form').onsubmit = e => {
       e.preventDefault();
-      commit({ ...state, confirmed: false, cash: { jpy: Number($('cash-jpy').value), usd: Number($('cash-usd').value),
+      saveForm('cash-form', { ...state, confirmed: false, cash: { jpy: Number($('cash-jpy').value), usd: Number($('cash-usd').value),
         extraJpy: Number($('cash-extra').value), extraIncluded: $('cash-included').checked } });
     };
     $('tax-form').onsubmit = e => {
       e.preventDefault();
-      commit({ ...state, tax: { rate: Number($('tax-rate').value), offset: $('tax-offset').value } });
+      saveForm('tax-form', { ...state, tax: { rate: Number($('tax-rate').value), offset: $('tax-offset').value } });
     };
-    $('targets-form').oninput = updateDraftTargets;
     $('targets-form').onsubmit = e => {
       e.preventDefault();
       const targets = collectTargets();
       const cashTarget = Number($('cash-target').value);
       if (Math.abs(targets.reduce((sum, t) => sum + t.pct, cashTarget) - 100) > 1e-6) return alert('目標配分の合計を100%にしてください。');
-      if (commit({ ...state, targets, cashTarget })) {
+      if (saveForm('targets-form', { ...state, targets, cashTarget })) {
         drawTargets(state.targets);
         drawCompanyPicker();
         if (targets.some(t => !market.quotes[t.ticker]?.usd)) refreshPrices();
       }
     };
-    $('target-add').onclick = () => drawTargets([...collectTargets(), { ticker: '', pct: 0, group: 'satellite', wait: true, sellCap: 0 }]);
+    $('target-add').onclick = () => {
+      drawTargets([...collectTargets(), { ticker: '', pct: 0, group: 'satellite', wait: true, sellCap: 0 }]);
+      markEdited('targets-form');
+    };
     $('target-rows').onclick = e => {
-      if (e.target.matches('[data-remove]')) { e.target.closest('tr').remove(); updateDraftTargets(); }
+      if (e.target.matches('[data-remove]')) {
+        e.target.closest('tr').remove();
+        updateDraftTargets();
+        markEdited('targets-form');
+      }
     };
     $('lot-add').onclick = () => openLot();
     $('holdings-lots').onclick = e => {
