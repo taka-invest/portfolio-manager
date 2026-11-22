@@ -54,7 +54,9 @@
         '<td>' + legend(row.ticker) + (noTarget ? '<div class="pm-muted pm-small">配分未設定</div>' : '') + '</td>' +
         '<td>' + pct(targetPct) + '</td>' +
         '<td>' + whole(row.shares) + '</td>' +
-        '<td>' + whole(row.idealWholeShares) + '</td>' +
+        '<td>' + whole(row.idealWholeShares) +
+        '<div class="pm-muted pm-small pm-target-values">目標 ' +
+        usd(row.targetUsd) + ' / ' + yen(row.target) + '</div></td>' +
         '<td><span class="pm-delta-badge pm-delta-' + type + '">' + badge + '</span>' +
         '<strong class="pm-delta-count">' + (diff == null ? '—' : whole(Math.abs(diff)) + '株') + '</strong>' +
         (note ? '<div class="pm-delta-note">' + safe(note) + '</div>' : '') + '</td>' +
