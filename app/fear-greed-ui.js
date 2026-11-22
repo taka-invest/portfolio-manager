@@ -114,6 +114,13 @@
   }
 
   async function refresh() {
+    // No CNN/proxy request is sent until an authorized dataset is explicitly enabled.
+    if (localStorage.getItem('pm_fg_feed_enabled_v1') !== 'true') {
+      problem = 'missing';
+      render();
+      onChange();
+      return;
+    }
     if (updating) return;
     updating = true;
     try {
