@@ -161,8 +161,10 @@
       alerts.push('目標比率までの買付不足額が今回の予算を下回ります。不要なPLTR売却は行いません。');
     if (funding.net + EPS < allocation.used)
       errors.push('買付費用が税引後売却代金を超過しました。発注しないでください。');
-    if (floorPctAfter + 1e-8 < FLOOR)
+    if (floorPctAfter + 1e-8 < FLOOR && funding.shares > 0)
       errors.push('PLTR比率30%下限に違反しています。発注しないでください。');
+    if (floorPctAfter + 1e-8 < FLOOR && funding.shares === 0)
+      alerts.push('現在のPLTR構成比がすでに30%未満です。本モードからのPLTR売却は0株に制限しました。');
     return {
       errors, alerts, stage, budget, rate, fx: market.fx, total,
       beforePltrPct: pltrShares * pJpy / total * 100,
