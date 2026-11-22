@@ -204,3 +204,8 @@ body.light { color-scheme: light; }
 
 /* Ideal preview status spans the entire four-column desktop summary. */
 .pm-ideal-summary > .pm-callout { grid-column: 1 / -1; margin: 0; }
+
+/* Account-name-free US stock entry; show one tax-type field at a time. */
+#lot-stock-type[hidden], #lot-other-type[hidden] { display: none !important; }
+#lot-stock-type input[readonly] { opacity: 0.9; cursor: default; }
+.pm-static-field { color: var(--muted); font-size: 13px; }
