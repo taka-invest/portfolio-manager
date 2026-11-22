@@ -4,7 +4,7 @@
   const day = 86400000;
   const quoteEndpoint = 'https://finnhub.io/api/v1';
   const fxEndpoint = 'https://api.frankfurter.dev/v2/providers/ecb/rate/usd/jpy';
-  const spotEndpoint = 'https://www.live-rates.com/api/price?rate=USDJPY';
+  const spotEndpoint = 'https://www.live-rates.com/rates';
   const hourlyEndpoint = 'https://api.exchangerate.fun/latest?base=USD';
   const formatters = new Map();
   const utcDate = t => new Date(t).toISOString().slice(0, 10);
@@ -138,7 +138,8 @@
   const errCode = e => e.status === 429 ? 'limited' : [401, 403].includes(e.status) ? 'denied' : 'failed';
 
   async function fetchFx(fetcher) {
-    // A source-provided timestamp is required for intraday spot data.
+    // Live-Rates keyless endpoint is /rates (not /api/price, which needs a key).
+    // Provider timestamps are required to classify a quote as intraday.
     // Live-Rates allows three unauthenticated calls/hour; never treat an
     // old market quote as live merely because the request just succeeded.
     try {
@@ -159,8 +160,8 @@
       const rate = Number(v?.rates?.JPY);
       if (v.base === 'USD' && rate > 0 && /^\d{4}-\d{2}-\d{2}$/.test(v.date) &&
           Math.abs(Date.now() - Date.parse(v.date)) <= 3 * day) {
-        return { rate, date: v.date, at: Date.now(), kind: 'hourly',
-          source: 'ExchangeRate.fun (時間更新・供給元の正確な時刻なし)' };
+        return { rate, date: v.date, kind: 'reference',
+          source: 'ExchangeRate.fun (時間更新・供給元時刻不明：注文試算は停止)' };
       }
     } catch (_) { /* Last resort is daily ECB reference, not executable FX. */ }
     try {
