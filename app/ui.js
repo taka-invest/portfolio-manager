@@ -272,7 +272,8 @@
       out.assets.every(a => M.quoteStatus(market.quotes[a.ticker]) === 'ready');
     const equity = !state.confirmed && !out.assets.length ? null : out.equity;
     const cards = [
-      ['対象資産', state.confirmed ? yen(out.total) : '—', '米国個別株 ＋ 対象現金' + (marketConfirmed ? '' : ' ・参考表示')],
+      [state.confirmed ? '対象資産' : '対象資産（概算）', yen(out.total),
+        '米国個別株 ＋ 対象現金' + (marketConfirmed ? ' ・実保有確認済み' : ' ・参考表示（売買計算は要確認）')],
       ['対象個別株', yen(equity), `${out.assets.length} 銘柄${marketConfirmed ? '' : ' ・参考表示'}`],
       ['既存現金', `${yen(state.cash.jpy)} / ${usd(state.cash.usd)}`, state.cash.extraIncluded ? '追加資金の別計上なし' : `未計上資金 ${yen(state.cash.extraJpy)}`],
       ['USD/JPY', market.fx?.rate ? number(market.fx.rate, 4) : '—', market.fx?.date ? `ECB参考レート ・ ${market.fx.date}` : 'ECB参考レート（Frankfurter）']
@@ -280,9 +281,23 @@
     $('summary-row').innerHTML = cards.map(([label, value, sub]) =>
       `<div class="summary-card"><div class="label">${label}</div><div class="value">${value}</div><div class="sub">${sub}</div></div>`).join('');
     const active = state.positions.filter(p => p.kind === 'stock');
-    $('trust-status').textContent = storageError || (state.confirmed ? '実保有・現金確認済み' :
-      state.positions.some(p => !D.readyLot(p)) ? 'ロットの資産区分と口座を設定し、実残高を確認してください。' :
-        '保有ロットと現金を入力し、証券口座の残高と照合してください。');
+    const pendingLots = state.positions.filter(p => !D.readyLot(p));
+    const pendingDescription = pendingLots.slice(0, 6).map(p => {
+      if (p.kind === 'review') return p.ticker + '（資産区分：要確認）';
+      const missing = [];
+      if (!p.broker.trim()) missing.push('証券会社');
+      if (!p.account.trim()) missing.push('口座名');
+      if (p.accountType === 'unknown') missing.push('口座区分');
+      return p.ticker + '（' + missing.join('・') + '未設定）';
+    }).join('、');
+    $('trust-status').textContent = storageError ||
+      (pendingLots.length ? '未確認の保有ロット ' + pendingLots.length + '件：' + pendingDescription +
+        (pendingLots.length > 6 ? '、ほか' + (pendingLots.length - 6) + '件' : '') +
+        '。左メニュー「保有資産」のロット一覧から「編集」してください。対象資産は概算を表示していますが、売買計算は保留中です。' :
+      !state.confirmed ? (dirty.has('cash-form') ?
+        '現金を保存し、証券口座の残高と照合してから「実保有・現金を確認」を押してください。' :
+        '保有ロットと現金を入力し、証券口座と照合したら「実保有・現金を確認」を押してください。対象資産は確認前の概算表示です。') :
+        '実保有・現金確認済み' + (marketConfirmed ? '' : '（株価・為替の鮮度は要確認）'));
     $('trust-status').dataset.warn = Boolean(storageError) || !state.confirmed;
     $('confirm-holdings').disabled = Boolean(storageError) || dirty.has('cash-form') || state.confirmed ||
       state.positions.some(p => !D.readyLot(p)) ||
