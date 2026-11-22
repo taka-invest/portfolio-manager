@@ -326,7 +326,7 @@
             <label>FMP APIキー（VIX・VXN用）<input type="password" id="s-fmp-key" autocomplete="off"></label>
           </div>
           <div class="pm-actions pm-spaced">
-            <button class="btn btn-ghost" onclick="PMApp.refreshPrices()">Finnhubキーを保存して更新</button>
+            <button class="btn btn-ghost" onclick="PMApp.refreshPrices({ force: true })">Finnhubキーを保存して更新</button>
             <button class="btn btn-ghost" onclick="saveFmpKey()">FMPキーを保存</button>
             <button class="btn btn-ghost" id="btn-jpy" onclick="setCurrency('jpy')">¥</button>
             <button class="btn btn-ghost" id="btn-usd" onclick="setCurrency('usd')">$</button>
@@ -963,10 +963,19 @@ async function fetchTechnicals(ticker) {
 }
 
 async function fetchAllTechnicals() {
+  // Public Yahoo proxies can return CORS/403. Avoid hammering them on every reload.
+  const attempts = pmRead('pm_technical_attempts_v1', {});
+  const now = Date.now();
   const tickers = [...new Set(positions.filter(p => p.kind === 'stock').map(p => p.ticker))];
+  let count = 0;
   for (const ticker of tickers) {
+    if (technicalsCache[ticker] && now - technicalsCache[ticker].t < 4 * 3600000) continue;
+    if (now - (attempts[ticker] || 0) < 6 * 3600000) continue;
+    if (++count > 2) break;
+    attempts[ticker] = now;
+    localStorage.setItem('pm_technical_attempts_v1', JSON.stringify(attempts));
     await fetchTechnicals(ticker);
-    render(); // 1銘柄取得するたびに即時反映
+    render();
   }
 }
 
@@ -1007,10 +1016,17 @@ async function fetchEarnings() {
   const from = today.toISOString().slice(0, 10);
   const to = new Date(today.getTime() + 120 * 86400000).toISOString().slice(0, 10);
   const earnings = pmRead('pm_earnings_v3', {});
+  const now = Date.now();
+  // At most four background earnings lookups per two hours across page reloads.
+  if (now < Number(localStorage.getItem('pm_earnings_next_batch_v1') || 0) ||
+      PMMarket.cooldownUntil()) return;
   updatingEarnings = true;
+  let attempted = 0;
   try {
     for (const ticker of tickers) {
       if (Date.now() - (earnings[ticker]?.at ?? 0) < 86400000) continue;
+      if (PMMarket.cooldownUntil() || attempted >= 4) break;
+      attempted++;
       try {
         const data = await PMMarket.finnhub('calendar/earnings', { from, to, symbol: ticker }, apiKey);
         const date = (data.earningsCalendar || []).map(e => e.date).filter(d => PMData.date(d) && d >= from).sort()[0];
@@ -1020,6 +1036,7 @@ async function fetchEarnings() {
       }
     }
     localStorage.setItem('pm_earnings_v3', JSON.stringify(earnings));
+    if (attempted) localStorage.setItem('pm_earnings_next_batch_v1', String(Date.now() + 2 * 3600000));
     PMApp.renderCompany();
   } finally { updatingEarnings = false; }
 }
@@ -1410,8 +1427,15 @@ function applyIndexUI(symbol, drawdownPct, curPrice) {
 
 async function fetchMarketIndex(symbol) {
   const apiKey = localStorage.getItem('pm_api_key') || '';
-  if (!apiKey) return;
+  if (!apiKey || PMMarket.cooldownUntil()) return;
   const prefix = symbol.toLowerCase();
+  const cached = pmRead('pm_' + prefix, null);
+  const now = Date.now();
+  // Quote + metric = two Finnhub requests. Skip repeated attempts after errors.
+  if (cached && now - cached.t >= 0 && now - cached.t < 2 * 3600000) return;
+  const lastAttempt = Number(localStorage.getItem('pm_index_attempt_' + prefix) || 0);
+  if (now - lastAttempt >= 0 && now - lastAttempt < 60 * 60000) return;
+  localStorage.setItem('pm_index_attempt_' + prefix, String(now));
   try {
     const [quoteData, metricData] = await Promise.all([
       PMMarket.finnhub('quote', { symbol }, apiKey),
