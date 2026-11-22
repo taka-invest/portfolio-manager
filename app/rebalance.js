@@ -200,7 +200,8 @@
     const cashAfterSales = cash + proceeds - tax;
     const buyBudget = Math.max(0, cashAfterSales - reserve);
     for (const row of rows) {
-      row.order = -totalOf(row.sales, sale => sale.shares);
+      const soldShares = totalOf(row.sales, sale => sale.shares);
+      row.order = soldShares > 0 ? -soldShares : 0;
       row.afterSaleValue = row.value + row.order * (row.jpy ?? 0);
       row.targetAfterTax = postTotal * (row.t?.pct ?? 0) / 100;
     }
