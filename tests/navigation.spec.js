@@ -74,8 +74,7 @@ test('direct links and settings: reload and nested anchor route', async ({ page 
   await page.goto(url + '#data-settings');
   await expect(page.locator('#overview')).toBeVisible();
   await expect(page.locator('#data-settings')).toHaveJSProperty('open', true);
-  await expect(page.getByRole('navigation', { name: '主要機能' })
-    .getByRole('link', { name: '設定・データ管理' })).toHaveAttribute('aria-current', 'page');
+  await expect(page.locator('#pm-side-nav a[href="#data-settings"]')).toHaveAttribute('aria-current', 'page');
   await noHorizontalOverflow(page);
 });
 
