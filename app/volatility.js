@@ -3,6 +3,7 @@
 /* Volatility reference data: a licensed feed can be published on this origin.
    No third-party reverse proxy, scraping, or redistribution is activated by default. */
 ((root) => {
+  const market = typeof module === 'object' && module.exports ? require('./market.js') : root.PMMarket;
   const VALID_AGE_MS = 96 * 60 * 60 * 1000;
   const isFiniteValue = n => typeof n === 'number' && Number.isFinite(n) && n > 0 && n <= 200;
   function validate(value) {
@@ -21,7 +22,7 @@
     const asOf = Date.parse(snapshot.asOf);
     if (!Number.isFinite(asOf) || asOf > now + 300000 || now - asOf > VALID_AGE_MS) return false;
     // Treat previous close as current only during exchange closure and premarket.
-    const status = root.PMMarket?.quoteStatus?.({ usd: snapshot.VIX, at: asOf }, now);
+    const status = market.quoteStatus({ usd: snapshot.VIX, at: asOf }, now);
     return status === 'ready';
   }
   function localFeedUrl(raw, base) {
