@@ -49,8 +49,13 @@ async function addLot(page, details) {
   await form.locator('[name=shares]').fill(details.shares);
   await form.locator('[name=kind]').selectOption(details.kind ?? 'stock');
   await form.locator('[name=broker]').fill('架空証券');
-  await form.locator('[name=account]').fill(details.account);
-  await form.locator('[name=accountType]').selectOption(details.type ?? 'specific');
+  // Account names are optional; US stock accounts are always 特定 in this UI.
+  if ((details.kind ?? 'stock') === 'stock') {
+    await expect(form.locator('[name=account]')).toHaveAttribute('type', 'hidden');
+    await expect(form.locator('#lot-stock-type input')).toHaveValue('特定（固定）');
+  } else {
+    await form.locator('[name=accountType]').selectOption(details.type ?? 'nisa');
+  }
   await form.locator('[name=currency]').selectOption('USD');
   await form.locator('[name=unitCost]').fill('10');
   await form.locator('[name=costJpy]').fill(details.cost ?? '40000');

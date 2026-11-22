@@ -25,7 +25,7 @@
   const optional = (v, predicate) => v == null || predicate(v);
   const validId = v => typeof v === 'string' && ID.test(v);
   const ticker = v => typeof v === 'string' && TICKER.test(v);
-  const readyLot = p => p.kind !== 'review' && (p.kind !== 'stock' || Boolean(p.broker.trim() && p.account.trim() && p.accountType !== 'unknown'));
+  const readyLot = p => p.kind !== 'review' && (p.kind !== 'stock' || Boolean(p.broker.trim() && p.accountType !== 'unknown'));
   const copy = v => JSON.parse(JSON.stringify(v));
   const pick = (v, keys) => Object.fromEntries(keys.filter(k => Object.hasOwn(v, k)).map(k => [k, v[k]]));
   const assert = (valid, label) => { if (!valid) throw new Error(label + 'の形式を確認してください。'); };
@@ -52,7 +52,10 @@
       optional(v.unitCost, num) && optional(v.costJpy, num) && optional(v.referenceJpy, num) && str(v.note), '保有ロット');
     return { ...pick(v, ['id', 'ticker', 'kind', 'broker', 'account', 'accountType', 'shares', 'currency',
       'unitCost', 'costJpy', 'referenceJpy', 'layer', 'note']), unitCost: v.unitCost ?? null,
-      costJpy: v.costJpy ?? null, referenceJpy: v.referenceJpy ?? null };
+      costJpy: v.costJpy ?? null, referenceJpy: v.referenceJpy ?? null,
+      // User-confirmed rule: currently unclassified US-stock lots are in 特定口座.
+      // Explicitly tagged NISA/general lots are preserved to avoid silent tax changes.
+      accountType: v.kind === 'stock' && v.accountType === 'unknown' ? 'specific' : v.accountType };
   }
 
   function target(v) {

@@ -788,8 +788,7 @@
     <form id="exec-form" class="pm-spaced">
       <div class="pm-form">
         <label>証券会社<input name="broker" maxlength="120" required></label>
-        <label>口座名<input name="account" maxlength="120" required></label>
-        <label>口座区分<select name="accountType"><option value="specific">特定</option><option value="general">一般</option><option value="nisa">NISA</option><option value="other">その他</option></select></label>
+        <p class="pm-static-field">口座区分：<strong>特定（固定）</strong></p>
         <label>約定株数<input name="shares" type="number" min="0.00000001" step="any" required></label>
         <label>円換算取得原価（約定全体）<input name="costJpy" type="number" min="0.01" step="any" required></label>
       </div>
@@ -829,8 +828,9 @@
       <label>ティッカー／投信コード<input name="ticker" maxlength="20" required></label>
       <label>資産区分<select name="kind"></select></label>
       <label>証券会社<input name="broker" maxlength="120"></label>
-      <label>口座名<input name="account" maxlength="120"></label>
-      <label>口座区分<select name="accountType"></select></label>
+      <input type="hidden" name="account">
+        <label id="lot-stock-type">口座区分<input type="text" value="特定（固定）" readonly tabindex="-1" aria-label="米国個別株の口座区分は特定で固定"></label>
+        <label id="lot-other-type" hidden>口座区分<select name="accountType"></select></label>
       <label>保有株数・口数<input type="number" name="shares" min="0.00000001" step="any" required></label>
       <label>取得単価<input type="number" name="unitCost" min="0" step="any"></label>
       <label>取得通貨<select name="currency"><option>JPY</option><option>USD</option></select></label>
@@ -1748,8 +1748,8 @@ function confirmExec(event) {
   if (!tranche) return closeExecModal();
   const input = Object.fromEntries(new FormData(event.currentTarget));
   const { ticker, layer } = plan;
-  const broker = input.broker.trim(), account = input.account.trim(), accountType = input.accountType;
-  if (!broker || !account) return alert('証券会社と口座名を入力してください。');
+  const broker = input.broker.trim(), account = '', accountType = 'specific';
+  if (!broker) return alert('証券会社を入力してください。');
   const shares = Number(input.shares), costJpy = Number(input.costJpy);
   const priceJpy = costJpy / shares;
   const lot = { id: uid(), ticker, layer, broker, account, accountType, kind: 'stock', shares,
