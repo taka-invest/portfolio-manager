@@ -89,7 +89,7 @@
     const sales = [];
     for (const [account, lots] of accounts) {
       const first = lots[0];
-      if (!first.broker || !first.account || !['specific', 'general', 'nisa'].includes(first.accountType)) continue;
+      if (!first.broker || !['specific', 'general', 'nisa'].includes(first.accountType)) continue;
       const taxable = first.accountType !== 'nisa';
       const available = totalOf(lots, p => p.shares);
       if (taxable && lots.some(p => p.costJpy == null)) continue;
