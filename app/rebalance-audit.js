@@ -103,7 +103,7 @@
       n + Math.abs(r.afterPct - (r.t?.pct ?? 0)), 0);
     const status = issues.some(item => item.severity === 'blocked') ? 'blocked' :
       issues.length ? 'partial' : 'achieved';
-    const labels = { achieved: '目標達成（試算）', partial: '一部未達成',
+    const labels = { achieved: '達成可能（試算）', partial: '一部未達成',
       blocked: '現設定では達成不可' };
     return { status, label: labels[status], tolerancePct, issues,
       count: issues.length, blockedCount: issues.filter(i => i.severity === 'blocked').length,
