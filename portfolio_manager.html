@@ -382,11 +382,13 @@
   <nav class="pm-rebalance-subnav" id="pm-rebalance-subnav" aria-label="リバランス内の移動" hidden>
     <span class="pm-muted pm-small">売買の流れ</span>
     <a href="#allocation">① 目標配分</a>
-    <a href="#rebalance">② 売買計画</a>
-    <a href="#after">③ 売買後構成</a>
+    <a href="#rebalance">② 理想の配分</a>
+    <a href="#after">③ 必要売買・売買後構成</a>
   </nav>
   <section id="allocation" aria-labelledby="allocation-title">
-    <div class="pm-heading"><h2 id="allocation-title">目標ポートフォリオ配分</h2></div>
+    <div class="pm-heading"><h2 id="allocation-title">① 目標ポートフォリオ配分</h2></div>
+    <p class="pm-muted pm-small">コア・サテライト・現金目標を設定します。下の理想保有額と必要売買に自動反映されます。</p>
+    <div class="pm-target-preview" id="target-preview" aria-live="polite"></div>
     <form id="targets-form" class="pm-card">
       <div class="pm-wrap" tabindex="0" aria-label="目標配分の編集">
         <table class="pos-table pm-targets"><thead><tr>
@@ -405,9 +407,13 @@
   </section>
 
   <section id="rebalance" aria-labelledby="rebalance-title">
-    <div class="pm-heading"><h2 id="rebalance-title">リバランス売買計画</h2>
+    <div class="pm-heading"><h2 id="rebalance-title">② 理想ポートフォリオ・売買計画</h2>
       <button id="csv-export" class="btn btn-ghost" disabled>CSVを出力</button></div>
-    <p class="pm-muted">シミュレーション専用。売買は証券会社で行います。</p>
+    <p class="pm-muted pm-small">現在の株式評価額と対象現金を合算し、①の比率から各銘柄の理想額・整数株数を表示します。積立NISA投信は対象外です。</p>
+    <div class="pm-ideal-summary" id="ideal-summary" aria-live="polite"></div>
+    <div id="ideal-table" class="pm-wrap" tabindex="0" aria-label="理想ポートフォリオ一覧"></div>
+    <p class="pm-muted pm-small">目標額は税引き前の参考値です。実際の購入株数は③で概算譲渡益税・現金目標・売却制限を加味して計算します。</p>
+    <p class="pm-muted pm-small">売買は証券会社で行います。注文前に為替・株価・買付余力を証券会社で照合してください。</p>
     <form id="tax-form" class="pm-card">
       <div class="pm-form">
         <label>概算税率（%）<input id="tax-rate" type="number" min="0" max="100" step="any" required></label>
@@ -423,6 +429,7 @@
       <p class="pm-muted pm-small pm-spaced">国内税の概算です。口座区分・実際の取得費・申告要件によって変わります。NISA株の損益は税の計算から除きます。</p>
     </form>
     <p class="pm-callout" id="rebalance-state" role="status"></p>
+    <h3 class="pm-subheading">売買金額と目標との差 — 計算明細</h3>
     <p class="pm-muted pm-small pm-scroll-hint">表は横にスクロールできます。</p>
     <div id="rebalance-table" class="pm-wrap" tabindex="0" aria-label="売買計画"></div>
     <details id="sale-breakdown" class="pm-card" hidden><summary>売却の口座・ロット別明細</summary>
@@ -430,7 +437,11 @@
   </section>
 
   <section id="after" aria-labelledby="after-title">
-    <div class="pm-heading"><h2 id="after-title">売買後の構成比・現金</h2></div>
+    <div class="pm-heading"><h2 id="after-title">③ 必要売買・売買後構成</h2></div>
+    <p class="pm-muted pm-small">必要な売却株数・購入株数・米ドル換算・円換算を並べて確認できます。概算税・現金目標を先に確保します。</p>
+    <div id="trade-board" aria-live="polite"></div>
+    <h3 class="pm-subheading">売買前・売買後の構成比</h3>
+    <div id="allocation-charts" aria-live="polite"></div>
     <p class="pm-callout" id="post-state"></p>
     <div id="post-table" class="pm-wrap" tabindex="0" aria-label="売買後の構成比"></div>
   </section>
@@ -880,6 +891,7 @@
 <script src="app/data.js"></script>
 <script src="app/market.js"></script>
 <script src="app/rebalance.js"></script>
+<script src="app/rebalance-view.js"></script>
 <script src="app/storage.js"></script>
 <script src="app/ui.js"></script>
 <script src="app/navigation.js"></script>
