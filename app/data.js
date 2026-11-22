@@ -41,7 +41,8 @@
     return {
       version: VERSION, positions: [], targets: copy(DEFAULT_TARGETS), cashTarget: 10,
       cash: { jpy: 0, usd: 0, extraJpy: 0, extraIncluded: true }, confirmed: false,
-      tax: { rate: 20.315, offset: 'none' }, plans: [], trades: [], watchlist: [], company: [], preferences: {}
+      tax: { rate: 20.315, offset: 'none' }, stagedFunding: null,
+      plans: [], trades: [], watchlist: [], company: [], preferences: {}
     };
   }
 
@@ -74,6 +75,16 @@
       return pick(t, ['stage', 'allocPct', 'trigger', 'executed', 'executedAt', 'executedShares', 'executedPriceJpy']);
     }, '購入計画の段階', 'stage');
     return { ...pick(v, ['id', 'ticker', 'layer', 'targetPct', 'note', 'createdAt', 'completed']), tranches };
+  }
+
+  function stagedFunding(v) {
+    if (v == null) return null; // Existing V2.6 workspaces remain compatible.
+    assert(record(v) && when(v.startedAt) && record(v.baselineShares), '段階買付計画');
+    const expected = ['NVDA', 'AVGO', 'CRDO'];
+    assert(Object.keys(v.baselineShares).length === expected.length &&
+      expected.every(k => Number.isSafeInteger(v.baselineShares[k]) && v.baselineShares[k] >= 0),
+      '開始時の保有株数');
+    return { startedAt: v.startedAt, baselineShares: pick(v.baselineShares, expected) };
   }
 
   function trade(v) {
@@ -127,6 +138,7 @@
       version: VERSION, positions, targets: uniqueRows(v.targets, target, '目標配分', 'ticker'),
       cashTarget: v.cashTarget, cash: pick(cash, ['jpy', 'usd', 'extraJpy', 'extraIncluded']),
       confirmed: v.confirmed, tax: pick(tax, ['rate', 'offset']),
+      stagedFunding: stagedFunding(v.stagedFunding),
       plans: uniqueRows(v.plans, plan, '購入計画'), trades: uniqueRows(v.trades, trade, '取引履歴'),
       watchlist: uniqueRows(v.watchlist, watch, 'ウォッチリスト'), company: uniqueRows(v.company, company, '企業評価', 'ticker'),
       preferences: preferences(v.preferences)

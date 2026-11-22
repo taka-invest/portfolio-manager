@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Portfolio Manager V2.6</title>
+<title>Portfolio Manager V2.7 - 段階的資金調達</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   :root {
@@ -272,6 +272,20 @@
     .sidebar { display: none; }
     .summary-row { grid-template-columns: 1fr 1fr; }
   }
+  /* Separate funding mode: fixed 5m / 3m / 2m, strict PLTR floor. */
+  .pm-staged-funding { border: 1px solid var(--accent); margin: 18px 0; }
+  .pm-stage-heading { display:flex; align-items:flex-start; justify-content:space-between; flex-wrap:wrap; gap:14px; margin-bottom:12px; }
+  .pm-stage-heading h3 { font-size:16px; margin-bottom:6px; }
+  .pm-stage-heading label { display:flex; flex-direction:column; gap:4px; }
+  #pm-staged-funding-stage { background:var(--bg3);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:7px 10px; }
+  .pm-stage-grid { display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:12px 0; }
+  .pm-stage-grid>div { padding:12px;border:1px solid var(--border);border-radius:8px;background:var(--bg3);min-width:0; }
+  .pm-stage-grid small { display:block;color:var(--muted);font-size:11px;margin-bottom:6px; }
+  .pm-stage-grid strong { display:block;font-size:19px;font-variant-numeric:tabular-nums;overflow-wrap:anywhere; }
+  .pm-staged-funding .pm-wrap { margin:12px 0; overflow-x:auto; }
+  .pm-staged-funding .pos-table { min-width:600px; }
+  @media(max-width:750px) { .pm-stage-grid {grid-template-columns:repeat(2,minmax(0,1fr));} .pm-stage-grid strong {font-size:16px;} }
+  @media(max-width:420px) { .pm-stage-grid {grid-template-columns:1fr;} }
 </style>
 <link rel="stylesheet" href="app/styles.css">
 </head>
@@ -304,7 +318,7 @@
   <div class="pm-top-inner">
     <div class="pm-top-identity">
       <button type="button" class="btn btn-ghost pm-mobile-trigger" id="pm-nav-open" aria-controls="pm-side-nav" aria-expanded="false" aria-label="メニューを開く">☰</button>
-      <div><strong>Portfolio Manager <span class="pm-muted">V2.6</span></strong><div class="pm-header-view" id="pm-current-page">ダッシュボード</div></div>
+      <div><strong>Portfolio Manager <span class="pm-muted">V2.7</span></strong><div class="pm-header-view" id="pm-current-page">ダッシュボード</div></div>
     </div>
     <button class="btn btn-ghost" id="theme-toggle" onclick="toggleTheme()" aria-label="テーマを切り替える">☀️</button>
   </div>
@@ -410,6 +424,27 @@
   <section id="rebalance" aria-labelledby="rebalance-title">
     <div class="pm-heading"><h2 id="rebalance-title">② 売買差分 — 何を何株売買する？</h2></div>
     <p class="pm-muted pm-small">最初に現在保有と理想保有の差を表示します。積立NISA投資信託は対象外です。税金・売却上限・購入待機はここでは差し引きません。</p>
+    <div class="pm-card pm-staged-funding" id="pm-staged-funding">
+      <div class="pm-stage-heading">
+        <div><h3>PLTR売却資金で動的3段階購入</h3>
+          <p class="pm-muted pm-small">各日の目標不足額を時価・為替・保有実績で再計算。累積50% → 80% → 100%で買い付けます。</p></div>
+        <div class="pm-actions">
+          <label class="pm-small">今回の段階
+            <select id="pm-staged-funding-stage" aria-label="購入する段階">
+              <option value="1">A日：累積50%</option>
+              <option value="2">B日：累積80%</option>
+              <option value="3">C日：累積100%</option>
+            </select>
+          </label>
+          <button type="button" id="pm-staged-start" class="btn btn-primary">買付計画を開始・初期保有を保存</button>
+          <button type="button" id="pm-staged-reset" class="btn btn-ghost" hidden>初期保有の記録をリセット</button>
+          <button type="button" id="pm-staged-funding-refresh" class="btn btn-primary">最新の株価・為替で再計算</button>
+        </div>
+      </div>
+      <p id="pm-staged-funding-status" class="pm-muted pm-small"></p>
+      <div id="pm-staged-funding-result" aria-live="polite"><p class="pm-muted">計算条件を確認中です。</p></div>
+    </div>
+
     <div id="ideal-totals" aria-live="polite"></div>
     <div id="ideal-table" class="pm-wrap pm-ideal-results" tabindex="0" aria-label="銘柄別の理想売買差分"></div>
     <p class="pm-reference-note">「買／売（理論）」は発注指示ではありません。配分外の保有株は②では売却候補ですが、③では自動売却しません。実際に使える資金・譲渡税・待機条件は③で確認します。</p>
@@ -598,11 +633,12 @@
     <div>
       <div class="section-header">
         <div style="display:flex;align-items:center;gap:10px;">
-          <span class="section-title">ピラミッディング計画</span>
+          <span class="section-title">個別銘柄の購入計画（従来機能）</span>
           <span id="plan-count-badge" class="badge" style="background:rgba(227,179,65,0.12);color:var(--yellow);display:none;"></span>
         </div>
         <button class="btn btn-primary" onclick="openPlanModal()">＋ 購入計画を追加</button>
       </div>
+      <p class="pm-muted pm-small">NVDA・AVGO・CRDOの統合買付とPLTR資金調達は、リバランス画面の「動的3段階購入」を利用してください。この欄は従来の個別銘柄プランで、税引後のPLTR売却と連動しません。</p>
       <div id="plans-wrap">
         <div class="empty-state" style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;">購入計画はまだありません</div>
       </div>
@@ -905,6 +941,7 @@
 <script src="app/rebalance-audit.js"></script>
 <script src="app/storage.js"></script>
 <script src="app/ui.js"></script>
+<script src="app/staged-funding.js"></script>
 <script src="app/navigation.js"></script>
 <script>
 
