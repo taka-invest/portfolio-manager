@@ -122,10 +122,39 @@
     return response.json();
   }
 
-  function finnhub(path, query, key, fetcher) {
+  const cooldownKey = 'pm_finnhub_cooldown_until_v1';
+
+  function cooldownUntil() {
+    try {
+      const until = Number(root.localStorage?.getItem(cooldownKey) ?? 0);
+      return Number.isFinite(until) && until > Date.now() ? until : 0;
+    } catch { return 0; }
+  }
+
+  function pauseFor(retryMs) {
+    // Persist across reloads and tabs. Honor the provider's Retry-After if present.
+    const delay = Number.isFinite(retryMs) ? Math.max(60000, retryMs) : 60000;
+    const until = Math.max(cooldownUntil(), Date.now() + delay);
+    try { root.localStorage?.setItem(cooldownKey, String(until)); } catch { /* private mode */ }
+    return until;
+  }
+
+  async function finnhub(path, query, key, fetcher) {
+    const until = cooldownUntil();
+    if (until) {
+      const error = new Error('Finnhub API cooldown');
+      error.status = 429;
+      error.retryMs = until - Date.now();
+      throw error;
+    }
     // Finnhub's browser preflight does not allow the custom token header.
     const params = new URLSearchParams({ ...query, token: key });
-    return json(`${quoteEndpoint}/${path}?${params}`, fetcher);
+    try {
+      return await json(quoteEndpoint + '/' + path + '?' + params, fetcher);
+    } catch (error) {
+      if (error.status === 429) pauseFor(error.retryMs);
+      throw error;
+    }
   }
 
   const errCode = e => e.status === 429 ? 'limited' : [401, 403].includes(e.status) ? 'denied' : 'failed';
@@ -173,7 +202,7 @@
     return { quotes, spaceX, limited, retryMs };
   }
 
-  const api = { quoteStatus, fxStatus, fetchFx, fetchQuotes, finnhub, usClosed, ecbClosed };
+  const api = { quoteStatus, fxStatus, fetchFx, fetchQuotes, finnhub, cooldownUntil, usClosed, ecbClosed };
   if (typeof module === 'object' && module.exports) module.exports = api;
   else root.PMMarket = api;
 })(globalThis);
