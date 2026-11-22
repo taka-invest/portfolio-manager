@@ -39,7 +39,7 @@ test('dashboard displays provisional target assets and names incomplete lots wit
   await expect(page.locator('#summary-row')).toContainText('対象資産（概算）');
   await expect(page.locator('#summary-row')).toContainText('¥821,285');
   await expect(page.locator('#trust-status')).toContainText('未確認の保有ロット 1件');
-  await expect(page.locator('#trust-status')).toContainText('PLTR（証券会社・口座名・口座区分未設定）');
+  await expect(page.locator('#trust-status')).toContainText('PLTR（証券会社未設定）');
   await expect(page.locator('#confirm-holdings')).toBeDisabled();
   await expect(page.locator('#rebalance-state')).toContainText('計算保留');
   await expect(page.locator('#trade-board')).toBeEmpty();
