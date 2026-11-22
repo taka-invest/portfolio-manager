@@ -380,7 +380,7 @@
       ['targets-form', 'cash-form', 'tax-form'].some(id => dirty.has(id));
     const audit = A.assess(auditPending ? { ...out, errors: ['保存していない変更があります。'] } : out, state);
     $('rebalance-audit').innerHTML = V.audit(audit);
-    const errors = auditPending ? ['未保存の変更があるため、売買計画を再計算してください。'] : out.errors;
+    const errors = auditPending ? ['未保存の変更を保存してから、売買計画を再計算してください。'] : out.errors;
     if (errors.length) {
       $('trade-board').innerHTML = '';
       $('allocation-charts').innerHTML = '';
