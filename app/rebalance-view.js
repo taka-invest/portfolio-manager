@@ -24,25 +24,83 @@
   function legend(ticker) {
     return '<span class="pm-swatch" style="background:' + color(ticker) + '"></span><strong>' + safe(ticker) + '</strong>';
   }
+  // Tax-excluded, reference-only buy/sell deltas. NEVER use this output as
+  // an executable brokerage order: sale limits, tax and cash are applied in ③.
   function ideal(out) {
     if (out.errors.length) return '';
     const rows = out.rows.map(row => {
-      const label = row.status === 'watch' ? '価格未確認・待機' :
-        row.t?.group === 'satellite' && row.t.wait ? '購入待機' :
-        row.t ? '目標' : '配分未設定';
-      return '<tr><td>' + legend(row.ticker) +
-        '<div class="pm-muted pm-small">' + label + '</div></td>' +
-        '<td>' + pct(row.t?.pct ?? 0) + '</td>' +
+      const targetPct = row.t?.pct ?? 0;
+      const tradablePrice = Number.isFinite(row.jpy) && row.jpy > 0;
+      const diff = tradablePrice ? row.idealWholeShares - row.shares : null;
+      const sell = diff != null && diff < -1e-7;
+      const buy = diff != null && diff > 1e-7;
+      const waiting = buy && row.t?.group === 'satellite' && row.t.wait;
+      const cap0 = sell && row.t?.sellCap === 0;
+      const capped = sell && row.t?.sellCap != null && row.t.sellCap >= 0 &&
+        -diff > row.t.sellCap;
+      const noTarget = !row.t && row.shares > 0;
+      const type = diff == null ? 'missing' : waiting ? 'wait' : buy ? 'buy' : sell ? 'sell' : 'hold';
+      const badge = { buy: '買（理論）', sell: '売（理論）', wait: '購入待機',
+        missing: '価格待ち', hold: '変更なし' }[type];
+      const note = cap0 ? '売却上限0株：③では売却されません' :
+        capped ? '売却上限あり：③では全株を売れません' :
+        waiting ? '購入待機中：③では買いません' :
+        noTarget ? '配分未登録：③での売却には目標0%登録が必要' :
+        row.status === 'watch' ? '価格未確認・待機' :
+        targetPct === 0 ? '目標0%' : '';
+      const jpy = diff == null ? null : Math.abs(diff) * row.jpy;
+      const dollars = diff == null ? null : Math.abs(diff) * row.usd;
+      return '<tr class="pm-delta-row">' +
+        '<td>' + legend(row.ticker) + (noTarget ? '<div class="pm-muted pm-small">配分未設定</div>' : '') + '</td>' +
+        '<td>' + pct(targetPct) + '</td>' +
+        '<td>' + whole(row.shares) + '</td>' +
+        '<td>' + whole(row.idealWholeShares) +
+        '<div class="pm-muted pm-small pm-target-values">目標 ' +
+        usd(row.targetUsd) + ' / ' + yen(row.target) + '</div></td>' +
+        '<td><span class="pm-delta-badge pm-delta-' + type + '">' + badge + '</span>' +
+        '<strong class="pm-delta-count">' + (diff == null ? '—' : whole(Math.abs(diff)) + '株') + '</strong>' +
+        (note ? '<div class="pm-delta-note">' + safe(note) + '</div>' : '') + '</td>' +
         '<td>' + usd(row.usd) + '</td>' +
-        '<td>' + whole(row.idealWholeShares) + '</td>' +
-        '<td>' + usd(row.targetUsd) + '</td>' +
-        '<td>' + yen(row.target) + '</td>' +
-        '<td>' + whole(row.shares) + '</td></tr>';
+        '<td>' + usd(dollars) + '</td>' +
+        '<td>' + yen(jpy) + '</td></tr>';
     }).join('');
-    return '<table class="pos-table pm-work-table"><thead><tr><th>銘柄</th><th>目標%</th>' +
-      '<th>株価 USD</th><th>理想株数（整数）</th><th>目標額 USD</th><th>目標額 JPY</th><th>現在株数</th>' +
+    return '<table class="pos-table pm-delta-table"><thead><tr>' +
+      '<th>銘柄</th><th>目標%</th><th>現在株数</th><th>理想株数（整数）</th>' +
+      '<th>売買差分（税引前）</th><th>参考株価 USD</th><th>差分 USD</th><th>差分 JPY</th>' +
       '</tr></thead><tbody>' + rows + '</tbody></table>';
   }
+
+  function idealTotals(out, state) {
+    if (out.errors.length) return '';
+    let grossSell = 0, grossBuy = 0, waitingBuy = 0, unknown = 0;
+    for (const row of out.rows) {
+      if (!(row.jpy > 0)) { if ((row.t?.pct ?? 0) > 0) unknown++; continue; }
+      const diff = row.idealWholeShares - row.shares;
+      if (diff < 0) grossSell += -diff * row.jpy;
+      if (diff > 0) {
+        grossBuy += diff * row.jpy;
+        if (row.t?.group === 'satellite' && row.t.wait) waitingBuy += diff * row.jpy;
+      }
+    }
+    const incomplete = unknown > 0;
+    const preTaxCash = out.cash + grossSell - grossBuy;
+    const targetCash = out.total * state.cashTarget / 100;
+    const kpis = [
+      ['理論売却総額', yen(grossSell), '売却制限・譲渡税は未反映'],
+      ['理論購入総額', incomplete ? '—' : yen(grossBuy), waitingBuy > 0 ? 'うち購入待機 ' + yen(waitingBuy) : '購入待機の設定を別途確認'],
+      ['全差分実行後の現金', incomplete ? '—' : yen(preTaxCash), '税引前・株価固定の参考額'],
+      ['目標現金', yen(targetCash), pct(state.cashTarget)]
+    ];
+    let notice = incomplete ? '未保有の目標銘柄で株価未確認があります。合計購入額・売買後現金は未確定です。' :
+      preTaxCash < targetCash - 1 ? '理論売買だけでも目標現金を下回ります。税金を加味すると不足はさらに大きくなります。' :
+      '理論差分は税金・売却上限・購入待機を無視した比較です。③の実行可能株数とは異なります。';
+    if (waitingBuy > 0) notice += ' 購入待機の銘柄は③では買付対象にしません。';
+    return '<div class="pm-delta-kpis">' + kpis.map(([title, value, sub]) =>
+      '<div class="pm-delta-kpi"><small>' + title + '</small><strong>' + value +
+      '</strong><span>' + sub + '</span></div>').join('') +
+      '</div><p class="pm-delta-notice" role="note">' + safe(notice) + '</p>';
+  }
+
   function tradeRows(rows, side) {
     if (!rows.length) return '<p class="pm-empty-trades">' +
       (side === 'sell' ? '売却予定の銘柄はありません。' : '購入予定の銘柄はありません。') + '</p>';
@@ -177,7 +235,18 @@
       '必要株数の売買可能性、実際の手数料・為替差・税額・約定価格は証券会社で確認してください。</p></section>';
   }
 
-  const api = { ideal, trades, comparison, audit, color };
+  function auditSummary(report) {
+    const detail = report.status === 'pending'
+      ? '保有ロット・現金などの確認前です。②の理論差分は上で確認できます。'
+      : report.status === 'achieved'
+        ? '株数と現金の目標を、概算税引後で許容範囲内に再現する試算です。'
+        : '未達成理由 ' + report.count + '件。下の「未達成の理由」を開くと原因と対応策を確認できます。';
+    return '<div class="pm-audit-brief pm-audit-brief-' + safe(report.status) +
+      '" role="status"><div><small>税引後の達成見込み</small><strong>' +
+      safe(report.label) + '</strong></div><p>' + safe(detail) + '</p></div>';
+  }
+
+  const api = { ideal, idealTotals, trades, comparison, audit, auditSummary, color };
   if (typeof module === 'object' && module.exports) module.exports = api;
   else root.PMRebalanceView = api;
 })(globalThis);

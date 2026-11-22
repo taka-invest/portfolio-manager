@@ -239,3 +239,50 @@ body.light { color-scheme: light; }
 .pm-audit-action { margin-top: 6px; line-height: 1.55; }
 .pm-audit-jump { display: inline-flex; margin-top: 14px; font-size: 13px; }
 .pm-audit-footnote { margin: 13px 0 0; line-height: 1.55; }
+
+
+/* V2.6 trade-first layout: theoretical deltas are always the main result. */
+.pm-targets-simple .pm-target-advanced { display: none !important; }
+.pm-targets-simple .pm-target-help { display: none !important; }
+.pm-advanced-toggle { margin-bottom: 12px; }
+.pm-ideal-results { margin: 18px 0 10px; }
+.pm-delta-table { width: 100%; min-width: 880px; border-collapse: collapse; }
+.pm-delta-table thead th { font-size: 11px; white-space: nowrap; }
+.pm-delta-table tbody td { padding: 13px 9px; vertical-align: middle; font-variant-numeric: tabular-nums; }
+.pm-delta-table th:not(:first-child), .pm-delta-table td:not(:first-child) { text-align: right; }
+.pm-delta-table th:nth-child(5), .pm-delta-table td:nth-child(5) { min-width: 210px; text-align: left; }
+.pm-delta-table .pm-delta-row td:first-child { min-width: 107px; }
+.pm-delta-badge { display: inline-flex; align-items: center; justify-content: center; padding: 5px 8px;
+  font-size: 11px; font-weight: 750; letter-spacing: .02em; border-radius: 6px; white-space: nowrap; }
+.pm-delta-buy { color: var(--green); background: rgba(38,170,114,.12); }
+.pm-delta-sell { color: var(--red); background: rgba(232,74,100,.12); }
+.pm-delta-wait { color: var(--yellow); background: rgba(218,158,39,.14); }
+.pm-delta-hold, .pm-delta-missing { color: var(--muted); background: var(--bg3); }
+.pm-delta-count { display: inline-block; margin-left: 9px; white-space: nowrap; font-size: 15px; }
+.pm-delta-note { font-size: 11px; color: var(--muted); margin-top: 6px; line-height: 1.45; }
+.pm-delta-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-top: 12px; }
+.pm-delta-kpi { display: flex; flex-direction: column; gap: 7px; padding: 14px;
+  background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; min-width: 0; }
+.pm-delta-kpi small, .pm-delta-kpi span { font-size: 11px; color: var(--muted); }
+.pm-delta-kpi strong { font-size: clamp(15px, 1.6vw, 22px); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.pm-delta-notice { margin: 12px 0 4px; padding: 9px 12px; border-left: 3px solid var(--border);
+  font-size: 12px; line-height: 1.65; background: var(--bg2); }
+.pm-reference-note { font-size: 12px; color: var(--muted); line-height: 1.6; }
+.pm-extra-details { margin: 16px 0; }
+.pm-extra-details > summary { font-size: 13px; font-weight: 650; cursor: pointer; padding: 3px 0; }
+.pm-extra-details[open] > summary { margin-bottom: 16px; }
+.pm-extra-details .pm-ideal-summary { margin: 12px 0; }
+.pm-audit-brief { display: flex; justify-content: space-between; align-items: center; gap: 22px;
+  background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 14px 17px;
+  margin: 16px 0; }
+.pm-audit-brief div { display: flex; flex-direction: column; gap: 4px; }
+.pm-audit-brief small { color: var(--muted); font-size: 11px; }
+.pm-audit-brief strong { font-size: 16px; }
+.pm-audit-brief p { font-size: 12px; margin: 0; color: var(--muted); max-width: 68%; line-height: 1.55; }
+@media(max-width: 1150px) {
+  .pm-delta-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media(max-width: 700px) {
+  .pm-audit-brief { align-items: stretch; flex-direction: column; }
+  .pm-audit-brief p { max-width: 100%; }
+}

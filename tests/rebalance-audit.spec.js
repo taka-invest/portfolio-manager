@@ -54,6 +54,8 @@ test('PC: PLTR sell cap=0 is shown as impossible with a shortcut to allocation s
   await expect(report).toContainText('PLTR');
   await expect(report).toContainText('売却上限0株');
   await expect(report).toContainText('最大乖離');
+  await expect(page.locator('#rebalance-audit-details')).not.toHaveAttribute('open', '');
+  await page.locator('#rebalance-audit-details > summary').click();
   await expect(report.locator('a[href="#allocation"]')).toBeVisible();
   await expect(page.locator('#trade-board')).toContainText('SELL');
   await expect(page.locator('#allocation-charts svg')).toHaveCount(2);

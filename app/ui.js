@@ -168,8 +168,8 @@
       <td><input aria-label="ティッカー" data-field="ticker" maxlength="20" required value="${escape(t.ticker)}"></td>
       <td><select aria-label="区分" data-field="group">${options({ core: 'コア', satellite: 'サテライト' }, t.group)}</select></td>
       <td><input aria-label="目標比率（%）" data-field="pct" type="number" min="0" max="100" step="any" required value="${t.pct}"></td>
-      <td><input aria-label="売却上限株数" data-field="cap" type="number" min="0" step="1" placeholder="上限なし" value="${t.sellCap ?? ''}"></td>
-      <td><input aria-label="サテライト購入待機" data-field="wait" type="checkbox"${t.wait ? ' checked' : ''}></td>
+      <td class="pm-target-advanced"><input aria-label="売却上限株数" data-field="cap" type="number" min="0" step="1" placeholder="上限なし" value="${t.sellCap ?? ''}"></td>
+      <td class="pm-target-advanced"><input aria-label="サテライト購入待機" data-field="wait" type="checkbox"${t.wait ? ' checked' : ''}></td>
       <td><span data-price></span></td>
       <td><button type="button" class="btn btn-ghost btn-sm" data-remove>削除</button></td></tr>`).join('');
     updateDraftTargets();
@@ -348,6 +348,8 @@
     // ② Ideal allocation is an independent, reference-only calculation.
     // Confirmed broker/tax-lot fields are NOT required for this section.
     if (preview.errors.length) {
+      $('ideal-totals').innerHTML = '<p class="pm-callout" data-warn="true">' +
+        escape('理論差分を計算できません：' + preview.errors.join(' ')) + '</p>';
       $('ideal-summary').innerHTML = '<p class="pm-callout" data-warn="true">' +
         escape('理想配分を計算できません：' + preview.errors.join(' ')) + '</p>';
       $('ideal-table').innerHTML = '';
@@ -366,6 +368,7 @@
         ? ' 目標比率の未保存変更は含まれません。「配分を保存」を押してください。' : '';
       const notices = preview.warnings.length
         ? ' ' + preview.warnings.join(' ') : '';
+      $('ideal-totals').innerHTML = V.idealTotals(preview, state);
       $('ideal-summary').innerHTML =
         '<p class="pm-callout" role="status">' + escape(status + unsaved + notices) + '</p>' +
         headline.map(([label, value, note]) =>
@@ -380,6 +383,7 @@
       ['targets-form', 'cash-form', 'tax-form'].some(id => dirty.has(id));
     const audit = A.assess(auditPending ? { ...out, errors: ['保存していない変更があります。'] } : out, state);
     $('rebalance-audit').innerHTML = V.audit(audit);
+    $('rebalance-audit-summary').innerHTML = V.auditSummary(audit);
     const errors = auditPending ? ['未保存の変更を保存してから、売買計画を再計算してください。'] : out.errors;
     if (errors.length) {
       $('trade-board').innerHTML = '';
@@ -557,6 +561,13 @@
         drawCompanyPicker();
         if (targets.some(t => !market.quotes[t.ticker]?.usd)) refreshPrices();
       }
+    };
+    $('target-detail-toggle').onclick = () => {
+      const expanded = $('targets-form').classList.toggle('pm-targets-detailed');
+      $('targets-form').classList.toggle('pm-targets-simple', !expanded);
+      $('target-detail-toggle').setAttribute('aria-expanded', String(expanded));
+      $('target-detail-toggle').textContent = expanded
+        ? '売却上限・購入待機を閉じる' : '売却上限・購入待機を表示する';
     };
     $('target-add').onclick = () => {
       drawTargets([...collectTargets(), { ticker: '', pct: 0, group: 'satellite', wait: true, sellCap: 0 }]);

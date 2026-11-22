@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Portfolio Manager V2.5</title>
+<title>Portfolio Manager V2.6</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   :root {
@@ -281,14 +281,14 @@
 <aside class="pm-side-nav" id="pm-side-nav" aria-label="Portfolio Managerのナビゲーション">
   <div class="pm-side-brand">
     <span class="pm-side-mark" aria-hidden="true">PM</span>
-    <span class="pm-side-brand-name"><strong>Portfolio Manager</strong><small>V2.5</small></span>
+    <span class="pm-side-brand-name"><strong>Portfolio Manager</strong><small>V2.6</small></span>
     <button type="button" id="pm-nav-close" class="pm-nav-close" aria-label="メニューを閉じる">×</button>
   </div>
   <nav class="pm-side-links" aria-label="主要機能">
     <p class="pm-nav-caption">PORTFOLIO</p>
     <a href="#overview" data-pm-view="overview" title="ダッシュボード"><span class="pm-nav-symbol" aria-hidden="true">▦</span><span class="pm-nav-label">ダッシュボード</span></a>
     <a href="#holdings" data-pm-view="holdings" title="保有資産"><span class="pm-nav-symbol" aria-hidden="true">▤</span><span class="pm-nav-label">保有資産</span></a>
-    <a href="#allocation" data-pm-view="rebalance" title="リバランス"><span class="pm-nav-symbol" aria-hidden="true">⇄</span><span class="pm-nav-label">リバランス</span></a>
+    <a href="#rebalance" data-pm-view="rebalance" title="リバランス"><span class="pm-nav-symbol" aria-hidden="true">⇄</span><span class="pm-nav-label">リバランス</span></a>
     <p class="pm-nav-caption">ANALYTICS</p>
     <a href="#market" data-pm-view="market" title="市場分析"><span class="pm-nav-symbol" aria-hidden="true">◉</span><span class="pm-nav-label">市場分析</span></a>
     <a href="#companies" data-pm-view="companies" title="企業評価"><span class="pm-nav-symbol" aria-hidden="true">◈</span><span class="pm-nav-label">企業評価</span></a>
@@ -304,7 +304,7 @@
   <div class="pm-top-inner">
     <div class="pm-top-identity">
       <button type="button" class="btn btn-ghost pm-mobile-trigger" id="pm-nav-open" aria-controls="pm-side-nav" aria-expanded="false" aria-label="メニューを開く">☰</button>
-      <div><strong>Portfolio Manager <span class="pm-muted">V2.5</span></strong><div class="pm-header-view" id="pm-current-page">ダッシュボード</div></div>
+      <div><strong>Portfolio Manager <span class="pm-muted">V2.6</span></strong><div class="pm-header-view" id="pm-current-page">ダッシュボード</div></div>
     </div>
     <button class="btn btn-ghost" id="theme-toggle" onclick="toggleTheme()" aria-label="テーマを切り替える">☀️</button>
   </div>
@@ -382,18 +382,19 @@
   <nav class="pm-rebalance-subnav" id="pm-rebalance-subnav" aria-label="リバランス内の移動" hidden>
     <span class="pm-muted pm-small">売買の流れ</span>
     <a href="#allocation">① 目標配分</a>
-    <a href="#rebalance">② 理想の配分</a>
-    <a href="#after">③ 必要売買・売買後構成</a>
+    <a href="#rebalance">② 何株売買する？</a>
+    <a href="#after">③ 税引後の実行・売買後構成</a>
   </nav>
   <section id="allocation" aria-labelledby="allocation-title">
     <div class="pm-heading"><h2 id="allocation-title">① 目標ポートフォリオ配分</h2></div>
     <p class="pm-muted pm-small">コア・サテライト・現金目標を設定します。下の理想保有額と必要売買に自動反映されます。</p>
     <div class="pm-target-preview" id="target-preview" aria-live="polite"></div>
-    <form id="targets-form" class="pm-card">
+    <form id="targets-form" class="pm-card pm-targets-simple">
+      <button type="button" class="btn btn-ghost btn-sm pm-advanced-toggle" id="target-detail-toggle" aria-expanded="false">売却上限・購入待機を表示する</button>
       <div class="pm-wrap" tabindex="0" aria-label="目標配分の編集">
         <table class="pos-table pm-targets"><thead><tr>
           <th scope="col">銘柄</th><th scope="col">区分</th><th scope="col">目標比率（%）</th>
-          <th scope="col">売却上限（株）</th><th scope="col">購入待機</th><th scope="col">価格・基準日時</th><th scope="col">操作</th>
+          <th class="pm-target-advanced" scope="col">売却上限（株）</th><th class="pm-target-advanced" scope="col">購入待機</th><th scope="col">価格・基準日時</th><th scope="col">操作</th>
         </tr></thead><tbody id="target-rows"></tbody></table>
       </div>
       <div class="pm-form pm-spaced">
@@ -402,49 +403,57 @@
           <button class="btn btn-primary">配分を保存</button></div>
       </div>
       <p id="target-sum" class="pm-callout" role="status"></p>
-      <p class="pm-muted pm-small">売却上限 0 株で売却を保留します。保有中の配分未登録銘柄は、配分表に追加すると売却条件を設定できます。</p>
+      <p class="pm-muted pm-small pm-target-help">売却上限0株は売却不可です。配分外の保有株を③で売る場合は、①に目標0%で追加し、売却上限を空欄にします。設定を変更しても自動発注はしません。</p>
     </form>
   </section>
 
   <section id="rebalance" aria-labelledby="rebalance-title">
-    <div class="pm-heading"><h2 id="rebalance-title">② 理想ポートフォリオ・売買計画</h2>
-      <button id="csv-export" class="btn btn-ghost" disabled>CSVを出力</button></div>
-    <p class="pm-muted pm-small">現在の株式評価額と対象現金を合算し、①の比率から各銘柄の理想額・整数株数を表示します。積立NISA投信は対象外です。</p>
-    <div class="pm-ideal-summary" id="ideal-summary" aria-live="polite"></div>
-    <div id="ideal-table" class="pm-wrap" tabindex="0" aria-label="理想ポートフォリオ一覧"></div>
-    <p class="pm-muted pm-small">目標額は税引き前の参考値です。実際の購入株数は③で概算譲渡益税・現金目標・売却制限を加味して計算します。</p>
-    <p class="pm-muted pm-small">売買は証券会社で行います。注文前に為替・株価・買付余力を証券会社で照合してください。</p>
-    <form id="tax-form" class="pm-card">
-      <div class="pm-form">
-        <label>概算税率（%）<input id="tax-rate" type="number" min="0" max="100" step="any" required></label>
-        <label>損益通算の試算条件
-          <select id="tax-offset">
-            <option value="none">通算なし</option>
-            <option value="account">同じ課税口座内で通算</option>
-            <option value="eligible">同一年度・対象口座の通算条件を満たすと仮定</option>
-          </select>
-        </label>
-        <div><button class="btn btn-ghost">税設定を保存</button></div>
-      </div>
-      <p class="pm-muted pm-small pm-spaced">国内税の概算です。口座区分・実際の取得費・申告要件によって変わります。NISA株の損益は税の計算から除きます。</p>
-    </form>
-    <p class="pm-callout" id="rebalance-state" role="status"></p>
-    <h3 class="pm-subheading">売買金額と目標との差 — 計算明細</h3>
-    <p class="pm-muted pm-small pm-scroll-hint">表は横にスクロールできます。</p>
-    <div id="rebalance-table" class="pm-wrap" tabindex="0" aria-label="売買計画"></div>
-    <details id="sale-breakdown" class="pm-card" hidden><summary>売却の口座・ロット別明細</summary>
-      <div id="sale-lots" class="pm-wrap" tabindex="0" aria-label="売却の口座・ロット別明細"></div></details>
+    <div class="pm-heading"><h2 id="rebalance-title">② 売買差分 — 何を何株売買する？</h2></div>
+    <p class="pm-muted pm-small">最初に現在保有と理想保有の差を表示します。積立NISA投資信託は対象外です。税金・売却上限・購入待機はここでは差し引きません。</p>
+    <div id="ideal-totals" aria-live="polite"></div>
+    <div id="ideal-table" class="pm-wrap pm-ideal-results" tabindex="0" aria-label="銘柄別の理想売買差分"></div>
+    <p class="pm-reference-note">「買／売（理論）」は発注指示ではありません。配分外の保有株は②では売却候補ですが、③では自動売却しません。実際に使える資金・譲渡税・待機条件は③で確認します。</p>
+    <details class="pm-card pm-extra-details" id="ideal-background">
+      <summary>資産総額・理想金額の計算前提を見る</summary>
+      <div class="pm-ideal-summary" id="ideal-summary" aria-live="polite"></div>
+    </details>
   </section>
 
   <section id="after" aria-labelledby="after-title">
-    <div class="pm-heading"><h2 id="after-title">③ 必要売買・売買後構成</h2></div>
-    <p class="pm-muted pm-small">必要な売却株数・購入株数・米ドル換算・円換算を並べて確認できます。概算税・現金目標を先に確保します。</p>
-    <div id="rebalance-audit" aria-live="polite" aria-label="目標配分の達成可否判定"></div>
+    <div class="pm-heading"><h2 id="after-title">③ 税引き後に実行できる売買案</h2>
+      <button id="csv-export" class="btn btn-ghost" disabled>実行試算をCSV出力</button></div>
+    <p class="pm-muted pm-small">保有ロット・現金を確認後、概算譲渡税と現金目標を先に確保し、売買可能な整数株数を試算します。②の理論差分とは異なります。</p>
     <div id="trade-board" aria-live="polite"></div>
+    <div id="rebalance-audit-summary" aria-live="polite"></div>
+    <details id="rebalance-audit-details" class="pm-card pm-extra-details">
+      <summary>未達成の理由・売却制限などを詳しく確認</summary>
+      <div id="rebalance-audit" aria-live="polite" aria-label="目標配分の達成可否判定"></div>
+    </details>
     <h3 class="pm-subheading">売買前・売買後の構成比</h3>
     <div id="allocation-charts" aria-live="polite"></div>
-    <p class="pm-callout" id="post-state"></p>
-    <div id="post-table" class="pm-wrap" tabindex="0" aria-label="売買後の構成比"></div>
+    <details class="pm-card pm-extra-details" id="execution-breakdown">
+      <summary>税率・損益通算・注文の詳細設定と計算表</summary>
+      <form id="tax-form" class="pm-card">
+        <div class="pm-form">
+          <label>概算税率（%）<input id="tax-rate" type="number" min="0" max="100" step="any" required></label>
+          <label>損益通算の試算条件
+            <select id="tax-offset">
+              <option value="none">通算なし</option>
+              <option value="account">同じ課税口座内で通算</option>
+              <option value="eligible">同一年度・対象口座の通算条件を満たすと仮定</option>
+            </select>
+          </label>
+          <div><button class="btn btn-ghost">税設定を保存</button></div>
+        </div>
+        <p class="pm-muted pm-small pm-spaced">国内税の概算です。実際の取得原価や損益通算の適用、為替・手数料で変動します。</p>
+      </form>
+      <p class="pm-callout" id="rebalance-state" role="status"></p>
+      <div id="rebalance-table" class="pm-wrap" tabindex="0" aria-label="売買計画"></div>
+      <details id="sale-breakdown" class="pm-card" hidden><summary>売却の口座・ロット別明細</summary>
+        <div id="sale-lots" class="pm-wrap" tabindex="0" aria-label="売却の口座・ロット別明細"></div></details>
+      <p class="pm-callout" id="post-state"></p>
+      <div id="post-table" class="pm-wrap" tabindex="0" aria-label="売買後の構成比"></div>
+    </details>
   </section>
 
   <section id="market" aria-labelledby="market-title">

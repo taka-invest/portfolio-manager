@@ -102,6 +102,7 @@ test('fresh start, market updates, verified lots, exports and responsive layout'
   await expect(page.locator('#rebalance-table')).toContainText('監視・価格待ち');
   await expect(page.locator('#post-table')).toContainText('現金');
   await verifyNoOverflow(page);
+  await page.locator('#execution-breakdown > summary').click();
   await expect(page.locator('#rebalance-table')).toBeVisible();
   await expect(page.locator('#rebalance-table')).toHaveJSProperty('tabIndex', 0);
 
