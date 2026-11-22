@@ -138,7 +138,46 @@
       'pt。税額・為替手数料・注文時の価格変動で実際の数値は異なります。</p>';
   }
 
-  const api = { ideal, trades, comparison, color };
+  function audit(report) {
+    const label = safe(report.label);
+    const introductory = '<div class="pm-audit-header"><div class="pm-audit-heading">' +
+      '<span class="pm-audit-pill pm-audit-' + safe(report.status) + '">' + label + '</span>' +
+      '<strong>リバランス目標達成判定</strong></div>' +
+      (report.status === 'pending' ? '' :
+        '<span class="pm-muted pm-small">判定許容差：各銘柄 ±' +
+        pct(report.tolerancePct) + ' ／ 現金は最低目標以上</span>') + '</div>' +
+      '<p class="pm-audit-message">' + safe(report.message) + '</p>';
+    if (report.status === 'pending')
+      return '<section class="pm-audit-box" data-audit-status="pending" role="status">' +
+        introductory + '<p class="pm-muted pm-small">対象資産・株価・為替・ロット情報を確認してから③を再計算してください。</p></section>';
+    const stats = '<div class="pm-audit-stats"><span>最大乖離 <strong>' +
+      pct(report.maxGapPct) + '</strong></span><span>絶対乖離合計 <strong>' +
+      pct(report.sumGapPct) + 'pt</strong></span><span>未達成項目 <strong>' +
+      report.count + '件</strong></span></div>';
+    const rows = report.issues.map(item => {
+      const gap = item.gapPct;
+      return '<tr><td>' + legend(item.ticker) + '</td><td>' +
+        pct(item.actualPct) + '</td><td>' + pct(item.targetPct) +
+        '</td><td>' + (gap > 0 ? '+' : '') + pct(gap) +
+        '</td><td><strong class="' +
+        (item.severity === 'blocked' ? 'pm-audit-blocker' : 'pm-audit-partial') +
+        '">' + safe(item.reason) + '</strong>' +
+        '<div class="pm-muted pm-small pm-audit-action">' + safe(item.action) +
+        '</div></td></tr>';
+    }).join('');
+    const detail = report.issues.length
+      ? '<div class="pm-wrap"><table class="pos-table pm-audit-table"><thead><tr>' +
+        '<th>銘柄</th><th>売買後</th><th>目標</th><th>差</th><th>未達成理由・対応</th>' +
+        '</tr></thead><tbody>' + rows + '</tbody></table></div>' +
+        '<a class="pm-audit-jump" href="#allocation">① 目標配分・売却上限を確認する</a>'
+      : '<p class="pm-muted pm-small">目標外の残存保有はなく、株数・現金条件も許容範囲内です。</p>';
+    return '<section class="pm-audit-box" data-audit-status="' + safe(report.status) +
+      '" role="status">' + introductory + stats + detail +
+      '<p class="pm-muted pm-small pm-audit-footnote">判定は現在の参考株価と概算税での試算です。注文保証ではありません。' +
+      '必要株数の売買可能性、実際の手数料・為替差・税額・約定価格は証券会社で確認してください。</p></section>';
+  }
+
+  const api = { ideal, trades, comparison, audit, color };
   if (typeof module === 'object' && module.exports) module.exports = api;
   else root.PMRebalanceView = api;
 })(globalThis);
