@@ -46,3 +46,4 @@ npm run test:browser
 
 - [データ構造と計算仕様](docs/specification.md)
 - [PC・スマホでの検証結果](docs/verification.md)
+- [CNN Fear & Greed の取得・表示と運用条件](docs/fear-greed.md)
