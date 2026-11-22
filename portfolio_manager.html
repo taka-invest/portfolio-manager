@@ -3,7 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Portfolio Manager V2.3</title>
+<title>Portfolio Manager V2.4.1</title>
+<link rel="icon" type="image/svg+xml" href="./favicon.svg">
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   :root {
@@ -281,7 +282,7 @@
 <aside class="pm-side-nav" id="pm-side-nav" aria-label="Portfolio Managerのナビゲーション">
   <div class="pm-side-brand">
     <span class="pm-side-mark" aria-hidden="true">PM</span>
-    <span class="pm-side-brand-name"><strong>Portfolio Manager</strong><small>V2.4</small></span>
+    <span class="pm-side-brand-name"><strong>Portfolio Manager</strong><small>V2.4.1</small></span>
     <button type="button" id="pm-nav-close" class="pm-nav-close" aria-label="メニューを閉じる">×</button>
   </div>
   <nav class="pm-side-links" aria-label="主要機能">
@@ -304,7 +305,7 @@
   <div class="pm-top-inner">
     <div class="pm-top-identity">
       <button type="button" class="btn btn-ghost pm-mobile-trigger" id="pm-nav-open" aria-controls="pm-side-nav" aria-expanded="false" aria-label="メニューを開く">☰</button>
-      <div><strong>Portfolio Manager <span class="pm-muted">V2.4</span></strong><div class="pm-header-view" id="pm-current-page">ダッシュボード</div></div>
+      <div><strong>Portfolio Manager <span class="pm-muted">V2.4.1</span></strong><div class="pm-header-view" id="pm-current-page">ダッシュボード</div></div>
     </div>
     <button class="btn btn-ghost" id="theme-toggle" onclick="toggleTheme()" aria-label="テーマを切り替える">☀️</button>
   </div>
@@ -329,6 +330,13 @@
     </form>
     <details class="pm-card" id="data-settings">
       <summary>データ管理・取得設定</summary>
+<div class="pm-settings-source" id="pm-sentiment-settings"><strong>市場センチメントの許諾済み配信</strong>
+<label for="s-volatility-feed">VIX/VXNの配信JSONパス（このサイト内のみ）</label>
+<input type="text" id="s-volatility-feed" placeholder="./market-data/volatility.json" autocomplete="off">
+<label class="pm-check"><input id="s-fg-enabled" type="checkbox"> 許諾済みCNN Fear &amp; Greed配信を使用する（market-dataブランチ）</label>
+<button type="button" id="s-sentiment-save" class="btn btn-ghost" onclick="saveSentimentSettings()">配信設定を保存</button>
+<p id="s-sentiment-msg" class="pm-muted pm-small">未設定ではプロキシへ接続しません。数値は手動参考値のみ利用できます。</p>
+</div>
       <div class="pm-settings-grid">
         <div>
           <h3>ブラウザー保存・JSON</h3>
@@ -348,7 +356,7 @@
             <label>FMP APIキー（VIX・VXN用）<input type="password" id="s-fmp-key" autocomplete="off"></label>
           </div>
           <div class="pm-actions pm-spaced">
-            <button class="btn btn-ghost" onclick="PMApp.refreshPrices()">Finnhubキーを保存して更新</button>
+            <button class="btn btn-ghost" onclick="PMApp.refreshPrices({ force: true })">Finnhubキーを保存して更新</button>
             <button class="btn btn-ghost" onclick="saveFmpKey()">FMPキーを保存</button>
             <button class="btn btn-ghost" id="btn-jpy" onclick="setCurrency('jpy')">¥</button>
             <button class="btn btn-ghost" id="btn-usd" onclick="setCurrency('usd')">$</button>
@@ -444,22 +452,56 @@
       </button>
       <div class="ac-body">
       <div class="sentiment-grid">
-        <div class="sentiment-card">
-          <div class="s-label">Fear & Greed</div>
+        <div class="sentiment-card fg-panel">
+          <div class="s-label">CNN Fear &amp; Greed Index（0〜100）</div>
           <div class="s-value" id="fg-value">—</div>
-          <div class="s-sub" id="fg-label" style="color:var(--muted);">取得中…</div>
+          <div class="s-sub" id="fg-label">—</div>
+          <p id="fg-status" class="pm-muted pm-small" role="status">公開データを確認中…</p>
+          <p id="fg-asof" class="pm-muted pm-small"></p>
+          <p id="fg-attempt" class="pm-muted pm-small"></p>
+          <dl class="fg-comparisons">
+            <div><dt>前営業日</dt><dd id="fg-previous">—</dd></div>
+            <div><dt>1週間前</dt><dd id="fg-week">—</dd></div>
+            <div><dt>1か月前</dt><dd id="fg-month">—</dd></div>
+          </dl>
+          <div id="fg-range" class="pm-actions" role="group" aria-label="Fear &amp; Greed のグラフ期間">
+            <button type="button" class="btn btn-ghost" data-days="30" aria-pressed="true">1か月</button>
+            <button type="button" class="btn btn-ghost" data-days="90" aria-pressed="false">3か月</button>
+            <button type="button" class="btn btn-ghost" data-days="365" aria-pressed="false">1年</button>
+          </div>
+          <div id="fg-chart" hidden role="img" aria-label="Fear &amp; Greed の推移">
+            <svg viewBox="0 0 312 130" width="100%" height="auto" aria-hidden="true">
+              <path d="M34 8H300 M34 62H300 M34 116H300" fill="none" stroke="var(--border)"/>
+              <g fill="var(--muted)" font-size="10"><text x="6" y="12">100</text><text x="11" y="66">50</text><text x="16" y="120">0</text></g>
+              <polyline id="fg-line" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round"/>
+            </svg>
+          </div>
+          <p id="fg-chart-range" class="pm-muted pm-small" hidden></p>
+          <p id="fg-chart-empty" class="pm-muted pm-small">表示できる履歴がありません。</p>
+          <details class="fg-manual">
+            <summary>自動取得できない場合：参考値を手動登録</summary>
+            <form id="fg-manual-form" class="pm-actions">
+              <label for="fg-manual-score">CNN公式ページで確認したスコア（0〜100）
+                <input id="fg-manual-score" type="number" min="0" max="100" step="0.1" inputmode="decimal" required>
+              </label>
+              <button type="submit" class="btn btn-ghost">参考値を保存</button>
+              <button type="button" id="fg-manual-clear" class="btn btn-ghost">手動値を削除</button>
+            </form>
+            <p id="fg-manual-note" class="pm-muted pm-small">手動値はブラウザ内にのみ保存し、売買シグナル・自動取得の履歴には使用しません。</p>
+          </details>
+          <p class="pm-muted pm-small"><a href="https://www.cnn.com/markets/fear-and-greed" target="_blank" rel="noopener noreferrer">出典 CNN Business</a> · 投資判断の参考指標</p>
         </div>
         <div class="sentiment-card">
           <div class="s-label">VIX <span style="font-size:9px;opacity:0.6;">S&amp;P500</span></div>
           <div class="s-value" id="vix-value">—</div>
-          <div class="s-sub" id="vix-label" style="color:var(--muted);">取得中…</div>
+          <div class="s-sub" id="vix-label" style="color:var(--muted);">—</div><p id="vix-status" class="pm-reference-note">許諾済み配信元未設定</p>
         </div>
         <div class="sentiment-card" style="grid-column:1/-1;">
           <div style="display:flex;align-items:center;justify-content:space-between;">
             <div>
               <div class="s-label">VXN <span style="font-size:9px;opacity:0.6;">NASDAQ-100</span></div>
               <div class="s-value" id="vxn-value">—</div>
-              <div class="s-sub" id="vxn-label" style="color:var(--muted);">取得中…</div>
+              <div class="s-sub" id="vxn-label" style="color:var(--muted);">—</div><p id="vxn-status" class="pm-reference-note">許諾済み配信元未設定</p>
             </div>
             <div id="vxn-ratio-wrap" style="text-align:right;display:none;">
               <div style="font-size:9px;color:var(--muted);">VXN/VIX比率</div>
@@ -548,7 +590,8 @@
 
     </div>
     <details class="pm-card">
-      <summary>VIX・VXNを手動入力</summary>
+      <summary>VIX・VXNを手動入力（参考値）</summary>
+<p class="pm-muted pm-small">入力値はこのPCだけに保存し、売買シグナル・確度計算には使用しません。<a href="https://www.cboe.com/tradable_products/vix/vix_historical_data/" target="_blank" rel="noopener noreferrer">VIX公式</a>／<a href="https://fred.stlouisfed.org/series/VXNCLS" target="_blank" rel="noopener noreferrer">VXN公式</a></p>
       <div class="pm-form">
         <label>VIX<input type="number" id="s-vix-manual" step="0.1"></label>
         <label>VXN<input type="number" id="s-vxn-manual" step="0.1"></label>
@@ -879,6 +922,9 @@
 
 <script src="app/data.js"></script>
 <script src="app/market.js"></script>
+<script src="app/volatility.js"></script>
+<script src="app/fear-greed.js"></script>
+<script src="app/fear-greed-ui.js"></script>
 <script src="app/rebalance.js"></script>
 <script src="app/storage.js"></script>
 <script src="app/ui.js"></script>
@@ -943,7 +989,11 @@ function currencySymbol() { return displayCurrency === 'usd' ? '$' : '¥'; }
 // キャッシュキー: pm_technicals = { PLTR: { rsi: 72, maDev: 18.5, t: timestamp }, ... }
 // TTL: 4時間
 let technicalsCache = pmRead('pm_technicals', {});
-function pmTechnicals(ticker) { return technicalsCache[ticker]; }
+function pmTechnicals(ticker) {
+  const value = technicalsCache[ticker];
+  return value && Number.isFinite(value.t) && Date.now() >= value.t &&
+    Date.now() - value.t < 4 * 3600000 ? value : null;
+}
 
 function calcRSI(closes, period = 14) {
   if (closes.length < period + 1) return null;
@@ -967,39 +1017,14 @@ function calcMADev(closes, period = 20) {
 }
 
 async function fetchTechnicals(ticker) {
-  const TTL = 4 * 60 * 60 * 1000;
-  const cached = technicalsCache[ticker];
-  if (cached && Date.now() - cached.t < TTL) return cached;
-
-  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1d&range=3mo`;
-  const proxies = [
-    'https://api.allorigins.win/raw?url=' + encodeURIComponent(url),
-    'https://corsproxy.io/?' + encodeURIComponent(url),
-  ];
-  let closes = null;
-  for (const proxy of proxies) {
-    try {
-      const res = await fetch(proxy, { signal: AbortSignal.timeout(10000) });
-      if (!res.ok) continue;
-      const json = await res.json();
-      closes = json?.chart?.result?.[0]?.indicators?.quote?.[0]?.close?.filter(v => v != null);
-      if (closes && closes.length >= 20) break;
-    } catch(e) {}
-  }
-  if (!closes || closes.length < 20) return null;
-
-  const result = { rsi: calcRSI(closes), maDev: calcMADev(closes), t: Date.now() };
-  technicalsCache[ticker] = result;
-  localStorage.setItem('pm_technicals', JSON.stringify(technicalsCache));
-  return result;
+  const previous = technicalsCache[ticker];
+  return previous && Number.isFinite(previous.t) &&
+    Date.now() >= previous.t && Date.now() - previous.t < 4 * 3600000 ? previous : null;
 }
-
 async function fetchAllTechnicals() {
-  const tickers = [...new Set(positions.filter(p => p.kind === 'stock').map(p => p.ticker))];
-  for (const ticker of tickers) {
-    await fetchTechnicals(ticker);
-    render(); // 1銘柄取得するたびに即時反映
-  }
+  // The former Yahoo public proxy returned 403/CORS. Do not scrape or repeat failing calls.
+  // Previously saved indicators remain display-only if still within their validity window.
+  return;
 }
 
 function rsiChip(rsi) {
@@ -1039,10 +1064,17 @@ async function fetchEarnings() {
   const from = today.toISOString().slice(0, 10);
   const to = new Date(today.getTime() + 120 * 86400000).toISOString().slice(0, 10);
   const earnings = pmRead('pm_earnings_v3', {});
+  const now = Date.now();
+  // At most four background earnings lookups per two hours across page reloads.
+  if (now < Number(localStorage.getItem('pm_earnings_next_batch_v1') || 0) ||
+      PMMarket.cooldownUntil()) return;
   updatingEarnings = true;
+  let attempted = 0;
   try {
     for (const ticker of tickers) {
       if (Date.now() - (earnings[ticker]?.at ?? 0) < 86400000) continue;
+      if (PMMarket.cooldownUntil() || attempted >= 4) break;
+      attempted++;
       try {
         const data = await PMMarket.finnhub('calendar/earnings', { from, to, symbol: ticker }, apiKey);
         const date = (data.earningsCalendar || []).map(e => e.date).filter(d => PMData.date(d) && d >= from).sort()[0];
@@ -1052,6 +1084,7 @@ async function fetchEarnings() {
       }
     }
     localStorage.setItem('pm_earnings_v3', JSON.stringify(earnings));
+    if (attempted) localStorage.setItem('pm_earnings_next_batch_v1', String(Date.now() + 2 * 3600000));
     PMApp.renderCompany();
   } finally { updatingEarnings = false; }
 }
@@ -1061,189 +1094,124 @@ function getEarningsDate(ticker) {
   return PMData.date(date) && date >= new Date().toISOString().slice(0, 10) ? date : null;
 }
 
-// ── Yahoo Finance 経由 VIX / VXN 取得（複数プロキシ自動フォールバック）──
-async function fetchVixQuote(symbol) {
-  const encoded = encodeURIComponent(symbol);
-  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encoded}?interval=1d&range=1d`;
-  const proxies = [
-    'https://api.allorigins.win/raw?url=' + encodeURIComponent(url),
-    'https://corsproxy.io/?' + encodeURIComponent(url),
-    'https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(url),
-  ];
-  let lastErr;
-  for (const proxyUrl of proxies) {
-    try {
-      const res = await fetch(proxyUrl, { signal: AbortSignal.timeout(10000) });
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      const data = await res.json();
-      const price = data?.chart?.result?.[0]?.meta?.regularMarketPrice;
-      if (!price || isNaN(price) || price <= 0) throw new Error('データなし');
-      return parseFloat(price);
-    } catch(e) { lastErr = e; }
-  }
-  throw lastErr;
-}
-
-// ── 市場センチメント（F&G + VIX） ──────────────────
-function fgClass(v) {
-  if (v >= 75) return 'fg-extreme-greed';
-  if (v >= 55) return 'fg-greed';
-  if (v >= 45) return 'fg-neutral';
-  if (v >= 25) return 'fg-fear';
-  return 'fg-extreme-fear';
-}
-function fgText(v) {
-  if (v >= 75) return 'Extreme Greed';
-  if (v >= 55) return 'Greed';
-  if (v >= 45) return 'Neutral';
-  if (v >= 25) return 'Fear';
-  return 'Extreme Fear';
-}
+// ── 市場センチメント：プロキシを使用しない ─────────────────────────
 function vixLabel(v) {
-  if (v <= 14) return '⚠️ 安心過剰（下位25%）';
-  if (v <= 24) return '安定域（通常）';
-  if (v <= 30) return '🟡 警戒域（上位25%）';
-  if (v <= 40) return '🟢 買い検討域';
-  return '🟢🟢 強い買い場';
+  return v <= 14 ? '低ボラティリティ' : v <= 24 ? '通常域' : v <= 30 ? '警戒域' :
+    v <= 40 ? '高ボラティリティ' : '非常に高いボラティリティ';
 }
-
 function vxnLabel(v) {
-  if (v <= 18) return '⚠️ 安心過剰';
-  if (v <= 28) return '安定域（通常）';
-  if (v <= 38) return '🟡 警戒域';
-  if (v <= 50) return '🟢 買い検討域';
-  return '🟢🟢 強い買い場';
+  return v <= 18 ? '低ボラティリティ' : v <= 28 ? '通常域' : v <= 38 ? '警戒域' :
+    v <= 50 ? '高ボラティリティ' : '非常に高いボラティリティ';
 }
+let volatilitySnapshot = null, volatilityProblem = '未設定';
+const volatilityCacheKey = 'pm_volatility_snapshot_v1';
+const volatilityURLKey = 'pm_volatility_feed_url_v1';
+const volatilityAttemptKey = 'pm_volatility_attempt_v1';
 
-// FRED（セントルイス連邦準備銀行）API
-// allorigins.win/get エンドポイント（JSONラッパー形式）で取得
-// /raw より安定・レート制限に強い
-async function fetchSentiment() {
+function configuredVolatilityURL() {
+  try { return PMVolatility.localFeedUrl(localStorage.getItem(volatilityURLKey), location.href); }
+  catch { return null; }
+}
+function volatilitySignal(symbol) {
+  return configuredVolatilityURL() && PMVolatility.isFresh(volatilitySnapshot)
+    ? volatilitySnapshot?.[symbol] ?? null : null;
+}
+function volatilityReference(symbol) {
+  if (volatilitySignal(symbol) != null) {
+    return { value: volatilitySnapshot[symbol], note: '自動配信・' + volatilitySnapshot.source +
+      '（' + new Date(volatilitySnapshot.asOf).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' }) + ' JST）' };
+  }
+  const manual = pmRead(symbol === 'VIX' ? 'pm_vix' : 'pm_vxn', null);
+  if (manual && Number.isFinite(manual.v) && manual.v > 0 && manual.v <= 200)
+    return { value: manual.v, note: '手動・旧保存値（参考のみ、売買シグナル不使用）' };
+  if (volatilitySnapshot?.[symbol] > 0)
+    return { value: volatilitySnapshot[symbol], note: '古い自動値（参考のみ、売買シグナル不使用）' };
+  return { value: null, note: volatilityProblem === '未設定'
+    ? '許諾済み配信元未設定（手動参考値を利用可）' : volatilityProblem };
+}
+function renderVolatility() {
+  const vix = volatilityReference('VIX'), vxn = volatilityReference('VXN');
+  for (const [prefix, value, label] of [['vix', vix, vixLabel], ['vxn', vxn, vxnLabel]]) {
+    document.getElementById(prefix + '-value').textContent =
+      value.value == null ? '—' : value.value.toFixed(1);
+    document.getElementById(prefix + '-label').textContent =
+      value.value == null ? 'データなし' : label(value.value);
+    document.getElementById(prefix + '-status').textContent = value.note;
+  }
+  document.getElementById('vxn-ratio-wrap').style.display =
+    vix.value != null && vxn.value != null ? 'block' : 'none';
+  if (vix.value != null && vxn.value != null)
+    document.getElementById('vxn-ratio').textContent = (vxn.value / vix.value).toFixed(2) + 'x';
+}
+function restoreVolatilityCache() {
+  try { volatilitySnapshot = PMVolatility.validate(pmRead(volatilityCacheKey, null)); }
+  catch { volatilitySnapshot = null; }
+  renderVolatility();
+}
+async function refreshVolatility() {
+  const url = configuredVolatilityURL();
+  if (!url) { volatilityProblem = '未設定'; renderVolatility(); return; }
+  const last = Number(localStorage.getItem(volatilityAttemptKey) || 0);
+  if (last > 0 && Date.now() >= last && Date.now() - last < 3600000) {
+    renderVolatility(); return;
+  }
+  localStorage.setItem(volatilityAttemptKey, String(Date.now()));
   try {
-    // CNN Fear & Greed（複数プロキシ自動フォールバック）
-    const fgUrl = 'https://production.dataviz.cnn.io/index/fearandgreed/graphdata/';
-    const fgProxies = [
-      'https://api.allorigins.win/raw?url=' + encodeURIComponent(fgUrl),
-      'https://corsproxy.io/?' + encodeURIComponent(fgUrl),
-      'https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(fgUrl),
-    ];
-    let fgRes = null;
-    for (const p of fgProxies) {
-      try { const r = await fetch(p, { signal: AbortSignal.timeout(8000) }); if (r.ok) { fgRes = r; break; } } catch(e) {}
-    }
-    if (fgRes.ok) {
-      const fgData = await fgRes.json();
-      const fg = Math.round(fgData.fear_and_greed?.score ?? fgData.fear_and_greed_historical?.data?.[0]?.x ?? 0);
-      if (fg > 0) {
-        document.getElementById('fg-value').textContent = fg;
-        document.getElementById('fg-value').className = `s-value ${fgClass(fg)}`;
-        document.getElementById('fg-label').textContent = fgText(fg);
-        document.getElementById('fg-label').style.color = '';
-        localStorage.setItem('pm_fg', JSON.stringify({ v: fg, t: Date.now() }));
-      }
-    }
-  } catch (e) {}
-
-  // VIX / VXN — Stooq.com CSV（直接 or corsproxy.io フォールバック）
-  const [vixResult, vxnResult] = await Promise.allSettled([
-    fetchVixQuote('^VIX'),
-    fetchVixQuote('^VXN'),
-  ]);
-
-  if (vixResult.status === 'fulfilled') {
-    const vix = vixResult.value;
-    document.getElementById('vix-value').textContent = vix.toFixed(1);
-    document.getElementById('vix-label').textContent = vixLabel(vix);
-    document.getElementById('vix-label').style.color = '';
-    localStorage.setItem('pm_vix', JSON.stringify({ v: vix, t: Date.now() }));
-    updateMarketSignal(null, vix);
-  } else {
-    document.getElementById('vix-value').textContent = '—';
-    document.getElementById('vix-label').textContent = vixResult.reason?.message === 'APIキー未設定' ? 'APIキー未設定' : '取得失敗';
-    console.warn('VIX fetch error:', vixResult.reason);
-  }
-
-  if (vxnResult.status === 'fulfilled') {
-    const vxn = vxnResult.value;
-    document.getElementById('vxn-value').textContent = vxn.toFixed(1);
-    document.getElementById('vxn-label').textContent = vxnLabel(vxn);
-    document.getElementById('vxn-label').style.color = '';
-    localStorage.setItem('pm_vxn', JSON.stringify({ v: vxn, t: Date.now() }));
-    // VXN/VIX比率を表示
-    const vixNow = JSON.parse(localStorage.getItem('pm_vix') || 'null')?.v;
-    if (vixNow) {
-      const ratio = (vxn / vixNow).toFixed(2);
-      document.getElementById('vxn-ratio').textContent = ratio + 'x';
-      document.getElementById('vxn-ratio-wrap').style.display = 'block';
-    }
-  } else {
-    document.getElementById('vxn-value').textContent = '—';
-    document.getElementById('vxn-label').textContent = vxnResult.reason?.message === 'APIキー未設定' ? 'APIキー未設定' : '取得失敗';
-    console.warn('VXN fetch error:', vxnResult.reason);
-  }
-
-  // キャッシュからF&Gを再読してシグナル更新
-  const fgCache = JSON.parse(localStorage.getItem('pm_fg') || 'null');
-  const vixCache = JSON.parse(localStorage.getItem('pm_vix') || 'null');
-  if (fgCache && vixCache) updateMarketSignal(fgCache.v, vixCache.v);
-
-  // 最終更新時刻を表示
-  const sentUpdEl = document.getElementById('sentiment-updated');
-  if (sentUpdEl) sentUpdEl.textContent = '最終更新: ' + new Date().toLocaleTimeString('ja-JP', {hour:'2-digit', minute:'2-digit'});
+    const response = await fetch(url, { cache: 'no-store', signal: AbortSignal.timeout(8000) });
+    if (!response.ok) throw new Error('HTTP ' + response.status);
+    volatilitySnapshot = PMVolatility.validate(await response.json());
+    localStorage.setItem(volatilityCacheKey, JSON.stringify(volatilitySnapshot));
+    volatilityProblem = '';
+  } catch { volatilityProblem = '配信元の取得失敗・形式不正（参考値のみ表示）'; }
+  renderVolatility();
 }
-
-function updateMarketSignal(fg, vix) {
-  const fgVal  = fg  ?? JSON.parse(localStorage.getItem('pm_fg')  || '{}')?.v;
-  const vixVal = vix ?? JSON.parse(localStorage.getItem('pm_vix') || '{}')?.v;
+function saveSentimentSettings() {
+  const url = document.getElementById('s-volatility-feed').value.trim();
+  const feedback = document.getElementById('s-sentiment-msg');
+  try {
+    if (url) PMVolatility.localFeedUrl(url, location.href);
+    const old = localStorage.getItem(volatilityURLKey) || '';
+    localStorage.setItem(volatilityURLKey, url);
+    localStorage.setItem('pm_fg_feed_enabled_v1',
+      String(document.getElementById('s-fg-enabled').checked));
+    if (old !== url) localStorage.removeItem(volatilityAttemptKey);
+    volatilityProblem = url ? '' : '未設定';
+    feedback.textContent = '配信設定を保存しました。利用許諾を確認したデータだけを設定してください。';
+    fetchSentiment();
+  } catch { feedback.textContent = 'このサイト内のJSONパスを設定してください。'; }
+}
+async function fetchSentiment() {
+  await Promise.allSettled([PMFearGreedUI.refresh(), refreshVolatility()]);
+  renderVolatility();
+  updateMarketSignal();
+  const el = document.getElementById('sentiment-updated');
+  if (el) el.textContent = '取得確認: ' +
+    new Date().toLocaleTimeString('ja-JP', { hour:'2-digit', minute:'2-digit' }) +
+    '（各指標の基準日時は上部に表示）';
+}
+function updateMarketSignal() {
+  const fg = PMFearGreedUI.currentScore();
+  const vix = volatilitySignal('VIX');
   const el = document.getElementById('market-signal');
-  if (!fgVal) return; // F&Gだけでも動作させる
-
-  const hasVix = !!vixVal;
-
-  if (fgVal >= 80 && (!hasVix || vixVal <= 12)) {
-    el.className = 'signal-box signal-trim';
-    el.textContent = hasVix
-      ? '🔴 トリミングシグナル — F&G過熱 + VIX低'
-      : '🔴 トリミングシグナル — F&G過熱（VIX未取得）';
-  } else if (fgVal <= 25 || (hasVix && vixVal >= 30)) {
-    el.className = 'signal-box signal-buy';
-    el.textContent = '🟢 購入シグナル — 市場が恐怖状態';
-  } else if (fgVal >= 65) {
+  if (fg == null && vix == null) {
     el.className = 'signal-box signal-wait';
-    el.textContent = '🟡 要注意 — Greed域（即行動不要）';
+    el.textContent = 'センチメントデータ未取得（自動シグナル無効）';
+  } else if (fg != null && fg >= 80 && (vix == null || vix <= 12)) {
+    el.className = 'signal-box signal-trim';
+    el.textContent = '要注意 — F&G過熱域（投資判断の参考）';
+  } else if ((fg != null && fg <= 25) || (vix != null && vix >= 30)) {
+    el.className = 'signal-box signal-buy';
+    el.textContent = '購入検討 — 市場の恐怖が高い（投資判断の参考）';
   } else {
     el.className = 'signal-box signal-wait';
-    el.textContent = '⚪ 通常域 — 待機';
+    el.textContent = '市場センチメント通常域・様子見';
   }
-  // F&G/VIX更新後にインデックス確度を再計算（補助指標として反映）
   updateCompositeSignal();
-  ['SPY','QQQ'].forEach(sym => updateConfidenceUI(sym));
+  ['SPY','QQQ'].forEach(symbol => updateConfidenceUI(symbol));
 }
-
 function restoreSentimentCache() {
-  const fgCache  = JSON.parse(localStorage.getItem('pm_fg')  || 'null');
-  const vixCache = JSON.parse(localStorage.getItem('pm_vix') || 'null');
-  const vxnCache = JSON.parse(localStorage.getItem('pm_vxn') || 'null');
-  const ttl = 3600000; // 1時間
-  if (fgCache && Date.now() - fgCache.t < ttl) {
-    document.getElementById('fg-value').textContent = fgCache.v;
-    document.getElementById('fg-value').className = `s-value ${fgClass(fgCache.v)}`;
-    document.getElementById('fg-label').textContent = fgText(fgCache.v);
-  }
-  if (vixCache && Date.now() - vixCache.t < ttl) {
-    document.getElementById('vix-value').textContent = vixCache.v.toFixed(1);
-    document.getElementById('vix-label').textContent = vixLabel(vixCache.v);
-  }
-  if (vxnCache && Date.now() - vxnCache.t < ttl) {
-    document.getElementById('vxn-value').textContent = vxnCache.v.toFixed(1);
-    document.getElementById('vxn-label').textContent = vxnLabel(vxnCache.v);
-    if (vixCache) {
-      const ratio = (vxnCache.v / vixCache.v).toFixed(2);
-      document.getElementById('vxn-ratio').textContent = ratio + 'x';
-      document.getElementById('vxn-ratio-wrap').style.display = 'block';
-    }
-  }
-  if (fgCache && vixCache) updateMarketSignal(fgCache.v, vixCache.v);
+  restoreVolatilityCache();
+  updateMarketSignal();
 }
 
 // ── 市場インデックス追跡（SPY / QQQ） ────────────────
@@ -1304,17 +1272,16 @@ function calcConfidence(symbol, signalType, absDrawdown) {
   }
 
   // VIX確認
-  const vixCache = JSON.parse(localStorage.getItem('pm_vix') || 'null');
-  if (vixCache?.v) {
-    if (signalType === 'buy'  && vixCache.v >= 30) { bonus += 5; factors.push('VIX≥30'); }
-    if (signalType === 'trim' && vixCache.v <= 15) { bonus += 5; factors.push('VIX≤15'); }
+  // Stale/hand-entered observations are deliberately ineligible for confidence bonuses.
+  const vix = volatilitySignal('VIX');
+  if (vix != null) {
+    if (signalType === 'buy' && vix >= 30) { bonus += 5; factors.push('VIX≥30'); }
+    if (signalType === 'trim' && vix <= 15) { bonus += 5; factors.push('VIX≤15'); }
   }
-
-  // F&G確認
-  const fgCache = JSON.parse(localStorage.getItem('pm_fg') || 'null');
-  if (fgCache?.v) {
-    if (signalType === 'buy'  && fgCache.v <= 25) { bonus += 5; factors.push('F&G≤25'); }
-    if (signalType === 'trim' && fgCache.v >= 65) { bonus += 5; factors.push('F&G≥65'); }
+  const fg = PMFearGreedUI.currentScore();
+  if (fg != null) {
+    if (signalType === 'buy' && fg <= 25) { bonus += 5; factors.push('F&G≤25'); }
+    if (signalType === 'trim' && fg >= 65) { bonus += 5; factors.push('F&G≥65'); }
   }
 
   return { pct: Math.min(95, base + bonus), factors };
@@ -1442,8 +1409,15 @@ function applyIndexUI(symbol, drawdownPct, curPrice) {
 
 async function fetchMarketIndex(symbol) {
   const apiKey = localStorage.getItem('pm_api_key') || '';
-  if (!apiKey) return;
+  if (!apiKey || PMMarket.cooldownUntil()) return;
   const prefix = symbol.toLowerCase();
+  const cached = pmRead('pm_' + prefix, null);
+  const now = Date.now();
+  // Quote + metric = two Finnhub requests. Skip repeated attempts after errors.
+  if (cached && now - cached.t >= 0 && now - cached.t < 2 * 3600000) return;
+  const lastAttempt = Number(localStorage.getItem('pm_index_attempt_' + prefix) || 0);
+  if (now - lastAttempt >= 0 && now - lastAttempt < 60 * 60000) return;
+  localStorage.setItem('pm_index_attempt_' + prefix, String(now));
   try {
     const [quoteData, metricData] = await Promise.all([
       PMMarket.finnhub('quote', { symbol }, apiKey),
@@ -1837,8 +1811,8 @@ function renderPlans() {
 
 // 記録時点の市場スナップショットをlocalStorageキャッシュから取得
 function captureMarketSnapshot() {
-  const vix = JSON.parse(localStorage.getItem('pm_vix') || 'null')?.v ?? null;
-  const fg  = JSON.parse(localStorage.getItem('pm_fg')  || 'null')?.v ?? null;
+  const vix = volatilitySignal('VIX');
+  const fg = PMFearGreedUI.currentScore();
   const spy = JSON.parse(localStorage.getItem('pm_spy') || 'null');
   return { vix, fg, spyDrawdown: spy?.drawdown ?? null };
 }
@@ -2003,31 +1977,13 @@ function watchToPlan(id) {
 // ════════════════════════════════════════════════════
 
 // S&P500（^GSPC）の期間リターンをYahoo Finance経由で取得
-async function fetchSpyHistoricalReturn(startDateStr) {
-  const period1 = Math.floor(new Date(startDateStr).getTime() / 1000);
-  const period2 = Math.floor(Date.now() / 1000);
-  const url = `https://query1.finance.yahoo.com/v8/finance/chart/%5EGSPC?period1=${period1}&period2=${period2}&interval=1mo`;
-  const proxyUrl = 'https://corsproxy.io/?' + encodeURIComponent(url);
-  const res = await fetch(proxyUrl, { signal: AbortSignal.timeout(12000) });
-  if (!res.ok) throw new Error('HTTP ' + res.status);
-  const data = await res.json();
-  const closes = data.chart.result[0].indicators.quote[0].close.filter(v => v != null);
-  if (closes.length < 2) throw new Error('データ不足');
-  return (closes[closes.length - 1] - closes[0]) / closes[0] * 100;
+async function fetchSpyHistoricalReturn() {
+  // No third-party reverse proxy for historical SPX data. Licensed integration pending.
+  return null;
 }
-
 async function updatePerformance() {
-  const startDate = PMApp.state().preferences.perf_start || '';
-  let spyReturn = JSON.parse(localStorage.getItem('pm_spy_return') || 'null');
-  // 1日以上古いか未取得なら再フェッチ
-  if (startDate && (!spyReturn || Date.now() - spyReturn.t > 86400000)) {
-    try {
-      const pct = await fetchSpyHistoricalReturn(startDate);
-      spyReturn = { pct, t: Date.now() };
-      localStorage.setItem('pm_spy_return', JSON.stringify(spyReturn));
-    } catch(e) { /* キャッシュ値を使い続ける */ }
-  }
-  renderPerformance(spyReturn?.pct ?? null);
+  // Old benchmark returns are not refreshed and must not masquerade as current data.
+  renderPerformance(null);
 }
 
 function renderPerformance(spyReturnPct) {
@@ -2098,30 +2054,15 @@ function saveFmpKey() {
 
 // ── VIX/VXN 手動入力 ───────────────────────────────
 function applyManualVix() {
-  const vix = parseFloat(document.getElementById('s-vix-manual').value);
-  const vxn = parseFloat(document.getElementById('s-vxn-manual').value);
-  if (!isNaN(vix) && vix > 0) {
-    document.getElementById('vix-value').textContent = vix.toFixed(1);
-    document.getElementById('vix-label').textContent = vixLabel(vix);
-    document.getElementById('vix-label').style.color = '';
-    localStorage.setItem('pm_vix', JSON.stringify({ v: vix, t: Date.now() }));
-    updateMarketSignal(null, vix);
+  for (const prefix of ['vix','vxn']) {
+    const raw = document.getElementById('s-' + prefix + '-manual').value.trim();
+    const value = Number(raw);
+    if (raw && Number.isFinite(value) && value > 0 && value <= 200)
+      localStorage.setItem('pm_' + prefix, JSON.stringify({ v: value, t: Date.now(), source: 'manual' }));
   }
-  if (!isNaN(vxn) && vxn > 0) {
-    document.getElementById('vxn-value').textContent = vxn.toFixed(1);
-    document.getElementById('vxn-label').textContent = vxnLabel(vxn);
-    document.getElementById('vxn-label').style.color = '';
-    localStorage.setItem('pm_vxn', JSON.stringify({ v: vxn, t: Date.now() }));
-    const vixCache = JSON.parse(localStorage.getItem('pm_vix') || 'null');
-    if (vixCache?.v) {
-      document.getElementById('vxn-ratio').textContent = (vxn / vixCache.v).toFixed(2) + 'x';
-      document.getElementById('vxn-ratio-wrap').style.display = 'block';
-    }
-  }
-  const sentUpdEl = document.getElementById('sentiment-updated');
-  if (sentUpdEl) sentUpdEl.textContent = '手動更新: ' + new Date().toLocaleTimeString('ja-JP', {hour:'2-digit', minute:'2-digit'});
+  renderVolatility();
+  updateMarketSignal();
 }
-
 
 // ── Init ───────────────────────────────────────────
 document.getElementById('s-api-key').value = localStorage.getItem('pm_api_key') || '';
@@ -2159,6 +2100,11 @@ PMApp.init(() => {
   renderTradeLog();
 });
 PMNavigation.init();
+PMFearGreedUI.init(updateMarketSignal);
+document.getElementById('s-volatility-feed').value =
+  localStorage.getItem(volatilityURLKey) || '';
+document.getElementById('s-fg-enabled').checked =
+  localStorage.getItem('pm_fg_feed_enabled_v1') === 'true';
 restoreSentimentCache();
 restoreIndexCache();
 fetchSentiment();
