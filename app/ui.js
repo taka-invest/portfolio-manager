@@ -5,6 +5,7 @@
   const S = root.PMStorage;
   const M = root.PMMarket;
   const R = root.PMRebalance;
+  const V = root.PMRebalanceView;
   const $ = id => document.getElementById(id);
   const escape = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
   const number = (value, digits = 2) => value == null ? '—' : value.toLocaleString('ja-JP', { maximumFractionDigits: digits });
@@ -184,6 +185,23 @@
     const sum = totals.core + totals.satellite + Number($('cash-target').value);
     $('target-sum').textContent = `コア ${pct(totals.core)} ／ サテライト ${pct(totals.satellite)} ／ 合計 ${pct(sum)}`;
     $('target-sum').dataset.warn = Math.abs(sum - 100) > 1e-6;
+    const percent = value => Math.max(0, Math.min(100, value));
+    const colored = [
+      { label: 'コア', pct: totals.core, color: '#4679E8' },
+      { label: 'サテライト', pct: totals.satellite, color: '#8F70D5' },
+      { label: '現金', pct: Number($('cash-target').value), color: '#9AA3B1' }
+    ];
+    $('target-preview').innerHTML =
+      '<div class="pm-target-line"><strong>目標アセットアロケーション</strong><span>' +
+      (Math.abs(sum - 100) <= 1e-6 ? '合計100%' : '合計 ' + pct(sum) + '（要調整）') +
+      '</span></div><div class="pm-target-bar" role="img" aria-label="目標 コア ' +
+      pct(totals.core) + ' サテライト ' + pct(totals.satellite) +
+      ' 現金 ' + pct(Number($('cash-target').value)) + '">' +
+      colored.map(group => '<span style="width:' + percent(group.pct) +
+      '%;background:' + group.color + '"></span>').join('') + '</div>' +
+      '<div class="pm-target-legend">' + colored.map(group =>
+        '<span><i style="background:' + group.color + '"></i>' + group.label +
+        ' <strong>' + pct(group.pct) + '</strong></span>').join('') + '</div>';
   }
 
   function collectTargets() {
@@ -313,6 +331,26 @@
 
   function renderOrders(out) {
     const errors = out.errors;
+    if (errors.length) {
+      $('ideal-summary').innerHTML = '<p class="pm-callout" data-warn="true">対象資産総額・株価・為替・保有残高の確認が済むと理想株数を計算できます。</p>';
+      $('ideal-table').innerHTML = '';
+      $('trade-board').innerHTML = '';
+      $('allocation-charts').innerHTML = '';
+    } else {
+      const stockBudget = out.total * (100 - state.cashTarget) / 100;
+      const headline = [
+        ['対象資産総額', yen(out.total), '保有株式＋対象現金'],
+        ['目標株式枠', yen(stockBudget), '税引き前の参考値'],
+        ['目標現金', yen(out.total * state.cashTarget / 100), pct(state.cashTarget)],
+        ['USD/JPY', number(out.fx.rate, 4), out.fx.date + ' 参考レート']
+      ];
+      $('ideal-summary').innerHTML = headline.map(([label, value, note]) =>
+        '<div class="pm-ideal-card"><small>' + label + '</small><strong>' + value +
+        '</strong><span>' + note + '</span></div>').join('');
+      $('ideal-table').innerHTML = V.ideal(out);
+      $('trade-board').innerHTML = V.trades(out);
+      $('allocation-charts').innerHTML = V.comparison(out, state);
+    }
     $('rebalance-state').textContent = errors.length ? '計算保留　' + errors.join(' ') : '保有と価格を確認済み。売買株数は買いを＋、売りを−で表示します。';
     $('rebalance-state').dataset.warn = Boolean(errors.length);
     $('csv-export').disabled = Boolean(errors.length);
