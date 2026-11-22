@@ -64,3 +64,20 @@ body.light { color-scheme: light; }
   .field { min-width: 0; }
   .pm-shell .btn, .pm-dialog .btn { min-height: 42px; }
 }
+
+.fg-panel { grid-column: 1 / -1; min-width: 0; text-align: left; }
+.fg-panel a { color: var(--accent); }
+.fg-panel [role=status] { margin-top: 6px; }
+.fg-comparisons { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin: 8px 0; }
+.fg-comparisons dt { color: var(--muted); font-size: 11px; }
+.fg-comparisons dd { font-size: 12px; margin: 3px 0; }
+#fg-range { margin: 6px 0; }
+#fg-range [aria-pressed=true] { border-color: var(--accent); color: var(--accent); }
+#fg-chart svg { display: block; }
+
+.fg-manual { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin: 12px 0; }
+.fg-manual summary { cursor: pointer; font-size: 12px; font-weight: 600; }
+.fg-manual form { margin-top: 12px; }
+.fg-manual label { display: grid; gap: 5px; flex: 1 1 190px; font-size: 12px; }
+.fg-manual input { width: 100%; max-width: 220px; background: var(--bg3); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; }
+.fg-manual .btn { white-space: nowrap; }

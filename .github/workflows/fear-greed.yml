@@ -1,0 +1,57 @@
+name: Refresh Fear & Greed
+
+on:
+  schedule:
+    # 18:23 ET in winter and 19:23 ET during daylight saving
+    - cron: '23 23 * * 1-5'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fear-greed-market-data
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    if: vars.CNN_FG_DATA_AUTHORIZED == 'true' && vars.CNN_FG_APPROVED_URL != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Collect and publish snapshot
+        env:
+          CNN_FG_DATA_AUTHORIZED: ${{ vars.CNN_FG_DATA_AUTHORIZED }}
+          CNN_FG_APPROVED_URL: ${{ vars.CNN_FG_APPROVED_URL }}
+        run: |
+          set -euo pipefail
+          data_dir="$RUNNER_TEMP/fear-greed"
+          data_ref=refs/heads/market-data
+          if git ls-remote --exit-code origin "$data_ref" >/dev/null; then
+            git fetch origin "$data_ref"
+            git worktree add --detach "$data_dir" FETCH_HEAD
+          else
+            lookup_status=$?
+            if [ "$lookup_status" -ne 2 ]; then exit "$lookup_status"; fi
+            git worktree add --detach "$data_dir" HEAD
+            git -C "$data_dir" switch --orphan market-data
+          fi
+
+          result=0
+          node scripts/update-fear-greed.cjs "$data_dir/fear-greed.json" || result=$?
+          if [ "$result" -ne 0 ] && [ "$result" -ne 2 ]; then exit "$result"; fi
+
+          git -C "$data_dir" add fear-greed.json
+          if ! git -C "$data_dir" diff --cached --quiet; then
+            git -C "$data_dir" -c user.name='github-actions[bot]' \
+              -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+              commit -m 'Refresh Fear & Greed status'
+            git -C "$data_dir" push origin "HEAD:$data_ref"
+          fi
+          exit "$result"
