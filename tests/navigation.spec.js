@@ -16,7 +16,8 @@ async function noHorizontalOverflow(page) {
   );
 }
 
-test('desktop: six routes, rebalance subtabs, history, preference and in-progress fields', async ({ page }) => {
+test('desktop: six routes, rebalance subtabs, history, preference and in-progress fields', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'PC', 'Desktop-only sidebar layout');
   await stubExternal(page);
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
@@ -78,7 +79,8 @@ test('direct links and settings: reload and nested anchor route', async ({ page 
   await noHorizontalOverflow(page);
 });
 
-test('mobile: drawer, overlay, Escape and selection', async ({ page }) => {
+test('mobile: drawer, overlay, Escape and selection', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'スマホ', 'Mobile-only drawer layout');
   await stubExternal(page);
   await page.goto(url + '#holdings');
   const sidebar = page.locator('#pm-side-nav');
