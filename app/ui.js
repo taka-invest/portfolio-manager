@@ -286,8 +286,7 @@
       if (p.kind === 'review') return p.ticker + '（資産区分：要確認）';
       const missing = [];
       if (!p.broker.trim()) missing.push('証券会社');
-      if (!p.account.trim()) missing.push('口座名');
-      if (p.accountType === 'unknown') missing.push('口座区分');
+      if (p.accountType === 'unknown') missing.push('口座区分（特定への設定を確認）');
       return p.ticker + '（' + missing.join('・') + '未設定）';
     }).join('、');
     $('trust-status').textContent = storageError ||
@@ -327,14 +326,14 @@
       assets.map(a => `<tr><td>${a.ticker}${holdingIndicators(a.ticker)}</td><td>${number(a.shares, 8)}</td>
       <td>${new Set(a.lots.map(p => [p.broker, p.account, p.accountType].join('\0'))).size}</td><td>${priceLabel(a.ticker)}</td>
       <td>${yen(a.costJpy)}</td><td>${yen(a.value)}</td><td>${yen(a.pnl)}</td></tr>`).join(''), '対象の個別株は未登録です。');
-    $('holdings-lots').innerHTML = buildTable(['銘柄・資産区分', '証券会社・口座', '口座区分', '株数', '取得単価', '円取得原価', '現在株価', '円評価額', '円評価損益', 'メモ', '操作'],
+    $('holdings-lots').innerHTML = buildTable(['銘柄・資産区分', '証券会社', '口座区分', '株数', '取得単価', '円取得原価', '現在株価', '円評価額', '円評価損益', 'メモ', '操作'],
       state.positions.map(p => {
         const a = byTicker.get(p.ticker);
         const price = p.kind === 'stock' ? a?.jpy ?? p.referenceJpy : p.referenceJpy;
         const value = price == null ? null : price * p.shares;
         const pnl = value == null || p.costJpy == null ? null : value - p.costJpy;
         return `<tr><td>${p.ticker}<div class="pm-muted pm-small">${D.KINDS[p.kind]}</div></td>
-          <td class="pm-description">${escape([p.broker, p.account].filter(Boolean).join(' / ') || '未確認')}</td>
+          <td class="pm-description">${escape(p.broker || '未確認')}</td>
           <td>${D.TYPES[p.accountType]}</td><td>${number(p.shares, 8)}</td>
           <td>${p.currency === 'USD' ? usd(p.unitCost) : yen(p.unitCost)}</td><td>${yen(p.costJpy)}</td>
           <td>${yen(price)}${price != null && (p.kind !== 'stock' || a?.jpy == null) ? '（登録参考値）' : ''}</td>
@@ -404,16 +403,24 @@
       `<tr><td>現金</td><td>—</td><td>${yen(out.cashAfter)}（${yen(out.cashAfterJpy)} + ${usd(out.cashAfterUsd)}）</td><td>${pct(out.cashAfterPct)}</td></tr>`, '');
   }
 
+  function syncLotTypeFields(form) {
+    const stock = form.elements.namedItem('kind').value === 'stock';
+    $('lot-stock-type').hidden = !stock;
+    $('lot-other-type').hidden = stock;
+    if (stock) form.elements.namedItem('accountType').value = 'specific';
+  }
+
   function openLot(lotId) {
     const lot = state.positions.find(p => p.id === lotId);
     const form = $('lot-form');
     form.reset();
     $('lot-error').hidden = true;
     form.elements.namedItem('kind').innerHTML = options(D.KINDS, lot?.kind ?? 'stock');
-    form.elements.namedItem('accountType').innerHTML = options(D.TYPES, lot?.accountType ?? 'unknown');
+    form.elements.namedItem('accountType').innerHTML = options(D.TYPES, lot?.accountType ?? 'specific');
     for (const [k, v] of Object.entries(lot ?? { id: '', currency: 'JPY', layer: 1 })) {
       if (form.elements.namedItem(k)) form.elements.namedItem(k).value = v ?? '';
     }
+    syncLotTypeFields(form);
     $('lot-title').textContent = lot ? '保有ロットを編集' : '保有ロットを登録';
     $('lot-dialog').showModal();
   }
@@ -425,9 +432,11 @@
     const unitCost = fields.unitCost === '' ? null : Number(fields.unitCost);
     const costJpy = fields.costJpy !== '' ? Number(fields.costJpy) : fields.currency === 'JPY' && unitCost != null ? unitCost * shares : null;
     const lot = { ...fields, id: fields.id || id(), ticker, shares, unitCost, costJpy, layer: Number(fields.layer),
-      broker: fields.broker.trim(), account: fields.account.trim(), referenceJpy: fields.referenceJpy === '' ? null : Number(fields.referenceJpy) };
-    if (lot.kind === 'stock' && (!lot.broker || !lot.account || lot.accountType === 'unknown')) {
-      return showNotice('個別株の証券会社・口座名・口座区分を入力してください。', true);
+      broker: fields.broker.trim(), account: fields.account?.trim() ?? '',
+      accountType: fields.kind === 'stock' ? 'specific' : fields.accountType,
+      referenceJpy: fields.referenceJpy === '' ? null : Number(fields.referenceJpy) };
+    if (lot.kind === 'stock' && !lot.broker) {
+      return showNotice('米国個別株の証券会社を入力してください。口座区分は特定で固定です。', true);
     }
     const exists = state.positions.some(p => p.id === lot.id);
     const positions = exists ? state.positions.map(p => p.id === lot.id ? lot : p) : [...state.positions, lot];
@@ -564,6 +573,7 @@
       }
     };
     $('lot-form').onsubmit = e => { e.preventDefault(); saveLot(e.currentTarget); };
+    $('lot-form').elements.namedItem('kind').onchange = e => syncLotTypeFields(e.currentTarget.form);
     $('csv-export').onclick = () => {
       const out = result();
       if (out.errors.length) return render();
