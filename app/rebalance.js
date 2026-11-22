@@ -126,7 +126,7 @@
       if (row.jpy == null || row.delta >= 0) continue;
       const { sales, limited } = liquidate(row, -row.delta / row.jpy, row.t ? row.t.sellCap : 0);
       row.sales = sales;
-      row.order = -totalOf(sales, s => s.shares);
+      row.order = sales.length ? -totalOf(sales, s => s.shares) : 0;
       row.status = limited ? (row.t ? 'sale-limited' : 'no-target') : 'none';
     }
 

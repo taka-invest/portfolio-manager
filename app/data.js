@@ -25,6 +25,7 @@
   const optional = (v, predicate) => v == null || predicate(v);
   const validId = v => typeof v === 'string' && ID.test(v);
   const ticker = v => typeof v === 'string' && TICKER.test(v);
+  const readyLot = p => p.kind !== 'review' && (p.kind !== 'stock' || Boolean(p.broker.trim() && p.account.trim() && p.accountType !== 'unknown'));
   const copy = v => JSON.parse(JSON.stringify(v));
   const pick = (v, keys) => Object.fromEntries(keys.filter(k => Object.hasOwn(v, k)).map(k => [k, v[k]]));
   const assert = (valid, label) => { if (!valid) throw new Error(label + 'の形式を確認してください。'); };
@@ -118,7 +119,7 @@
     assert(num(v.cashTarget, 0, 100) && typeof v.confirmed === 'boolean' &&
       record(tax) && num(tax.rate, 0, 100) && ['none', 'account', 'eligible'].includes(tax.offset), '計算設定');
     const positions = uniqueRows(v.positions, position, '保有ロット');
-    assert(!v.confirmed || positions.every(p => p.kind !== 'review' && !isSample(p)), '保有確認');
+    assert(!v.confirmed || positions.every(readyLot), '保有確認');
     return {
       version: VERSION, positions, targets: uniqueRows(v.targets, target, '目標配分', 'ticker'),
       cashTarget: v.cashTarget, cash: pick(cash, ['jpy', 'usd', 'extraJpy', 'extraIncluded']),
@@ -152,16 +153,19 @@
       return { next: { ...validate(payload), confirmed: false }, samples: 0 };
     }
     const v = Array.isArray(payload) ? { positions: payload } : payload;
-    assert(record(v) && Array.isArray(v.positions) && v.positions.length <= 10000, '旧バックアップ');
-    const samples = v.positions.filter(p => record(p) && isSample(p)).length;
-    const positions = v.positions.filter(p => !record(p) || !isSample(p)).map(legacyPosition);
+    assert(record(v) && ['positions', 'plans', 'trades', 'watchlist'].some(k => Object.hasOwn(v, k)), '旧バックアップ');
+    const hasPositions = Object.hasOwn(v, 'positions');
+    assert(!hasPositions || (Array.isArray(v.positions) && v.positions.length <= 10000), '旧保有ロット');
+    const lots = hasPositions ? v.positions : [];
+    const samples = lots.filter(p => record(p) && isSample(p)).length;
+    const positions = hasPositions ? lots.filter(p => !record(p) || !isSample(p)).map(legacyPosition) : current.positions;
     return {
       next: validate({ ...current, ...pick(v, ['plans', 'trades', 'watchlist', 'preferences']), positions, confirmed: false }),
       samples
     };
   }
 
-  const api = { KEY, BACKUP, TYPES, KINDS, METRICS, PREFS, ticker, date, blank, validate, prepare, copy };
+  const api = { KEY, BACKUP, TYPES, KINDS, METRICS, ticker, date, blank, validate, prepare, copy, readyLot };
   if (typeof module === 'object' && module.exports) module.exports = api;
   else root.PMData = api;
 })(globalThis);

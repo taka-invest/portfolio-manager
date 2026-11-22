@@ -88,7 +88,9 @@
     const time = zoned(quote.at, 'America/New_York');
     const previous = priorOpen(shift(ny.date, -1), usClosed);
     const close = earlyClose(ny.date) ? 780 : 960;
-    if (usClosed(ny.date) || ny.minutes < 585) return time.date === previous ? 'ready' : 'stale';
+    const priorClose = time.date === previous && time.minutes >= (earlyClose(previous) ? 765 : 945);
+    if (usClosed(ny.date) || ny.minutes < 570) return priorClose ? 'ready' : 'stale';
+    if (ny.minutes < 585 && priorClose) return 'ready';
     if (time.date !== ny.date || time.minutes < 570) return 'stale';
     if (ny.minutes <= close + 15) return now - quote.at <= 90 * 60000 ? 'ready' : 'stale';
     return time.minutes >= close - 15 ? 'ready' : 'stale';
@@ -104,29 +106,33 @@
     return fx.date >= expected && fx.date <= berlin.date && !ecbClosed(fx.date) ? 'ready' : 'stale';
   }
 
-  async function json(url, key, fetcher = fetch) {
+  async function json(url, fetcher = fetch) {
     const response = await fetcher(url, {
-      headers: key ? { 'X-Finnhub-Token': key } : undefined,
+      cache: 'no-store',
       referrerPolicy: 'no-referrer',
       signal: AbortSignal.timeout(12000)
     });
     if (!response.ok) {
       const error = new Error('HTTP ' + response.status);
       error.status = response.status;
+      const retry = response.headers?.get('Retry-After');
+      error.retryMs = !retry ? 60000 : /^\d+$/.test(retry) ? Number(retry) * 1000 : Date.parse(retry) - Date.now();
       throw error;
     }
     return response.json();
   }
 
   function finnhub(path, query, key, fetcher) {
-    return json(`${quoteEndpoint}/${path}?${new URLSearchParams(query)}`, key, fetcher);
+    // Finnhub's browser preflight does not allow the custom token header.
+    const params = new URLSearchParams({ ...query, token: key });
+    return json(`${quoteEndpoint}/${path}?${params}`, fetcher);
   }
 
   const errCode = e => e.status === 429 ? 'limited' : [401, 403].includes(e.status) ? 'denied' : 'failed';
 
   async function fetchFx(fetcher) {
     try {
-      const v = await json(fxEndpoint, null, fetcher);
+      const v = await json(fxEndpoint, fetcher);
       if (v.base !== 'USD' || v.quote !== 'JPY' || !Number.isFinite(v.rate) || v.rate <= 0 ||
         !/^\d{4}-\d{2}-\d{2}$/.test(v.date)) return { error: 'missing' };
       return { rate: v.rate, date: v.date };
@@ -139,6 +145,7 @@
     const quotes = {};
     let spaceX = knownSpaceX;
     let limited = false;
+    let retryMs = 0;
     for (const ticker of tickers) {
       if (!key || limited) {
         quotes[ticker] = { error: limited ? 'limited' : 'no-key' };
@@ -160,9 +167,10 @@
       } catch (e) {
         quotes[ticker] = { error: errCode(e) };
         limited = e.status === 429;
+        if (limited) retryMs = Math.max(60000, e.retryMs || 0);
       }
     }
-    return { quotes, spaceX, limited };
+    return { quotes, spaceX, limited, retryMs };
   }
 
   const api = { quoteStatus, fxStatus, fetchFx, fetchQuotes, finnhub, usClosed, ecbClosed };

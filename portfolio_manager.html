@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Portfolio Manager</title>
+<title>Portfolio Manager V2.3</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   :root {
@@ -273,40 +273,142 @@
     .summary-row { grid-template-columns: 1fr 1fr; }
   }
 </style>
+<link rel="stylesheet" href="app/styles.css">
 </head>
 <body>
-<div class="layout">
-  <!-- Sidebar: Rules + Settings -->
-  <aside class="sidebar">
-    <div style="display:flex;align-items:center;justify-content:space-between;">
-      <div class="logo">Portfolio<span> Manager</span></div>
-      <button id="theme-toggle" onclick="toggleTheme()" style="background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:4px 10px;cursor:pointer;font-size:13px;color:var(--muted);">☀️</button>
-    </div>
 
-    <div class="rules-panel ac-section">
-      <button class="ac-header" onclick="toggleAc(this)">
-        <span>投資ルール</span><span class="ac-chevron">▾</span>
-      </button>
-      <div class="ac-body">
-        <div class="rule-item">
-          <div class="rule-num">Rule 1 — Layer 1</div>
-          <div class="rule-text">ポジションが閾値を超えたらトリミング</div>
-          <div class="rule-detail">均等比率の1.5倍が目安。超過分を売却してキャッシュへ。</div>
+<header class="pm-top">
+  <div class="pm-top-inner">
+    <strong>Portfolio Manager <span class="pm-muted">V2.3</span></strong>
+    <nav aria-label="ページ内ナビゲーション">
+      <a href="#holdings">保有資産</a><a href="#allocation">目標配分</a><a href="#rebalance">売買計画</a>
+      <a href="#market">市場</a><a href="#companies">企業評価</a>
+    </nav>
+    <button class="btn btn-ghost" id="theme-toggle" onclick="toggleTheme()" aria-label="テーマを切り替える">☀️</button>
+  </div>
+</header>
+<main class="pm-shell">
+  <section id="overview" aria-labelledby="overview-title">
+    <div class="pm-heading pm-hero"><h1 id="overview-title">資産サマリー</h1>
+      <button class="btn btn-primary" id="price-update">株価・為替を更新</button></div>
+    <div id="summary-row" class="summary-row"></div>
+    <p id="trust-status" class="pm-callout" role="status"></p>
+    <div class="pm-actions"><button id="confirm-holdings" class="btn btn-primary">実保有・現金を確認</button>
+      <span id="market-status" class="pm-muted pm-small" role="status"></span></div>
+    <form id="cash-form" class="pm-card">
+      <h3>現金残高</h3>
+      <div class="pm-form">
+        <label>円現金（JPY）<input id="cash-jpy" type="number" min="0" step="any" required></label>
+        <label>ドル現金（USD）<input id="cash-usd" type="number" min="0" step="any" required></label>
+        <label>追加投資資金（JPY）<input id="cash-extra" type="number" min="0" step="any" required></label>
+        <label class="pm-check"><input id="cash-included" type="checkbox"> 追加資金は既存現金に計上済み</label>
+        <div><button class="btn btn-ghost">現金を保存</button></div>
+      </div>
+    </form>
+    <details class="pm-card" id="data-settings">
+      <summary>データ管理・取得設定</summary>
+      <div class="pm-settings-grid">
+        <div>
+          <h3>ブラウザー保存・JSON</h3>
+          <div class="pm-actions">
+            <button id="data-export" class="btn btn-ghost">JSONを書き出す</button>
+            <label class="btn btn-ghost" for="data-upload">JSONを選択</label><input type="file" id="data-upload" accept=".json,application/json" hidden>
+            <button id="data-local" class="btn btn-ghost">旧ブラウザーデータを確認</button>
+            <button id="data-old-file" class="btn btn-ghost">旧ファイル保存先を確認</button>
+            <button id="data-previous" class="btn btn-ghost">上書き直前のバックアップを確認</button>
+          </div>
+          <p class="pm-muted pm-small">JSONには資産と取引履歴が含まれます。自分だけがアクセスできる場所に保存してください。</p>
         </div>
-        <div class="rule-item">
-          <div class="rule-num">Rule 2 — Layer 2</div>
-          <div class="rule-text">2〜3倍になったら元本を回収</div>
-          <div class="rule-detail">半分売却→元本をキャッシュ回収。残りはタダ乗り。</div>
-        </div>
-        <div class="rule-item">
-          <div class="rule-num">Rule 3 — キャッシュ</div>
-          <div class="rule-text">常時20%以上を維持</div>
-          <div class="rule-detail">S&P500が10%以上下落した時のみ、ウォッチリスト銘柄を購入。</div>
+        <div>
+          <h3>価格・表示設定</h3>
+          <div class="pm-form">
+            <label>Finnhub APIキー<input type="password" id="s-api-key" autocomplete="off"></label>
+            <label>FMP APIキー（VIX・VXN用）<input type="password" id="s-fmp-key" autocomplete="off"></label>
+          </div>
+          <div class="pm-actions pm-spaced">
+            <button class="btn btn-ghost" onclick="PMApp.refreshPrices()">Finnhubキーを保存して更新</button>
+            <button class="btn btn-ghost" onclick="saveFmpKey()">FMPキーを保存</button>
+            <button class="btn btn-ghost" id="btn-jpy" onclick="setCurrency('jpy')">¥</button>
+            <button class="btn btn-ghost" id="btn-usd" onclick="setCurrency('usd')">$</button>
+          </div>
         </div>
       </div>
-    </div>
+      <details class="pm-card">
+        <summary>JSONBin バックアップ</summary>
+        <div class="pm-form">
+          <label>Master Key<input type="password" id="s-jb-key" autocomplete="off"></label>
+          <label>Bin ID（読み込み用）<input type="text" id="s-jb-bin" autocomplete="off"></label>
+          <label class="pm-check"><input type="checkbox" id="cloud-consent"> APIキーと資産データのJSONBinとの送受信を許可</label>
+        </div>
+        <div class="pm-actions pm-spaced">
+          <button id="cloud-load" class="btn btn-ghost">Binを読み込み差分を確認</button>
+          <button id="cloud-save" class="btn btn-ghost">新規プライベートBinに保存</button>
+        </div>
+      </details>
+    </details>
+    <p id="data-notice" class="pm-callout" role="status" hidden></p>
+  </section>
 
-    <div class="sentiment-panel settings-panel ac-section">
+  <section id="holdings" aria-labelledby="holdings-title">
+    <div class="pm-heading"><h2 id="holdings-title">保有銘柄・資産の内訳</h2>
+      <button id="lot-add" class="btn btn-primary">＋ ロットを登録</button></div>
+    <div class="pm-card"><h3>米国個別株の銘柄別集計</h3><div id="holdings-aggregate" class="pm-wrap" tabindex="0" aria-label="銘柄別集計"></div></div>
+    <div class="pm-card"><h3>口座・ロット別明細</h3><div id="holdings-lots" class="pm-wrap" tabindex="0" aria-label="ロット別明細"></div></div>
+  </section>
+
+  <section id="allocation" aria-labelledby="allocation-title">
+    <div class="pm-heading"><h2 id="allocation-title">目標ポートフォリオ配分</h2></div>
+    <form id="targets-form" class="pm-card">
+      <div class="pm-wrap" tabindex="0" aria-label="目標配分の編集">
+        <table class="pos-table pm-targets"><thead><tr>
+          <th scope="col">銘柄</th><th scope="col">区分</th><th scope="col">目標比率（%）</th>
+          <th scope="col">売却上限（株）</th><th scope="col">購入待機</th><th scope="col">価格・基準日時</th><th scope="col">操作</th>
+        </tr></thead><tbody id="target-rows"></tbody></table>
+      </div>
+      <div class="pm-form pm-spaced">
+        <label>現金目標（%）<input type="number" id="cash-target" min="0" max="100" step="any" required></label>
+        <div class="pm-actions"><button type="button" id="target-add" class="btn btn-ghost">＋ 銘柄</button>
+          <button class="btn btn-primary">配分を保存</button></div>
+      </div>
+      <p id="target-sum" class="pm-callout" role="status"></p>
+      <p class="pm-muted pm-small">売却上限 0 株で売却を保留します。保有中の配分未登録銘柄は、配分表に追加すると売却条件を設定できます。</p>
+    </form>
+  </section>
+
+  <section id="rebalance" aria-labelledby="rebalance-title">
+    <div class="pm-heading"><h2 id="rebalance-title">リバランス売買計画</h2>
+      <button id="csv-export" class="btn btn-ghost" disabled>CSVを出力</button></div>
+    <p class="pm-muted">シミュレーション専用。売買は証券会社で行います。</p>
+    <form id="tax-form" class="pm-card">
+      <div class="pm-form">
+        <label>概算税率（%）<input id="tax-rate" type="number" min="0" max="100" step="any" required></label>
+        <label>損益通算の試算条件
+          <select id="tax-offset">
+            <option value="none">通算なし</option>
+            <option value="account">同じ課税口座内で通算</option>
+            <option value="eligible">同一年度・対象口座の通算条件を満たすと仮定</option>
+          </select>
+        </label>
+        <div><button class="btn btn-ghost">税設定を保存</button></div>
+      </div>
+      <p class="pm-muted pm-small pm-spaced">国内税の概算です。口座区分・実際の取得費・申告要件によって変わります。NISA株の損益は税の計算から除きます。</p>
+    </form>
+    <p class="pm-callout" id="rebalance-state" role="status"></p>
+    <div id="rebalance-table" class="pm-wrap" tabindex="0" aria-label="売買計画"></div>
+    <details id="sale-breakdown" class="pm-card" hidden><summary>売却の口座・ロット別明細</summary>
+      <div id="sale-lots" class="pm-wrap" tabindex="0" aria-label="売却の口座・ロット別明細"></div></details>
+  </section>
+
+  <section id="after" aria-labelledby="after-title">
+    <div class="pm-heading"><h2 id="after-title">売買後の構成比・現金</h2></div>
+    <p class="pm-callout" id="post-state"></p>
+    <div id="post-table" class="pm-wrap" tabindex="0" aria-label="売買後の構成比"></div>
+  </section>
+
+  <section id="market" aria-labelledby="market-title">
+    <div class="pm-heading"><h2 id="market-title">市場センチメント・監視指標</h2></div>
+    <div class="pm-settings-grid">
+    <div data-ac-id="ac1" class="sentiment-panel settings-panel ac-section">
       <button class="ac-header" onclick="toggleAc(this)">
         <span>市場センチメント</span><span class="ac-chevron">▾</span>
       </button>
@@ -348,7 +450,7 @@
     </div>
 
     <!-- 市場インデックス追跡パネル（SPY / QQQ） -->
-    <div class="index-panel settings-panel ac-section">
+    <div data-ac-id="ac2" class="index-panel settings-panel ac-section">
       <button class="ac-header" onclick="toggleAc(this)">
         <span>📊 市場インデックス追跡</span><span class="ac-chevron">▾</span>
       </button>
@@ -413,134 +515,34 @@
       </div><!-- /ac-body -->
     </div>
 
-    <div class="settings-panel ac-section">
-      <button class="ac-header" onclick="toggleAc(this)">
-        <span>株価自動取得</span><span class="ac-chevron">▾</span>
-      </button>
-      <div class="ac-body">
-      <div class="setting-row">
-        <span class="setting-label">Finnhub APIキー</span>
-      </div>
-      <input class="setting-input" type="text" id="s-api-key" placeholder="APIキーを入力" style="width:100%;margin-bottom:8px;">
-      <button class="btn btn-primary" style="width:100%;margin-bottom:6px;" onclick="fetchPrices()">🔄 株価を今すぐ更新</button>
-      <div class="setting-row" style="margin-top:10px;">
-        <span class="setting-label">FMP APIキー <span style="font-size:10px;color:var(--muted);">（VIX/VXN用）</span></span>
-      </div>
-      <div style="font-size:10px;color:var(--muted);margin-bottom:6px;">
-        <a href="https://financialmodelingprep.com/register" target="_blank" style="color:var(--accent);">financialmodelingprep.com</a> で無料取得
-      </div>
-      <input class="setting-input" type="text" id="s-fmp-key" placeholder="APIキーを入力" style="width:100%;margin-bottom:8px;">
-      <button class="btn" style="width:100%;margin-bottom:10px;background:var(--bg3);border:1px solid var(--border);color:var(--text);font-size:12px;" onclick="saveFmpKey()">💾 キーを保存 &amp; VIX取得</button>
-      <div style="border-top:1px solid var(--border);padding-top:10px;margin-bottom:4px;">
-        <span style="font-size:10px;color:var(--muted);">手動入力（APIが使えない場合）</span>
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:6px;">
-        <div>
-          <label style="font-size:10px;color:var(--muted);display:block;margin-bottom:3px;">VIX</label>
-          <input class="setting-input" type="number" id="s-vix-manual" placeholder="18.5" step="0.1" style="width:100%;">
-        </div>
-        <div>
-          <label style="font-size:10px;color:var(--muted);display:block;margin-bottom:3px;">VXN</label>
-          <input class="setting-input" type="number" id="s-vxn-manual" placeholder="22.0" step="0.1" style="width:100%;">
-        </div>
-      </div>
-      <button class="btn btn-ghost" style="width:100%;font-size:11px;margin-bottom:6px;" onclick="applyManualVix()">✏️ 手動値を適用</button>
-      <div id="fetch-status" style="font-size:11px;color:var(--muted);text-align:center;min-height:16px;"></div>
-      <div style="margin-top:8px;display:flex;align-items:center;justify-content:space-between;">
-        <span style="font-size:11px;color:var(--muted);">USD/JPY レート</span>
-        <span id="usdjpy-rate" style="font-size:12px;font-weight:600;color:var(--text);">—</span>
-      </div>
-      <div style="margin-top:10px;display:flex;background:var(--bg3);border:1px solid var(--border);border-radius:7px;padding:2px;">
-        <button id="btn-jpy" onclick="setCurrency('jpy')" style="flex:1;border:none;border-radius:5px;padding:5px;font-size:12px;font-weight:600;cursor:pointer;background:var(--accent);color:#fff;">¥ 円</button>
-        <button id="btn-usd" onclick="setCurrency('usd')" style="flex:1;border:none;border-radius:5px;padding:5px;font-size:12px;font-weight:600;cursor:pointer;background:transparent;color:var(--muted);">$ ドル</button>
-      </div>
-      </div><!-- /ac-body -->
+
     </div>
-
-    <div class="settings-panel ac-section">
-      <button class="ac-header" onclick="toggleAc(this)">
-        <span>☁️ クラウド同期</span><span class="ac-chevron">▾</span>
-      </button>
-      <div class="ac-body">
-        <div style="font-size:11px;color:var(--muted);margin-bottom:10px;line-height:1.6;">
-          <a href="https://jsonbin.io" target="_blank" style="color:var(--accent);">jsonbin.io</a> に登録してAPIキーとBin IDを取得すると、どのPCからでもデータを共有できます。
-        </div>
-        <div style="margin-bottom:8px;">
-          <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px;">Master Key</label>
-          <input type="password" id="s-jb-key" placeholder="$2a$10$..." style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:6px 8px;color:var(--text);font-size:12px;">
-        </div>
-        <div style="margin-bottom:10px;">
-          <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px;">Bin ID</label>
-          <input type="text" id="s-jb-bin" placeholder="6849f..." style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:6px 8px;color:var(--text);font-size:12px;">
-        </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px;">
-          <button class="btn btn-primary" style="font-size:11px;" onclick="cloudSave(true)">⬆️ 今すぐ保存</button>
-          <button class="btn btn-ghost"   style="font-size:11px;" onclick="cloudLoad(true)">⬇️ 今すぐ読込</button>
-        </div>
-        <button class="btn btn-ghost" style="width:100%;font-size:11px;margin-bottom:6px;" onclick="cloudCreateBin()">🆕 新規Binを自動作成</button>
-        <div id="cloud-status" style="font-size:11px;color:var(--muted);text-align:center;min-height:16px;"></div>
-      </div><!-- /ac-body -->
-    </div>
-
-    <div class="settings-panel ac-section">
-      <button class="ac-header" onclick="toggleAc(this)">
-        <span>保存先 (ローカル)</span><span class="ac-chevron">▾</span>
-      </button>
-      <div class="ac-body">
-      <div style="margin-bottom:10px;">
-        <button id="btn-select-file" class="btn btn-ghost" style="width:100%;justify-content:center;" onclick="selectSaveFile()">📁 保存先を選択</button>
+    <details class="pm-card">
+      <summary>VIX・VXNを手動入力</summary>
+      <div class="pm-form">
+        <label>VIX<input type="number" id="s-vix-manual" step="0.1"></label>
+        <label>VXN<input type="number" id="s-vxn-manual" step="0.1"></label>
+        <div><button class="btn btn-ghost" onclick="applyManualVix()">参考値を適用</button></div>
       </div>
-      <div id="save-status" style="font-size:11px;color:var(--muted);text-align:center;margin-bottom:4px;">💾 localStorageのみ</div>
-      </div><!-- /ac-body -->
-    </div>
-
-    <div class="settings-panel ac-section">
-      <button class="ac-header" onclick="toggleAc(this)">
-        <span>閾値設定</span><span class="ac-chevron">▾</span>
-      </button>
-      <div class="ac-body">
-      <div class="setting-row">
-        <span class="setting-label">Layer 1 上限 (%)</span>
-        <input class="setting-input" type="number" id="s-l1-trigger" value="20" min="5" max="50">
-      </div>
-      <div class="setting-row">
-        <span class="setting-label">Layer 2 収穫倍率</span>
-        <input class="setting-input" type="number" id="s-l2-harvest" value="2" min="1.5" max="10" step="0.5">
-      </div>
-      <div class="setting-row">
-        <span class="setting-label">キャッシュ下限 (%)</span>
-        <input class="setting-input" type="number" id="s-cash-min" value="20" min="0" max="50">
-      </div>
-      </div><!-- /ac-body -->
-    </div>
-  </aside>
-
-  <!-- Main content -->
-  <main class="main">
-    <!-- Summary cards -->
-    <div class="summary-row" id="summary-row"></div>
-
-    <!-- パフォーマンス比較 -->
-    <div id="perf-section"></div>
-
-    <!-- Alerts -->
-    <div class="alerts-section" id="alerts-section"></div>
-
-    <!-- Layer 1 positions -->
+    </details>
+    <div id="perf-section" class="pm-spaced"></div>
+    <!-- ウォッチリストセクション -->
     <div>
       <div class="section-header">
         <div style="display:flex;align-items:center;gap:10px;">
-          <span class="section-title">ポートフォリオ</span>
-          <span class="badge badge-l1">Layer 1 コア</span>
-          <span class="badge badge-l2">Layer 2 テーマ</span>
+          <span class="section-title">👀 ウォッチリスト</span>
+          <span id="watch-count-badge" class="badge" style="background:rgba(227,179,65,0.12);color:var(--yellow);display:none;"></span>
         </div>
-        <button class="btn btn-primary" onclick="openModal()">＋ 銘柄追加</button>
+        <button class="btn btn-primary" onclick="openWatchModal()">＋ 銘柄を追加</button>
       </div>
-      <div class="positions-block">
-        <div id="pos-table-wrap"></div>
-      </div>
+      <div id="watchlist-wrap"></div>
     </div>
 
+
+  </section>
+
+  <section id="history" aria-labelledby="history-title">
+    <div class="pm-heading"><h2 id="history-title">購入計画・取引履歴</h2></div>
     <!-- 購入計画セクション -->
     <div>
       <div class="section-header">
@@ -555,18 +557,6 @@
       </div>
     </div>
 
-    <!-- ウォッチリストセクション -->
-    <div>
-      <div class="section-header">
-        <div style="display:flex;align-items:center;gap:10px;">
-          <span class="section-title">👀 ウォッチリスト</span>
-          <span id="watch-count-badge" class="badge" style="background:rgba(227,179,65,0.12);color:var(--yellow);display:none;"></span>
-        </div>
-        <button class="btn btn-primary" onclick="openWatchModal()">＋ 銘柄を追加</button>
-      </div>
-      <div id="watchlist-wrap"></div>
-    </div>
-
     <!-- 取引ログセクション -->
     <div>
       <div class="section-header">
@@ -574,6 +564,7 @@
           <span class="section-title">📋 取引ログ</span>
           <span id="trade-count-badge" class="badge" style="background:rgba(91,141,238,0.12);color:var(--accent);display:none;"></span>
         </div>
+        <button class="btn btn-ghost btn-sm" onclick="document.getElementById('trade-dialog').showModal()">取引を記録</button>
         <button class="btn btn-ghost btn-sm" onclick="clearTradeLog()" style="font-size:11px;">🗑 ログ削除</button>
       </div>
       <div class="positions-block">
@@ -581,9 +572,33 @@
       </div>
     </div>
 
-  </main>
-</div>
 
+  </section>
+
+  <section id="companies" aria-labelledby="companies-title">
+    <div class="pm-heading"><h2 id="companies-title">企業価値・決算管理</h2></div>
+    <p class="pm-muted">2028年末に投資仮説を見直します。成長が続けば2030年以降の保有も検討します。</p>
+    <div class="pm-card">
+      <div class="pm-form"><label>評価する銘柄<select id="company-ticker"></select></label>
+        <div><h3>次回決算（Finnhub）</h3><span id="company-earnings">—</span></div>
+        <div class="pm-actions">
+          <button id="company-edit" class="btn btn-ghost">投資仮説・シナリオを編集</button>
+          <button id="company-observe" class="btn btn-ghost">＋ 評価指標</button>
+        </div>
+      </div>
+      <details class="pm-card"><summary>投資仮説とシナリオ</summary>
+        <div class="pm-settings-grid">
+          <div><h3>投資仮説・保有理由</h3><p id="company-thesis" class="pm-muted"></p></div>
+          <div><h3>仮説が崩れる条件</h3><p id="company-breaks" class="pm-muted"></p></div>
+          <div><h3>弱気</h3><p id="company-bear" class="pm-muted"></p></div>
+          <div><h3>標準</h3><p id="company-base" class="pm-muted"></p></div>
+          <div><h3>強気</h3><p id="company-bull" class="pm-muted"></p></div>
+        </div>
+      </details>
+      <div id="company-table" class="pm-wrap" tabindex="0" aria-label="企業評価指標"></div>
+    </div>
+  </section>
+</main>
 <!-- ウォッチリスト追加モーダル -->
 <div class="modal-overlay" id="watch-modal" style="display:none;" onclick="closeWatchModalOutside(event)">
   <div class="modal">
@@ -720,393 +735,154 @@
   </div>
 </div>
 
-<!-- 実行確認モーダル -->
+
+<!-- 購入計画の約定記録 -->
 <div class="modal-overlay" id="exec-modal" style="display:none;" onclick="closeExecModalOutside(event)">
-  <div class="modal" style="width:420px;">
-    <h2>トランシェ実行確認</h2>
-    <div id="exec-preview"></div>
-    <div class="modal-footer">
-      <button class="btn btn-ghost" onclick="closeExecModal()">キャンセル</button>
-      <button class="btn btn-primary" id="exec-confirm-btn" onclick="confirmExec()">実行する</button>
-    </div>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="exec-title">
+    <h2 id="exec-title">購入計画の約定を記録</h2>
+    <p id="exec-preview" class="pm-muted"></p>
+    <form id="exec-form" class="pm-spaced">
+      <div class="pm-form">
+        <label>証券会社<input name="broker" maxlength="120" required></label>
+        <label>口座名<input name="account" maxlength="120" required></label>
+        <label>口座区分<select name="accountType"><option value="specific">特定</option><option value="general">一般</option><option value="nisa">NISA</option><option value="other">その他</option></select></label>
+        <label>約定株数<input name="shares" type="number" min="0.00000001" step="any" required></label>
+        <label>円換算取得原価（約定全体）<input name="costJpy" type="number" min="0.01" step="any" required></label>
+      </div>
+      <p class="pm-muted pm-small pm-spaced">記録後、証券口座の残高に合わせて現金を更新し、実保有と現金を確認してください。</p>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-ghost" onclick="closeExecModal()">キャンセル</button>
+        <button class="btn btn-primary">約定を記録</button>
+      </div>
+    </form>
   </div>
 </div>
 
-<!-- Modal -->
-<div class="modal-overlay" id="modal" style="display:none;" onclick="closeModalOutside(event)">
-  <div class="modal">
-    <h2 id="modal-title">銘柄を追加</h2>
-    <div class="field-row">
-      <div class="field">
-        <label>ティッカー</label>
-        <div class="ac-wrap">
-          <input type="text" id="f-ticker" placeholder="PLTR" style="text-transform:uppercase" autocomplete="off" oninput="acInput('f-ticker','ac-pos')" onkeydown="acKeydown(event,'f-ticker','ac-pos')">
-          <div class="ac-dropdown" id="ac-pos" style="display:none;"></div>
-        </div>
-      </div>
-      <div class="field">
-        <label>レイヤー</label>
-        <select id="f-layer">
-          <option value="1">Layer 1 — コア</option>
-          <option value="2">Layer 2 — テーマ</option>
-        </select>
-      </div>
+<dialog id="trade-dialog" class="pm-dialog" aria-labelledby="trade-title">
+  <h2 id="trade-title">約定を取引履歴に記録</h2>
+  <form id="trade-form">
+    <div class="pm-form">
+      <label>銘柄<input name="ticker" maxlength="20" required></label>
+      <label>約定日（日本時間）<input name="date" type="date" required></label>
+      <label>売買<select name="action"><option value="buy">買</option><option value="sell">売</option></select></label>
+      <label>約定株数<input name="shares" type="number" min="0.00000001" step="any" required></label>
+      <label>約定単価（JPY）<input name="priceJpy" type="number" min="0" step="any" required></label>
+      <label>メモ<input name="note" maxlength="2000"></label>
     </div>
-    <div class="field-row">
-      <div class="field">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
-          <label id="f-buy-price-label" style="margin-bottom:0;">平均取得単価</label>
-          <div style="display:flex;background:var(--bg3);border:1px solid var(--border);border-radius:5px;padding:1px;gap:1px;">
-            <button id="price-cur-jpy" onclick="setPriceCurrency('jpy')" style="padding:2px 8px;border-radius:4px;border:none;cursor:pointer;font-size:11px;font-weight:600;background:var(--accent);color:#fff;">¥</button>
-            <button id="price-cur-usd" onclick="setPriceCurrency('usd')" style="padding:2px 8px;border-radius:4px;border:none;cursor:pointer;font-size:11px;font-weight:600;background:transparent;color:var(--muted);">$</button>
-          </div>
-        </div>
-        <input type="number" id="f-buy-price" placeholder="12357" step="0.01">
-        <span id="price-rate-hint" style="font-size:10px;color:var(--muted);"></span>
-      </div>
-      <div class="field">
-        <label>現在値 (¥) ※自動更新</label>
-        <input type="number" id="f-cur-price" placeholder="22918" step="1">
-      </div>
+    <p class="pm-muted pm-small pm-spaced">保有ロットと現金は、証券口座の残高に合わせて資産管理画面で更新してください。</p>
+    <div class="pm-actions pm-footer">
+      <button type="button" class="btn btn-ghost" data-close-dialog>キャンセル</button>
+      <button class="btn btn-primary">取引履歴に記録</button>
     </div>
-    <div class="field-row">
-      <div class="field">
-        <label>保有株数</label>
-        <input type="number" id="f-shares" placeholder="100" step="1">
-      </div>
-      <div class="field">
-        <label>メモ（任意）</label>
-        <input type="text" id="f-note" placeholder="会計優良 / AI インフラ">
-      </div>
-    </div>
-    <div class="modal-footer">
-      <button class="btn btn-ghost" onclick="closeModal()">キャンセル</button>
-      <button class="btn btn-primary" onclick="savePosition()">保存</button>
-    </div>
-  </div>
-</div>
+  </form>
+</dialog>
 
+<dialog id="lot-dialog" class="pm-dialog" aria-labelledby="lot-title">
+  <h2 id="lot-title">保有ロット</h2>
+  <form id="lot-form">
+    <input name="id" type="hidden">
+    <div class="pm-form">
+      <label>ティッカー／投信コード<input name="ticker" maxlength="20" required></label>
+      <label>資産区分<select name="kind"></select></label>
+      <label>証券会社<input name="broker" maxlength="120"></label>
+      <label>口座名<input name="account" maxlength="120"></label>
+      <label>口座区分<select name="accountType"></select></label>
+      <label>保有株数・口数<input type="number" name="shares" min="0.00000001" step="any" required></label>
+      <label>取得単価<input type="number" name="unitCost" min="0" step="any"></label>
+      <label>取得通貨<select name="currency"><option>JPY</option><option>USD</option></select></label>
+      <label>円換算取得原価（ロット全体）<input type="number" name="costJpy" min="0" step="any"></label>
+      <label>監視区分<select name="layer"><option value="1">コア</option><option value="2">サテライト</option></select></label>
+      <label>参考単価（円・任意）<input type="number" name="referenceJpy" min="0" step="any"></label>
+      <label>メモ<input name="note" maxlength="2000"></label>
+    </div>
+    <p class="pm-muted pm-small pm-spaced">円取得原価は証券会社の記録を入力してください。円建て取得で原価欄が空の場合は、単価×数量を保存します。</p>
+    <p id="lot-error" class="pm-callout" role="alert" hidden></p>
+    <div class="pm-actions pm-footer"><button type="button" class="btn btn-ghost" data-close-dialog>キャンセル</button>
+      <button class="btn btn-primary">ロットを保存</button></div>
+  </form>
+</dialog>
+
+<dialog id="data-review" class="pm-dialog" aria-labelledby="data-review-title">
+  <h2 id="data-review-title">取り込み差分の確認</h2>
+  <pre id="data-diff"></pre>
+  <p class="pm-muted pm-small">現在の保存データは上書き直前のバックアップとして保持されます。</p>
+  <p id="import-error" class="pm-callout" role="alert" hidden></p>
+  <div class="pm-actions pm-footer"><button class="btn btn-ghost" data-close-dialog>キャンセル</button>
+    <button id="data-accept" class="btn btn-primary">差分を承認して保存</button></div>
+</dialog>
+
+<dialog id="company-dialog" class="pm-dialog" aria-labelledby="company-dialog-title">
+  <h2 id="company-dialog-title">投資仮説・2028年シナリオ</h2>
+  <form id="company-form">
+    <input name="ticker" type="hidden">
+    <div class="pm-form">
+      <label>投資仮説・保有理由<textarea name="thesis" maxlength="10000"></textarea></label>
+      <label>仮説が崩れる条件<textarea name="breaks" maxlength="10000"></textarea></label>
+      <label>弱気<textarea name="bear" maxlength="5000"></textarea></label>
+      <label>標準<textarea name="base" maxlength="5000"></textarea></label>
+      <label>強気<textarea name="bull" maxlength="5000"></textarea></label>
+    </div>
+    <div class="pm-actions pm-footer"><button type="button" class="btn btn-ghost" data-close-dialog>キャンセル</button>
+      <button class="btn btn-primary">保存</button></div>
+  </form>
+</dialog>
+
+<dialog id="observation-dialog" class="pm-dialog" aria-labelledby="observation-title">
+  <h2 id="observation-title">企業評価指標</h2>
+  <form id="observation-form">
+    <input name="id" type="hidden"><input name="ticker" type="hidden">
+    <div class="pm-form">
+      <label>指標<select name="metric"></select></label>
+      <label>入力区分<select name="kind"></select></label>
+      <label>対象期間<input name="period" maxlength="100" placeholder="2028年度"></label>
+      <label>値・内容<input name="value" maxlength="500" required></label>
+      <label>出典<input name="source" maxlength="500"></label>
+      <label>基準日<input name="date" type="date"></label>
+    </div>
+    <div class="pm-actions pm-footer"><button type="button" class="btn btn-ghost" data-close-dialog>キャンセル</button>
+      <button class="btn btn-primary">保存</button></div>
+  </form>
+</dialog>
+
+<script src="app/data.js"></script>
+<script src="app/market.js"></script>
+<script src="app/rebalance.js"></script>
+<script src="app/storage.js"></script>
+<script src="app/ui.js"></script>
 <script>
-// ── File System (IndexedDB でハンドルを永続化) ────────
-const DB_NAME = 'pm_fs', DB_STORE = 'handles', FILE_NAME = 'portfolio_manager.json';
-let fileHandle = null;
 
-function openDB() {
-  return new Promise((res, rej) => {
-    const req = indexedDB.open(DB_NAME, 1);
-    req.onupgradeneeded = e => e.target.result.createObjectStore(DB_STORE);
-    req.onsuccess = e => res(e.target.result);
-    req.onerror = e => rej(e);
-  });
-}
-async function loadHandleFromDB() {
-  const db = await openDB();
-  return new Promise(res => {
-    const tx = db.transaction(DB_STORE, 'readonly');
-    const req = tx.objectStore(DB_STORE).get('fileHandle');
-    req.onsuccess = e => res(e.target.result || null);
-    req.onerror = () => res(null);
-  });
-}
-async function saveHandleToDB(handle) {
-  const db = await openDB();
-  return new Promise(res => {
-    const tx = db.transaction(DB_STORE, 'readwrite');
-    tx.objectStore(DB_STORE).put(handle, 'fileHandle');
-    tx.oncomplete = res;
-  });
-}
+const pmEscape = PMApp.escape;
+const pmRead = PMStorage.read;
+let positions = [], plans = [], tradeLog = [], watchlist = [];
+function uid() { return PMApp.id(); }
 
-async function writeFile(data) {
-  if (!fileHandle) return;
-  try {
-    const writable = await fileHandle.createWritable();
-    await writable.write(JSON.stringify(data, null, 2));
-    await writable.close();
-    updateSaveStatus('✅ 保存済み');
-  } catch (e) {
-    updateSaveStatus('⚠️ 保存失敗');
-  }
-}
-
-async function selectSaveFile() {
-  if (!window.showSaveFilePicker) {
-    alert('このブラウザはFile System Access APIに対応していません。\nChromeをお使いください。');
-    return;
-  }
-  try {
-    const handle = await window.showSaveFilePicker({
-      suggestedName: FILE_NAME,
-      types: [{ description: 'JSON', accept: { 'application/json': ['.json'] } }],
-    });
-    fileHandle = handle;
-    await saveHandleToDB(handle);
-    await writeFile(positions);
-    updateSaveStatus('✅ 保存先を設定しました');
-    document.getElementById('btn-select-file').textContent = '📁 保存先変更';
-  } catch (e) {
-    if (e.name !== 'AbortError') alert('フォルダの選択に失敗しました: ' + e.message);
-  }
-}
-
-function updateSaveStatus(msg) {
-  const el = document.getElementById('save-status');
-  if (el) { el.textContent = msg; setTimeout(() => { el.textContent = fileHandle ? '📂 ファイル保存中' : '💾 localStorageのみ'; }, 2500); }
-}
-
-// ── State ──────────────────────────────────────────
-let positions = [];
-let editId = null;
-
-function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2); }
-
-function save() {
-  localStorage.setItem('pm_positions', JSON.stringify(positions));
-  writeFile(positions);
-  cloudSave(); // クラウドにも自動保存（キー未設定時は何もしない）
-}
-
-async function initData() {
-  // ファイルハンドルを復元
-  const handle = await loadHandleFromDB();
-  if (handle) {
-    try {
-      const perm = await handle.queryPermission({ mode: 'readwrite' });
-      if (perm === 'granted') {
-        fileHandle = handle;
-      } else {
-        const req = await handle.requestPermission({ mode: 'readwrite' });
-        if (req === 'granted') fileHandle = handle;
-      }
-    } catch (e) { fileHandle = null; }
-  }
-
-  // ファイルから読み込み（あれば優先）
-  if (fileHandle) {
-    try {
-      const file = await fileHandle.getFile();
-      const text = await file.text();
-      positions = JSON.parse(text);
-      document.getElementById('btn-select-file').textContent = '📁 保存先変更';
-      updateSaveStatus('📂 ファイル保存中');
-    } catch (e) {
-      positions = JSON.parse(localStorage.getItem('pm_positions') || '[]');
-    }
-  } else {
-    positions = JSON.parse(localStorage.getItem('pm_positions') || '[]');
-  }
-
-  // クラウドから読み込み（ローカルより優先）
-  const cloudLoaded = await cloudLoad();
-
-  // クラウド読込失敗 or 未設定の場合、初期データを投入
-  if (!cloudLoaded && positions.length === 0) {
-    positions = [
-      { id: uid(), ticker: 'PLTR', layer: 1, buyPrice: 1500, curPrice: 22918, shares: 1021, note: '会計優良 / AI・データ分析' },
-      { id: uid(), ticker: 'APP', layer: 1, buyPrice: 6000, curPrice: 58500, shares: 15, note: '会計優良 / モバイル広告' },
-      { id: uid(), ticker: 'SOFI', layer: 1, buyPrice: 1200, curPrice: 2100, shares: 300, note: 'フィンテック / 会計改善中' },
-      { id: uid(), ticker: 'RKLB', layer: 2, buyPrice: 750, curPrice: 3900, shares: 200, note: '宇宙テーマ' },
-      { id: uid(), ticker: 'CRWV', layer: 2, buyPrice: 6000, curPrice: 8250, shares: 50, note: 'AI インフラ / IPO銘柄' },
-    ];
-    save();
-  }
-
-  render();
-}
-
-function getSettings() {
-  return {
-    l1Trigger: parseFloat(document.getElementById('s-l1-trigger').value) || 20,
-    l2Harvest: parseFloat(document.getElementById('s-l2-harvest').value) || 2,
-    cashMin: parseFloat(document.getElementById('s-cash-min').value) || 20,
-  };
-}
-
-// ── Calculations ───────────────────────────────────
 function calcPortfolio() {
-  const total = positions.reduce((s, p) => s + p.curPrice * p.shares, 0);
-  return { total, positions };
+  const out = PMApp.result();
+  return { total: out.errors.length ? null : out.total, cash: out.errors.length ? null : out.cash };
 }
 
-function pct(pos, total) {
-  return total > 0 ? (pos.curPrice * pos.shares / total * 100) : 0;
-}
-
-function mult(pos) {
-  return pos.buyPrice > 0 ? pos.curPrice / pos.buyPrice : 1;
-}
-
-// ── Render ─────────────────────────────────────────
-function render() {
-  const { total } = calcPortfolio();
-  const s = getSettings();
-  const cashPct = 100 - positions.reduce((sum, p) => sum + pct(p, total), 0);
-  const l1pos = positions.filter(p => p.layer === 1);
-  const l2pos = positions.filter(p => p.layer === 2);
-  const l1total = l1pos.reduce((s, p) => s + p.curPrice * p.shares, 0);
-  const l2total = l2pos.reduce((s, p) => s + p.curPrice * p.shares, 0);
-
-  // Summary
-  document.getElementById('summary-row').innerHTML = `
-    <div class="summary-card">
-      <div class="label">総資産評価額</div>
-      <div class="value val-blue">${currencySymbol()}${fmt(toDisplay(total))}</div>
-      <div class="sub">${positions.length} ポジション</div>
-    </div>
-    <div class="summary-card">
-      <div class="label">Layer 1 比率</div>
-      <div class="value" style="color:var(--layer1)">${(l1total/total*100||0).toFixed(1)}%</div>
-      <div class="sub">${l1pos.length} 銘柄 ${l1pos.length > 0 ? `｜理想: <strong>${(55/l1pos.length).toFixed(1)}%</strong>/銘柄` : ''}</div>
-      ${l1pos.length >= 5 ? `<div style="font-size:10px;color:var(--red);margin-top:4px;">⚠️ 推奨上限（4銘柄）超過</div>` : ''}
-    </div>
-    <div class="summary-card">
-      <div class="label">Layer 2 比率</div>
-      <div class="value" style="color:var(--layer2)">${(l2total/total*100||0).toFixed(1)}%</div>
-      <div class="sub">${l2pos.length} 銘柄 ${l2pos.length > 0 ? `｜理想: <strong>${(22.5/l2pos.length).toFixed(1)}%</strong>/銘柄` : ''}</div>
-      ${l2pos.length >= 9 ? `<div style="font-size:10px;color:var(--red);margin-top:4px;">⚠️ 推奨上限（8銘柄）超過</div>` : ''}
-    </div>
-    <div class="summary-card">
-      <div class="label">キャッシュ比率</div>
-      <div class="value ${cashPct < s.cashMin ? 'val-red' : 'val-green'}">${cashPct.toFixed(1)}%</div>
-      <div class="sub">目標: ${s.cashMin}% 以上</div>
-    </div>
-  `;
-
-  // Alerts
-  const alerts = [];
-  positions.forEach(p => {
-    const pc = pct(p, total);
-    const m = mult(p);
-    if (p.layer === 1 && pc > s.l1Trigger) {
-      const currentVal = p.curPrice * p.shares;
-      const targetVal = total * (s.l1Trigger / 100);
-      const excessVal = currentVal - targetVal;
-      const sellShares = Math.ceil(excessVal / p.curPrice);
-      const sellVal = sellShares * p.curPrice;
-      alerts.push({ type: 'red', icon: '🔴',
-        title: `${p.ticker} — Layer 1 リバランス`,
-        desc: `現在 ${pc.toFixed(1)}% → 目標 ${s.l1Trigger}%｜` +
-              `売却推奨: <strong>${sellShares}株</strong>（${fmtPrice(sellVal)}）` +
-              `<br><span style="font-size:11px;opacity:0.8;">現在値 ${fmtPrice(p.curPrice)}/株 × ${sellShares}株 = ${fmtPrice(sellVal)} をキャッシュへ</span>`
-      });
-    }
-    const l2IdealPct = l2pos.length > 0 ? 22.5 / l2pos.length : 0;
-    if (p.layer === 2 && m >= s.l2Harvest && pc >= l2IdealPct) {
-      alerts.push({ type: 'yellow', icon: '🟡', title: `${p.ticker} — Layer 2 元本回収タイミング`, desc: `${m.toFixed(2)}x（購入単価 ${fmtPrice(p.buyPrice)} → 現在 ${fmtPrice(p.curPrice)}）。半分売却して元本を回収してください。` });
-    }
-  });
-  // 銘柄数超過アラート
-  if (l1pos.length >= 5) {
-    alerts.push({ type: 'red', icon: '⚠️',
-      title: `Layer 1 銘柄数過多 — 現在 ${l1pos.length} 銘柄（推奨上限: 4銘柄）`,
-      desc: `銘柄を増やすほどリターンが市場平均に近づきます。` +
-            `<br><span style="font-size:11px;opacity:0.8;">確信度の低い銘柄を1つ整理し、残り ${l1pos.length - 1} 銘柄の理想比率 ${(55/(l1pos.length-1)).toFixed(1)}%/銘柄 に近づけることを推奨。</span>`
-    });
-  }
-  if (l2pos.length >= 9) {
-    alerts.push({ type: 'yellow', icon: '⚠️',
-      title: `Layer 2 銘柄数過多 — 現在 ${l2pos.length} 銘柄（推奨上限: 8銘柄）`,
-      desc: `テーマ枠の分散が効きすぎて、当たっても全体への貢献が薄くなります。` +
-            `<br><span style="font-size:11px;opacity:0.8;">確信度の低いテーマを1つ整理し、残り ${l2pos.length - 1} 銘柄の理想比率 ${(22.5/(l2pos.length-1)).toFixed(1)}%/銘柄 に近づけることを推奨。</span>`
-    });
-  }
-
-  if (cashPct < s.cashMin) {
-    const shortfallJpy = (s.cashMin - cashPct) / 100 * total;
-    alerts.push({ type: 'red', icon: '🔴',
-      title: `キャッシュ不足 — ${cashPct.toFixed(1)}% （目標 ${s.cashMin}%）`,
-      desc: `不足額: <strong>${fmtPrice(shortfallJpy)}</strong> 分のポジション縮小が必要です。` +
-            `<br><span style="font-size:11px;opacity:0.8;">現在 ${fmtPrice(total * cashPct / 100)} ／ 目標 ${fmtPrice(total * s.cashMin / 100)}</span>`
-    });
-  }
-  if (alerts.length === 0) {
-    alerts.push({ type: 'green', icon: '✅', title: 'ルール遵守中', desc: '現在すべての閾値の範囲内です。次の市場調整まで待機。' });
-  }
-
-  document.getElementById('alerts-section').innerHTML = alerts.map(a =>
-    `<div class="alert alert-${a.type}">
-      <span class="alert-icon">${a.icon}</span>
-      <div class="alert-body">
-        <div class="title">${a.title}</div>
-        <div class="desc">${a.desc}</div>
-      </div>
-    </div>`
-  ).join('');
-
-  // Positions table
-  const allPos = [...positions].sort((a, b) => pct(b, total) - pct(a, total));
-  const rows = allPos.map(p => {
-    const pc = pct(p, total).toFixed(1);
-    const m = mult(p);
-    const val = p.curPrice * p.shares;
-    const overTrigger = p.layer === 1 && parseFloat(pc) > s.l1Trigger;
-    const overHarvest = p.layer === 2 && m >= s.l2Harvest;
-    const barClass = overTrigger || overHarvest ? 'bar-warn' : (p.layer === 1 ? 'bar-l1' : 'bar-l2');
-    const multClass = m >= s.l2Harvest && p.layer === 2 ? 'mult-harvest' : m >= s.l2Harvest * 0.7 ? 'mult-warn' : 'mult-good';
-
-    const earningsInfo = fmtEarningsDate(getEarningsDate(p.ticker));
-    const earningsHtml = earningsInfo
-      ? `<div class="earnings-cell${earningsInfo.urgent ? ' earnings-urgent' : ''}">${earningsInfo.label}</div>`
-      : '';
-
-    const tech = technicalsCache[p.ticker];
-    const techHtml = tech
-      ? `<div style="margin-top:3px;">${rsiChip(tech.rsi)}${maDevChip(tech.maDev)}</div>`
-      : '';
-
-    return `<tr>
-      <td>
-        <div class="ticker-cell">${p.ticker}</div>
-        <div class="note-cell">${p.note || ''}</div>
-        ${earningsHtml}
-        ${techHtml}
-      </td>
-      <td><span class="badge ${p.layer === 1 ? 'badge-l1' : 'badge-l2'}">L${p.layer}</span></td>
-      <td>
-        <div class="bar-wrap">
-          <div class="bar-bg"><div class="bar-fill ${barClass}" style="width:${Math.min(parseFloat(pc),50)*2}%"></div></div>
-          <span class="pct-label ${overTrigger ? 'val-red' : ''}">${pc}%</span>
-        </div>
-      </td>
-      <td>${currencySymbol()}${fmt(toDisplay(val))}</td>
-      <td>${fmtPnl(p)}</td>
-      <td>${fmtPrice(p.buyPrice)}</td>
-      <td>${fmtPrice(p.curPrice)}</td>
-      <td class="${multClass}">${m.toFixed(2)}x</td>
-      <td>
-        <div class="action-btns">
-          <button class="btn btn-ghost btn-sm" onclick="openModal('${p.id}')">編集</button>
-          <button class="btn btn-danger btn-sm" onclick="deletePos('${p.id}')">削除</button>
-        </div>
-      </td>
-    </tr>`;
-  }).join('');
-
-  document.getElementById('pos-table-wrap').innerHTML = `
-    <table class="pos-table">
-      <thead><tr>
-        <th>銘柄</th><th>Layer</th><th>比率</th><th>評価額</th><th>評価損益</th><th>平均取得単価</th><th>株価</th><th>倍率</th><th></th>
-      </tr></thead>
-      <tbody>${rows || `<tr><td colspan="9" class="empty-state">銘柄を追加してください</td></tr>`}</tbody>
-    </table>`;
-}
+function render() { PMApp.render(); }
 
 // ── 通貨表示 ───────────────────────────────────────
-let displayCurrency = localStorage.getItem('pm_currency') || 'jpy';
+let displayCurrency = 'jpy';
 
 function setCurrency(c) {
+  const state = PMApp.state();
+  PMApp.commit({ ...state, preferences: { ...state.preferences, currency: c } });
+}
+
+function applyCurrency(c) {
   displayCurrency = c;
-  localStorage.setItem('pm_currency', c);
   document.getElementById('btn-jpy').style.background = c === 'jpy' ? 'var(--accent)' : 'transparent';
   document.getElementById('btn-jpy').style.color = c === 'jpy' ? '#fff' : 'var(--muted)';
   document.getElementById('btn-usd').style.background = c === 'usd' ? 'var(--accent)' : 'transparent';
   document.getElementById('btn-usd').style.color = c === 'usd' ? '#fff' : 'var(--muted)';
-  render();
 }
 
 // 円建て内部値 → 表示用に変換
 function toDisplay(jpyValue) {
-  return displayCurrency === 'usd' ? jpyValue / lastUsdJpy : jpyValue;
+  if (jpyValue == null) return null;
+  return displayCurrency === 'usd' ? jpyValue / (PMApp.fxRate() ?? NaN) : jpyValue;
 }
 
 function fmt(n) {
@@ -1122,171 +898,18 @@ function fmt(n) {
 
 function fmtPrice(jpyValue) {
   const v = toDisplay(jpyValue);
+  if (v == null || !Number.isFinite(v)) return '—';
   if (displayCurrency === 'usd') return '$' + v.toFixed(2);
   return '¥' + Math.round(v).toLocaleString();
 }
 
 function currencySymbol() { return displayCurrency === 'usd' ? '$' : '¥'; }
 
-function fmtPnl(p) {
-  const pnlJpy = (p.curPrice - p.buyPrice) * p.shares;
-  const pnlDisp = toDisplay(pnlJpy);
-  const pct = p.buyPrice > 0 ? ((p.curPrice - p.buyPrice) / p.buyPrice * 100) : 0;
-  const isPos = pnlJpy >= 0;
-  const sign = isPos ? '+' : '';
-  const color = isPos ? 'var(--green)' : 'var(--red)';
-  const amtStr = displayCurrency === 'usd'
-    ? `${sign}$${fmt(Math.abs(pnlDisp))}`
-    : `${sign}¥${fmt(Math.abs(pnlDisp))}`;
-  return `<div style="color:${color};font-weight:600;font-size:13px;">${amtStr}</div>
-          <div style="color:${color};font-size:11px;">${sign}${pct.toFixed(1)}%</div>`;
-}
-
-// ── Modal ──────────────────────────────────────────
-function openModal(id) {
-  editId = id || null;
-  setPriceCurrency('jpy'); // デフォルトは円入力にリセット
-  document.getElementById('modal-title').textContent = id ? '銘柄を編集' : '銘柄を追加';
-  if (id) {
-    const p = positions.find(x => x.id === id);
-    document.getElementById('f-ticker').value = p.ticker;
-    document.getElementById('f-layer').value = p.layer;
-    document.getElementById('f-buy-price').value = p.buyPrice;
-    document.getElementById('f-cur-price').value = p.curPrice;
-    document.getElementById('f-shares').value = p.shares;
-    document.getElementById('f-note').value = p.note || '';
-  } else {
-    ['f-ticker','f-buy-price','f-cur-price','f-shares','f-note'].forEach(id => document.getElementById(id).value = '');
-    document.getElementById('f-layer').value = '1';
-  }
-  document.getElementById('modal').style.display = 'flex';
-}
-
-function closeModal() { document.getElementById('modal').style.display = 'none'; editId = null; }
-function closeModalOutside(e) { if (e.target.id === 'modal') closeModal(); }
-
-let modalPriceCurrency = 'jpy'; // 'jpy' or 'usd'
-
-function setPriceCurrency(cur) {
-  modalPriceCurrency = cur;
-  const rate = lastUsdJpy || 150;
-  document.getElementById('price-cur-jpy').style.background = cur === 'jpy' ? 'var(--accent)' : 'transparent';
-  document.getElementById('price-cur-jpy').style.color = cur === 'jpy' ? '#fff' : 'var(--muted)';
-  document.getElementById('price-cur-usd').style.background = cur === 'usd' ? 'var(--accent)' : 'transparent';
-  document.getElementById('price-cur-usd').style.color = cur === 'usd' ? '#fff' : 'var(--muted)';
-  // 取得単価のみ通貨切替。現在値は常に¥
-  document.getElementById('f-buy-price-label').textContent = cur === 'usd' ? '平均取得単価 ($)' : '平均取得単価 (¥)';
-  document.getElementById('f-buy-price').placeholder = cur === 'usd' ? '77.73' : '12357';
-  document.getElementById('price-rate-hint').textContent = cur === 'usd' ? `→ ×${rate.toFixed(0)}円で換算して保存` : '';
-}
-
-function savePosition() {
-  const ticker = document.getElementById('f-ticker').value.trim().toUpperCase();
-  const layer = parseInt(document.getElementById('f-layer').value);
-  const rate = lastUsdJpy || 150;
-  const rawBuy = parseFloat(document.getElementById('f-buy-price').value);
-  const rawCur = parseFloat(document.getElementById('f-cur-price').value);
-  // 取得単価のみ$→¥換算。現在値は常に¥入力
-  const buyPrice = modalPriceCurrency === 'usd' ? Math.round(rawBuy * rate) : rawBuy;
-  const curPrice = rawCur; // 常に¥
-  const shares = parseFloat(document.getElementById('f-shares').value);
-  const note = document.getElementById('f-note').value.trim();
-
-  if (!ticker || isNaN(buyPrice) || isNaN(curPrice) || isNaN(shares)) {
-    alert('ティッカー、単価、株数を入力してください。');
-    return;
-  }
-
-  if (editId) {
-    const idx = positions.findIndex(p => p.id === editId);
-    const old = positions[idx];
-    positions[idx] = { ...old, ticker, layer, buyPrice, curPrice, shares, note };
-    // 株数変化があればログに記録
-    const diff = shares - old.shares;
-    if (diff > 0)      logTrade({ ticker, action: 'buy_add', shares: diff,            priceJpy: curPrice, note });
-    else if (diff < 0) logTrade({ ticker, action: 'trim',    shares: Math.abs(diff),  priceJpy: curPrice, note });
-  } else {
-    positions.push({ id: uid(), ticker, layer, buyPrice, curPrice, shares, note });
-    logTrade({ ticker, action: 'buy', shares, priceJpy: buyPrice, note });
-  }
-  save();
-  closeModal();
-  render();
-}
-
-function deletePos(id) {
-  if (!confirm('このポジションを削除しますか？')) return;
-  const p = positions.find(x => x.id === id);
-  if (p) logTrade({ ticker: p.ticker, action: 'sell', shares: p.shares, priceJpy: p.curPrice, note: '全売却' });
-  positions = positions.filter(x => x.id !== id);
-  save();
-  render();
-}
-
-// ── Settings change ────────────────────────────────
-['s-l1-trigger','s-l2-harvest','s-cash-min'].forEach(id => {
-  document.getElementById(id).addEventListener('input', render);
-});
-
-// ── Finnhub 株価取得（円換算） ─────────────────────
-let lastUsdJpy = parseFloat(localStorage.getItem('pm_usdjpy')) || 150;
-
-async function fetchPrices() {
-  const apiKey = document.getElementById('s-api-key').value.trim();
-  if (!apiKey) {
-    setFetchStatus('⚠️ APIキーを入力してください', 'var(--yellow)');
-    return;
-  }
-  localStorage.setItem('pm_api_key', apiKey);
-
-  const tickers = [...new Set(positions.map(p => p.ticker))];
-  if (tickers.length === 0) { setFetchStatus('銘柄がありません', 'var(--muted)'); return; }
-
-  setFetchStatus('取得中…', 'var(--muted)');
-  const btn = document.querySelector('[onclick="fetchPrices()"]');
-  btn.disabled = true;
-
-  // USD/JPY レート取得 — FRED DEXJPUS（日次、前営業日値）
-  try {
-    const rate = await fetchFRED('DEXJPUS', 50, 250);
-    lastUsdJpy = rate;
-    localStorage.setItem('pm_usdjpy', lastUsdJpy);
-    document.getElementById('usdjpy-rate').textContent = lastUsdJpy.toFixed(2) + ' 円';
-  } catch (e) { /* レート取得失敗時は前回値を使用 */ }
-
-  let updated = 0, failed = [];
-  for (const ticker of tickers) {
-    try {
-      const res = await fetch(`https://finnhub.io/api/v1/quote?symbol=${ticker}&token=${apiKey}`);
-      if (!res.ok) throw new Error(res.status);
-      const data = await res.json();
-      if (!data.c || data.c === 0) { failed.push(ticker); continue; }
-      const priceJpy = Math.round(data.c * lastUsdJpy);
-      positions.forEach(p => { if (p.ticker === ticker) p.curPrice = priceJpy; });
-      updated++;
-    } catch (e) {
-      failed.push(ticker);
-    }
-  }
-
-  save();
-  render();
-  btn.disabled = false;
-  fetchEarnings();    // 決算日を非同期で取得（24時間キャッシュ）
-  fetchAllTechnicals(); // RSI・MA乖離率を非同期で取得
-
-  if (failed.length === 0) {
-    const now = new Date().toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
-    setFetchStatus(`✅ ${updated}銘柄を更新 (${now})`, 'var(--green)');
-  } else {
-    setFetchStatus(`⚠️ ${updated}件成功 / ${failed.join(',')} 失敗`, 'var(--yellow)');
-  }
-}
-
 // ── テクニカル指標（RSI14・MA20乖離率） ──────────────
 // キャッシュキー: pm_technicals = { PLTR: { rsi: 72, maDev: 18.5, t: timestamp }, ... }
 // TTL: 4時間
-let technicalsCache = JSON.parse(localStorage.getItem('pm_technicals') || '{}');
+let technicalsCache = pmRead('pm_technicals', {});
+function pmTechnicals(ticker) { return technicalsCache[ticker]; }
 
 function calcRSI(closes, period = 14) {
   if (closes.length < period + 1) return null;
@@ -1338,7 +961,7 @@ async function fetchTechnicals(ticker) {
 }
 
 async function fetchAllTechnicals() {
-  const tickers = [...new Set(positions.map(p => p.ticker))];
+  const tickers = [...new Set(positions.filter(p => p.kind === 'stock').map(p => p.ticker))];
   for (const ticker of tickers) {
     await fetchTechnicals(ticker);
     render(); // 1銘柄取得するたびに即時反映
@@ -1352,7 +975,7 @@ function rsiChip(rsi) {
   else if (rsi >= 60) { color = '#f90'; label = `RSI ${rsi} 🟡`; }
   else if (rsi <= 30) { color = '#58f'; label = `RSI ${rsi} 🔵`; }
   else                { color = 'var(--green)'; label = `RSI ${rsi}`; }
-  return `<span style="font-size:10px;color:${color};font-weight:600;margin-right:6px;">${label}</span>`;
+  return `<span style="font-size:10px;color:${color};font-weight:600;margin-right:6px;">${pmEscape(label)}</span>`;
 }
 
 function maDevChip(dev) {
@@ -1370,62 +993,38 @@ function maDevChip(dev) {
 // キャッシュキー: pm_earnings = { PLTR: "2026-08-05", APP: "2026-08-07", ... }
 // TTL: 24時間
 
+
+let updatingEarnings = false;
 async function fetchEarnings() {
   const apiKey = localStorage.getItem('pm_api_key') || '';
-  if (!apiKey || positions.length === 0) return;
+  if (!apiKey || updatingEarnings) return;
 
-  const cached = JSON.parse(localStorage.getItem('pm_earnings_meta') || 'null');
-  if (cached && Date.now() - cached.t < 86400000) return; // 24時間キャッシュ有効
-
-  const tickers = [...new Set(positions.map(p => p.ticker))];
+  const tickers = [...new Set([...PMApp.state().targets.map(t => t.ticker),
+    ...positions.filter(p => p.kind === 'stock').map(p => p.ticker)])];
   const today = new Date();
-  const from  = today.toISOString().slice(0, 10);
-  const to    = new Date(today.getTime() + 120 * 86400000).toISOString().slice(0, 10); // 120日先まで
-
-  const earningsMap = {};
-  await Promise.all(tickers.map(async ticker => {
-    try {
-      const res = await fetch(
-        `https://finnhub.io/api/v1/calendar/earnings?from=${from}&to=${to}&symbol=${ticker}&token=${apiKey}`
-      );
-      if (!res.ok) return;
-      const data = await res.json();
-      const dates = (data.earningsCalendar || [])
-        .map(e => e.date)
-        .filter(d => d >= from)
-        .sort();
-      if (dates.length > 0) earningsMap[ticker] = dates[0];
-    } catch (e) {}
-  }));
-
-  localStorage.setItem('pm_earnings', JSON.stringify(earningsMap));
-  localStorage.setItem('pm_earnings_meta', JSON.stringify({ t: Date.now() }));
-  render(); // 決算日が入ったら再描画
+  const from = today.toISOString().slice(0, 10);
+  const to = new Date(today.getTime() + 120 * 86400000).toISOString().slice(0, 10);
+  const earnings = pmRead('pm_earnings_v3', {});
+  updatingEarnings = true;
+  try {
+    for (const ticker of tickers) {
+      if (Date.now() - (earnings[ticker]?.at ?? 0) < 86400000) continue;
+      try {
+        const data = await PMMarket.finnhub('calendar/earnings', { from, to, symbol: ticker }, apiKey);
+        const date = (data.earningsCalendar || []).map(e => e.date).filter(d => PMData.date(d) && d >= from).sort()[0];
+        earnings[ticker] = { date: date ?? null, at: Date.now() };
+      } catch (error) {
+        if ([401, 403, 429].includes(error.status)) break;
+      }
+    }
+    localStorage.setItem('pm_earnings_v3', JSON.stringify(earnings));
+    PMApp.renderCompany();
+  } finally { updatingEarnings = false; }
 }
 
 function getEarningsDate(ticker) {
-  const map = JSON.parse(localStorage.getItem('pm_earnings') || '{}');
-  return map[ticker] || null;
-}
-
-function fmtEarningsDate(dateStr) {
-  if (!dateStr) return null;
-  const d = new Date(dateStr + 'T00:00:00');
-  const today = new Date();
-  today.setHours(0,0,0,0);
-  const diffDays = Math.round((d - today) / 86400000);
-  const mmdd = (d.getMonth()+1) + '/' + d.getDate();
-  if (diffDays < 0)  return null; // 過去日は表示しない
-  if (diffDays === 0) return { label: '📅 本日決算', urgent: true };
-  if (diffDays <= 7)  return { label: `🔔 次回決算: ${mmdd}（${diffDays}日後）`, urgent: true };
-  if (diffDays <= 30) return { label: `📅 次回決算: ${mmdd}（${diffDays}日後）`, urgent: false };
-  return { label: `📅 次回決算: ${mmdd}`, urgent: false };
-}
-
-function setFetchStatus(msg, color) {
-  const el = document.getElementById('fetch-status');
-  el.textContent = msg;
-  el.style.color = color;
+  const date = pmRead('pm_earnings_v3', {})[ticker]?.date ?? pmRead('pm_earnings', {})[ticker];
+  return PMData.date(date) && date >= new Date().toISOString().slice(0, 10) ? date : null;
 }
 
 // ── Yahoo Finance 経由 VIX / VXN 取得（複数プロキシ自動フォールバック）──
@@ -1485,33 +1084,6 @@ function vxnLabel(v) {
 // FRED（セントルイス連邦準備銀行）API
 // allorigins.win/get エンドポイント（JSONラッパー形式）で取得
 // /raw より安定・レート制限に強い
-async function fetchFRED(seriesId, minVal, maxVal) {
-  const key = localStorage.getItem('pm_fred_key') || '';
-  if (!key) throw new Error('no fred key');
-  const fredUrl = `https://api.stlouisfed.org/fred/series/observations?series_id=${seriesId}&api_key=${key}&sort_order=desc&limit=5&file_type=json`;
-
-  // 最大3回リトライ（レート制限対策）
-  for (let attempt = 0; attempt < 3; attempt++) {
-    if (attempt > 0) await new Promise(r => setTimeout(r, 3000));
-    try {
-      // /get エンドポイント: {"contents":"...json...","status":{"http_code":200}}
-      const proxyUrl = 'https://api.allorigins.win/get?url=' + encodeURIComponent(fredUrl);
-      const res = await fetch(proxyUrl, { signal: AbortSignal.timeout(12000) });
-      if (!res.ok) continue;
-      const wrapper = await res.json();
-      if (!wrapper || !wrapper.contents) continue;
-      if (wrapper.status && wrapper.status.http_code !== 200) continue;
-      const data = JSON.parse(wrapper.contents);
-      const obs = (data && data.observations) || [];
-      for (const o of obs) {
-        const v = parseFloat(o.value);
-        if (!isNaN(v) && v >= minVal && v <= maxVal) return v;
-      }
-    } catch (e) { continue; }
-  }
-  throw new Error('no valid data');
-}
-
 async function fetchSentiment() {
   try {
     // CNN Fear & Greed（複数プロキシ自動フォールバック）
@@ -1839,13 +1411,10 @@ async function fetchMarketIndex(symbol) {
   if (!apiKey) return;
   const prefix = symbol.toLowerCase();
   try {
-    const [quoteRes, metricRes] = await Promise.all([
-      fetch(`https://finnhub.io/api/v1/quote?symbol=${symbol}&token=${apiKey}`),
-      fetch(`https://finnhub.io/api/v1/stock/metric?symbol=${symbol}&metric=all&token=${apiKey}`)
+    const [quoteData, metricData] = await Promise.all([
+      PMMarket.finnhub('quote', { symbol }, apiKey),
+      PMMarket.finnhub('stock/metric', { symbol, metric: 'all' }, apiKey)
     ]);
-    if (!quoteRes.ok || !metricRes.ok) throw new Error('fetch failed');
-    const quoteData  = await quoteRes.json();
-    const metricData = await metricRes.json();
     const curPrice   = quoteData.c;
     const high52w    = metricData.metric?.['52WeekHigh'];
     if (!curPrice || !high52w) throw new Error('data missing');
@@ -1885,10 +1454,9 @@ async function acSearch(query) {
   const apiKey = localStorage.getItem('pm_api_key') || '';
   if (!apiKey || query.length < 1) return [];
   try {
-    const res = await fetch(`https://finnhub.io/api/v1/search?q=${encodeURIComponent(query)}&token=${apiKey}`);
-    const data = await res.json();
+    const data = await PMMarket.finnhub('search', { q: query }, apiKey);
     return (data.result || [])
-      .filter(r => r.type === 'Common Stock' && !r.symbol.includes('.'))
+      .filter(r => r.type === 'Common Stock' && PMData.ticker(r.symbol) && !r.symbol.includes('.'))
       .slice(0, 8);
   } catch { return []; }
 }
@@ -1908,7 +1476,7 @@ function acInput(inputId, dropId) {
       `<div class="ac-item" data-ticker="${r.symbol}" data-input="${inputId}" data-drop="${dropId}"
             onmousedown="acSelect('${r.symbol}','${inputId}','${dropId}')">
         <span class="ac-ticker">${r.symbol}</span>
-        <span class="ac-name">${r.description}</span>
+        <span class="ac-name">${pmEscape(r.description)}</span>
       </div>`
     ).join('');
     drop.style.display = 'block';
@@ -1952,11 +1520,11 @@ document.addEventListener('click', e => {
 });
 
 // ── 購入計画（ピラミッディング） ────────────────────
-let plans = JSON.parse(localStorage.getItem('pm_plans') || '[]');
+
 let planWizardStep = 1;
 let execContext = null; // { planId, stage }
 
-function savePlans() { localStorage.setItem('pm_plans', JSON.stringify(plans)); }
+
 
 // ── ウィザード ──
 function openPlanModal() {
@@ -1986,12 +1554,12 @@ function planWizardNext() {
   if (planWizardStep === 1) {
     const ticker = document.getElementById('p-ticker').value.trim().toUpperCase();
     const pct = parseFloat(document.getElementById('p-target-pct').value);
-    if (!ticker || isNaN(pct) || pct <= 0) { alert('ティッカーと目標比率を入力してください'); return; }
+    if (!PMData.ticker(ticker) || !Number.isFinite(pct) || pct <= 0 || pct > 100) { alert('ティッカーと目標比率を入力してください'); return; }
     planWizardStep = 2;
     updateWizardUI();
   } else if (planWizardStep === 2) {
     const sum = ['p-t1','p-t2','p-t3'].reduce((s,id) => s + (parseFloat(document.getElementById(id).value)||0), 0);
-    if (Math.abs(sum - 100) > 0.1) { alert('配分の合計が100%になるよう調整してください'); return; }
+    if (Math.abs(sum - 100) > 0.1 || ['p-t1','p-t2','p-t3'].some(id => Number(document.getElementById(id).value) < 0)) { alert('配分の合計が100%になるよう調整してください'); return; }
     planWizardStep = 3;
     updateWizardUI();
   } else {
@@ -2024,14 +1592,14 @@ function updateStep1Preview() {
   const amtJpy = total * pct / 100;
   const el = document.getElementById('step1-preview');
   if (pct > 0 && total > 0) {
-    el.innerHTML = `現在の総資産 ${currencySymbol()}${fmt(toDisplay(total))} の ${pct}% = <strong>${fmtPrice(amtJpy)}</strong>`;
+    el.innerHTML = `現在の総資産 ${fmtPrice(total)} の ${pct}% = <strong>${fmtPrice(amtJpy)}</strong>`;
   } else { el.innerHTML = ''; }
 }
 
 function updateAllocPreview() {
   const { total } = calcPortfolio();
   const targetPct = parseFloat(document.getElementById('p-target-pct').value) || 0;
-  const totalBudget = total * targetPct / 100;
+  const totalBudget = total == null ? null : total * targetPct / 100;
   const t1 = parseFloat(document.getElementById('p-t1').value) || 0;
   const t2 = parseFloat(document.getElementById('p-t2').value) || 0;
   const t3 = parseFloat(document.getElementById('p-t3').value) || 0;
@@ -2039,17 +1607,16 @@ function updateAllocPreview() {
   document.getElementById('alloc-sum-warn').style.display = Math.abs(sum - 100) > 0.1 ? 'block' : 'none';
 
   const ticker = document.getElementById('p-ticker').value.trim().toUpperCase();
-  const pos = positions.find(p => p.ticker === ticker);
-  const curPrice = pos ? pos.curPrice : null;
+  const curPrice = PMApp.freshPrice(ticker);
 
   const rows = [[t1,'第1弾'],[t2,'第2弾'],[t3,'第3弾']].map(([pct, label]) => {
-    const amt = totalBudget * pct / 100;
-    const shares = curPrice ? Math.floor(amt / curPrice) : '—';
+    const amt = totalBudget == null ? null : totalBudget * pct / 100;
+    const shares = estimateTranche(ticker, amt, curPrice);
     return `<tr>
       <td>${label}</td>
       <td>${pct}%</td>
       <td>${fmtPrice(amt)}</td>
-      <td>${shares}${curPrice ? '株' : ''}</td>
+      <td>${shares != null ? shares + '株' : '—'}</td>
     </tr>`;
   }).join('');
   document.getElementById('alloc-preview').innerHTML = `
@@ -2086,92 +1653,67 @@ function savePlan() {
     createdAt: new Date().toISOString(),
     completed: false,
   };
-  plans.push(plan);
-  savePlans();
+  if (!PMApp.commit({ ...PMApp.state(), plans: [...plans, plan] })) return;
   closePlanModal();
-  renderPlans();
+  PMApp.refreshPrices({ indicators: false });
 }
 
 function deletePlan(id) {
   if (!confirm('この購入計画を削除しますか？')) return;
-  plans = plans.filter(p => p.id !== id);
-  savePlans();
+  PMApp.commit({ ...PMApp.state(), plans: plans.filter(p => p.id !== id) }, true);
   renderPlans();
 }
 
-// ── 実行モーダル ──
+
+// ── 約定の記録 ─────────────────────────────────
+function estimateTranche(ticker, budget, price) {
+  const out = PMApp.result();
+  if (out.errors.length || budget == null || !price) return null;
+  const target = PMApp.state().targets.find(t => t.ticker === ticker);
+  if (target?.group === 'satellite' && target.wait) return 0;
+  return Math.max(0, Math.floor(Math.min(budget, out.cash - out.total * PMApp.state().cashTarget / 100) / price));
+}
+
 function openExecModal(planId, stage) {
   const plan = plans.find(p => p.id === planId);
-  const tranche = plan.tranches.find(t => t.stage === stage);
-  const { total } = calcPortfolio();
-  const budgetJpy = total * plan.targetPct / 100 * tranche.allocPct / 100;
-  const pos = positions.find(p => p.ticker === plan.ticker);
-  const curPriceJpy = pos ? pos.curPrice : null;
-  const shares = curPriceJpy ? Math.floor(budgetJpy / curPriceJpy) : null;
-  const actualCostJpy = shares && curPriceJpy ? shares * curPriceJpy : null;
-  const cashJpy = total * (100 - positions.reduce((s,p) => s + pct(p,total), 0)) / 100;
-  const cashShort = actualCostJpy && actualCostJpy > cashJpy;
-
-  execContext = { planId, stage, shares, curPriceJpy, actualCostJpy };
-
-  document.getElementById('exec-preview').innerHTML = `
-    <table class="preview-table" style="margin-bottom:12px;">
-      <tr><td style="color:var(--muted)">銘柄</td><td><strong>${plan.ticker}</strong>（第${stage}弾 / ${tranche.allocPct}%）</td></tr>
-      <tr><td style="color:var(--muted)">現在の総資産</td><td>${fmtPrice(total)}</td></tr>
-      <tr><td style="color:var(--muted)">目標比率 ${plan.targetPct}% × ${tranche.allocPct}%</td><td><strong>${fmtPrice(budgetJpy)}</strong></td></tr>
-      <tr><td style="color:var(--muted)">現在株価</td><td>${curPriceJpy ? fmtPrice(curPriceJpy) + '/株' : '⚠️ 未取得（要更新）'}</td></tr>
-      <tr><td style="color:var(--muted)">購入株数</td><td><strong>${shares !== null ? shares + '株' : '—'}</strong></td></tr>
-      <tr><td style="color:var(--muted)">実際の投入金額</td><td>${actualCostJpy ? fmtPrice(actualCostJpy) : '—'}</td></tr>
-    </table>
-    ${cashShort ? `<div class="cash-warning">⚠️ キャッシュ不足：現在 ${fmtPrice(cashJpy)} しかありません</div>` : ''}
-    ${!curPriceJpy ? `<div class="cash-warning">⚠️ 株価未取得です。先に「株価を今すぐ更新」を実行してください</div>` : ''}
-  `;
-  document.getElementById('exec-confirm-btn').disabled = !shares || shares <= 0;
+  const tranche = plan?.tranches.find(t => t.stage === stage && !t.executed);
+  if (!tranche) return;
+  execContext = { planId, stage };
+  const form = document.getElementById('exec-form');
+  form.reset();
+  document.getElementById('exec-preview').textContent = `${plan.ticker} 第${stage}弾。証券会社で約定した内容を入力します。`;
   document.getElementById('exec-modal').style.display = 'flex';
 }
-function closeExecModal() { document.getElementById('exec-modal').style.display = 'none'; execContext = null; }
+
+function closeExecModal() {
+  document.getElementById('exec-modal').style.display = 'none';
+  execContext = null;
+}
 function closeExecModalOutside(e) { if (e.target.id === 'exec-modal') closeExecModal(); }
 
-function confirmExec() {
+function confirmExec(event) {
+  event.preventDefault();
   if (!execContext) return;
-  const { planId, stage, shares, curPriceJpy } = execContext;
-  const plan = plans.find(p => p.id === planId);
-  const tranche = plan.tranches.find(t => t.stage === stage);
-
-  // ポジションに加算
-  const existing = positions.find(p => p.ticker === plan.ticker);
-  if (existing) {
-    const totalCostOld = existing.buyPrice * existing.shares;
-    const totalCostNew = curPriceJpy * shares;
-    const newShares = existing.shares + shares;
-    existing.buyPrice = Math.round((totalCostOld + totalCostNew) / newShares);
-    existing.shares = newShares;
-    existing.curPrice = curPriceJpy;
-  } else {
-    positions.push({ id: uid(), ticker: plan.ticker, layer: plan.layer, buyPrice: curPriceJpy, curPrice: curPriceJpy, shares, note: plan.note });
-  }
-
-  // 計画を更新
-  tranche.executed = true;
-  tranche.executedAt = new Date().toISOString();
-  tranche.executedShares = shares;
-  tranche.executedPriceJpy = curPriceJpy;
+  const { planId, stage } = execContext;
+  const saved = plans.find(p => p.id === planId);
+  if (!saved) return closeExecModal();
+  const plan = PMData.copy(saved);
+  const tranche = plan?.tranches.find(t => t.stage === stage && !t.executed);
+  if (!tranche) return closeExecModal();
+  const input = Object.fromEntries(new FormData(event.currentTarget));
+  const { ticker, layer } = plan;
+  const broker = input.broker.trim(), account = input.account.trim(), accountType = input.accountType;
+  if (!broker || !account) return alert('証券会社と口座名を入力してください。');
+  const shares = Number(input.shares), costJpy = Number(input.costJpy);
+  const priceJpy = costJpy / shares;
+  const lot = { id: uid(), ticker, layer, broker, account, accountType, kind: 'stock', shares,
+    currency: 'JPY', unitCost: priceJpy, costJpy, referenceJpy: null, note: plan.note || '' };
+  const at = new Date().toISOString();
+  Object.assign(tranche, { executed: true, executedAt: at, executedShares: shares, executedPriceJpy: priceJpy });
   plan.completed = plan.tranches.every(t => t.executed);
-
-  // 取引ログに記録（計画実行は市場状況が最も重要な場面）
-  logTrade({
-    ticker: plan.ticker,
-    action: 'buy',
-    shares,
-    priceJpy: curPriceJpy,
-    note: `購入計画 第${stage}弾 (${tranche.trigger || ''})`,
-  });
-
-  save();
-  savePlans();
-  closeExecModal();
-  render();
-  renderPlans();
+  const entry = tradeEntry({ ticker, action: 'buy', shares, priceJpy, note: `購入計画 第${stage}弾 (${tranche.trigger || ''})`, lotId: lot.id });
+  if (PMApp.commit({ ...PMApp.state(), confirmed: false, positions: [...positions, lot],
+    plans: plans.map(p => p.id === planId ? plan : p), trades: [entry, ...tradeLog] })) closeExecModal();
 }
 
 // ── 計画レンダリング ──
@@ -2196,17 +1738,15 @@ function renderPlans() {
   document.getElementById('plans-wrap').innerHTML = allPlans.map(plan => {
     const doneCount = plan.tranches.filter(t => t.executed).length;
     const nextTranche = plan.tranches.find(t => !t.executed);
-    const budgetJpy = total * plan.targetPct / 100;
+    const budgetJpy = total == null ? null : total * plan.targetPct / 100;
 
     const segments = plan.tranches.map(t =>
       `<div class="progress-segment ${t.executed ? 'progress-segment-done' : (t === nextTranche ? 'progress-segment-active' : 'progress-segment-pending')}" style="flex:${t.allocPct}"></div>`
     ).join('');
 
     const trancheRows = plan.tranches.map(t => {
-      const amtJpy = budgetJpy * t.allocPct / 100;
-      const pos = positions.find(p => p.ticker === plan.ticker);
-      const curPrice = pos ? pos.curPrice : null;
-      const estShares = curPrice ? Math.floor(amtJpy / curPrice) : null;
+      const amtJpy = budgetJpy == null ? null : budgetJpy * t.allocPct / 100;
+      const estShares = estimateTranche(plan.ticker, amtJpy, PMApp.freshPrice(plan.ticker));
       const dotClass = t.executed ? 'stage-dot-done' : (t === nextTranche ? 'stage-dot-active' : 'stage-dot-pending');
 
       return `<div class="tranche-row">
@@ -2216,12 +1756,12 @@ function renderPlans() {
         </div>
         <div class="tranche-info">
           <div class="tranche-amounts">${fmtPrice(amtJpy)}${estShares ? ` / 約${estShares}株*` : ''}</div>
-          ${t.trigger ? `<div class="tranche-trigger">🎯 ${t.trigger}</div>` : ''}
+          ${t.trigger ? `<div class="tranche-trigger">🎯 ${pmEscape(t.trigger)}</div>` : ''}
           ${t.executed ? `<div class="tranche-done-info">✅ ${new Date(t.executedAt).toLocaleDateString('ja-JP')} 実行 — ${t.executedShares}株 @ ${fmtPrice(t.executedPriceJpy)}</div>` : ''}
         </div>
         <div>
           ${!t.executed && t === nextTranche
-            ? `<button class="btn btn-primary btn-sm" onclick="openExecModal('${plan.id}',${t.stage})">実行</button>`
+            ? `<button class="btn btn-primary btn-sm" onclick="openExecModal('${plan.id}',${t.stage})">約定を記録</button>`
             : t.executed ? '' : `<span style="font-size:11px;color:var(--muted);">待機中</span>`}
         </div>
       </div>`;
@@ -2235,7 +1775,7 @@ function renderPlans() {
             <span class="badge ${plan.layer === 1 ? 'badge-l1' : 'badge-l2'}">L${plan.layer}</span>
             ${plan.completed ? '<span style="font-size:11px;color:var(--green);font-weight:600;">✅ 完了</span>' : ''}
           </div>
-          <div class="plan-meta">${plan.note || ''}　目標比率: ${plan.targetPct}% = ${fmtPrice(budgetJpy)} / 進捗 ${doneCount}/${plan.tranches.length} 完了</div>
+          <div class="plan-meta">${pmEscape(plan.note)}　目標比率: ${plan.targetPct}% = ${fmtPrice(budgetJpy)} / 進捗 ${doneCount}/${plan.tranches.length} 完了</div>
         </div>
         <div style="display:flex;align-items:center;gap:8px;">
           <span class="plan-target-badge">${plan.targetPct}%</span>
@@ -2257,9 +1797,9 @@ function renderPlans() {
 // ════════════════════════════════════════════════════
 // 取引ログ
 // ════════════════════════════════════════════════════
-let tradeLog = JSON.parse(localStorage.getItem('pm_trade_log') || '[]');
 
-function saveTradeLog() { localStorage.setItem('pm_trade_log', JSON.stringify(tradeLog)); }
+
+
 
 // 記録時点の市場スナップショットをlocalStorageキャッシュから取得
 function captureMarketSnapshot() {
@@ -2269,19 +1809,16 @@ function captureMarketSnapshot() {
   return { vix, fg, spyDrawdown: spy?.drawdown ?? null };
 }
 
-function logTrade({ ticker, action, shares, priceJpy, note = '' }) {
-  const entry = {
+function tradeEntry({ ticker, action, shares, priceJpy, note = '', lotId, date }) {
+  return {
     id: uid(),
-    date: new Date().toISOString(),
-    ticker, action, shares, priceJpy,
+    date: date || new Date().toISOString(),
+    ticker, action, shares, priceJpy, lotId,
     totalJpy: Math.round(shares * priceJpy),
     note,
     market: captureMarketSnapshot(),
   };
-  tradeLog.unshift(entry);
-  if (tradeLog.length > 300) tradeLog = tradeLog.slice(0, 300);
-  saveTradeLog();
-  renderTradeLog();
+
 }
 
 function actionMeta(action) {
@@ -2292,7 +1829,7 @@ function actionMeta(action) {
     trim:      { label: 'トリム', color: 'var(--yellow)' },
     harvest:   { label: '元本回収', color: 'var(--yellow)'},
   };
-  return map[action] || { label: action, color: 'var(--muted)' };
+  return Object.hasOwn(map, action) ? map[action] : { label: action, color: 'var(--muted)' };
 }
 
 function renderTradeLog() {
@@ -2303,7 +1840,7 @@ function renderTradeLog() {
   if (badge) { badge.textContent = `${tradeLog.length}件`; badge.style.display = tradeLog.length ? 'inline-flex' : 'none'; }
 
   if (tradeLog.length === 0) {
-    wrap.innerHTML = '<div class="empty-state">取引ログはまだありません。銘柄の追加・削除・計画実行時に自動記録されます。</div>';
+    wrap.innerHTML = '<div class="empty-state">取引ログはまだありません。約定した売買を記録できます。</div>';
     return;
   }
   const rows = tradeLog.map(e => {
@@ -2318,12 +1855,12 @@ function renderTradeLog() {
     return `<tr>
       <td style="color:var(--muted);white-space:nowrap;font-size:11px;">${dateStr}</td>
       <td style="font-weight:700;">${e.ticker}</td>
-      <td><span style="color:${color};font-weight:700;font-size:11px;">${label}</span></td>
+      <td><span style="color:${color};font-weight:700;font-size:11px;">${pmEscape(label)}</span></td>
       <td style="text-align:right;">${e.shares}株</td>
       <td style="text-align:right;">${fmtPrice(e.priceJpy)}</td>
       <td style="text-align:right;font-weight:600;">${fmtPrice(e.totalJpy)}</td>
       <td>${vixTag}${fgTag}${spyTag}</td>
-      <td style="color:var(--muted);font-size:11px;">${e.note}</td>
+      <td style="color:var(--muted);font-size:11px;">${pmEscape(e.note)}</td>
     </tr>`;
   }).join('');
   wrap.innerHTML = `<table class="trade-table">
@@ -2338,17 +1875,15 @@ function renderTradeLog() {
 
 function clearTradeLog() {
   if (!confirm('取引ログをすべて削除しますか？')) return;
-  tradeLog = [];
-  saveTradeLog();
-  renderTradeLog();
+  PMApp.commit({ ...PMApp.state(), trades: [] }, true);
 }
 
 // ════════════════════════════════════════════════════
 // ウォッチリスト
 // ════════════════════════════════════════════════════
-let watchlist = JSON.parse(localStorage.getItem('pm_watchlist') || '[]');
 
-function saveWatchlist() { localStorage.setItem('pm_watchlist', JSON.stringify(watchlist)); }
+
+
 
 function openWatchModal() { document.getElementById('watch-modal').style.display = 'flex'; }
 function closeWatchModal() {
@@ -2360,40 +1895,20 @@ function closeWatchModalOutside(e) { if (e.target.id === 'watch-modal') closeWat
 
 function addToWatchlist() {
   const ticker = document.getElementById('w-ticker').value.trim().toUpperCase();
-  if (!ticker) { alert('ティッカーを入力してください'); return; }
+  if (!PMData.ticker(ticker)) { alert('ティッカーを入力してください'); return; }
   const layer  = parseInt(document.getElementById('w-layer').value);
   const targetPriceJpy = parseFloat(document.getElementById('w-target-price').value) || null;
   const condition = document.getElementById('w-condition').value.trim();
   const note = document.getElementById('w-note').value.trim();
-  watchlist.push({ id: uid(), ticker, layer, targetPriceJpy, condition, note, curPriceJpy: null, addedAt: new Date().toISOString() });
-  saveWatchlist();
+  const entry = { id: uid(), ticker, layer, targetPriceJpy, condition, note, curPriceJpy: null, addedAt: new Date().toISOString() };
+  if (!PMApp.commit({ ...PMApp.state(), watchlist: [...watchlist, entry] })) return;
   closeWatchModal();
-  fetchWatchlistPrices();
-  renderWatchlist();
+  PMApp.refreshPrices({ indicators: false });
 }
 
 function removeFromWatchlist(id) {
   if (!confirm('ウォッチリストから削除しますか？')) return;
-  watchlist = watchlist.filter(w => w.id !== id);
-  saveWatchlist();
-  renderWatchlist();
-}
-
-async function fetchWatchlistPrices() {
-  const apiKey = localStorage.getItem('pm_api_key') || '';
-  if (!apiKey || watchlist.length === 0) return;
-  const tickers = [...new Set(watchlist.map(w => w.ticker))];
-  for (const ticker of tickers) {
-    try {
-      const res = await fetch(`https://finnhub.io/api/v1/quote?symbol=${ticker}&token=${apiKey}`);
-      const data = await res.json();
-      if (!data.c || data.c === 0) continue;
-      const priceJpy = Math.round(data.c * lastUsdJpy);
-      watchlist.forEach(w => { if (w.ticker === ticker) w.curPriceJpy = priceJpy; });
-    } catch(e) {}
-  }
-  saveWatchlist();
-  renderWatchlist();
+  PMApp.commit({ ...PMApp.state(), watchlist: watchlist.filter(w => w.id !== id) }, true);
 }
 
 function renderWatchlist() {
@@ -2407,7 +1922,7 @@ function renderWatchlist() {
     return;
   }
   wrap.innerHTML = `<div class="watchlist-grid">${watchlist.map(w => {
-    const cur    = w.curPriceJpy;
+    const cur    = PMApp.freshPrice(w.ticker);
     const target = w.targetPriceJpy;
     const dist   = (cur && target) ? (cur - target) / target * 100 : null;
     const ready  = dist != null && dist <= 0;
@@ -2429,8 +1944,8 @@ function renderWatchlist() {
         <div><span style="color:var(--muted);font-size:10px;display:block;">現在値</span><strong>${cur ? fmtPrice(cur) : '—'}</strong></div>
         <div><span style="color:var(--muted);font-size:10px;display:block;">目標値</span><strong>${target ? fmtPrice(target) : '—'}</strong><br>${distHtml}</div>
       </div>
-      ${w.condition ? `<div style="font-size:11px;color:var(--muted);padding-top:6px;border-top:1px solid var(--border);">🎯 ${w.condition}</div>` : ''}
-      ${w.note      ? `<div style="font-size:11px;color:var(--muted);margin-top:2px;">📝 ${w.note}</div>` : ''}
+      ${w.condition ? `<div style="font-size:11px;color:var(--muted);padding-top:6px;border-top:1px solid var(--border);">🎯 ${pmEscape(w.condition)}</div>` : ''}
+      ${w.note      ? `<div style="font-size:11px;color:var(--muted);margin-top:2px;">📝 ${pmEscape(w.note)}</div>` : ''}
     </div>`;
   }).join('')}</div>`;
 }
@@ -2468,7 +1983,7 @@ async function fetchSpyHistoricalReturn(startDateStr) {
 }
 
 async function updatePerformance() {
-  const startDate = localStorage.getItem('pm_perf_start') || '';
+  const startDate = PMApp.state().preferences.perf_start || '';
   let spyReturn = JSON.parse(localStorage.getItem('pm_spy_return') || 'null');
   // 1日以上古いか未取得なら再フェッチ
   if (startDate && (!spyReturn || Date.now() - spyReturn.t > 86400000)) {
@@ -2484,10 +1999,10 @@ async function updatePerformance() {
 function renderPerformance(spyReturnPct) {
   const el = document.getElementById('perf-section');
   if (!el) return;
-  const { total } = calcPortfolio();
-  const costBasis  = positions.reduce((s, p) => s + p.buyPrice * p.shares, 0);
-  const unrealized = costBasis > 0 ? (total - costBasis) / costBasis * 100 : null;
-  const startDate  = localStorage.getItem('pm_perf_start') || '';
+  const out = PMApp.result();
+  const costBasis = out.assets.every(a => a.costJpy != null) ? out.assets.reduce((s, a) => s + a.costJpy, 0) : 0;
+  const unrealized = !out.errors.length && out.equity != null && costBasis > 0 ? (out.equity - costBasis) / costBasis * 100 : null;
+  const startDate  = PMApp.state().preferences.perf_start || '';
   const alpha      = (unrealized != null && spyReturnPct != null) ? unrealized - spyReturnPct : null;
 
   function colorOf(v) { return v == null ? 'var(--muted)' : v >= 0 ? 'var(--green)' : 'var(--red)'; }
@@ -2518,163 +2033,27 @@ function renderPerformance(spyReturnPct) {
 }
 
 function setPerfStartDate(dateStr) {
-  localStorage.setItem('pm_perf_start', dateStr);
-  localStorage.removeItem('pm_spy_return'); // キャッシュを破棄して再取得
-  updatePerformance();
+  if (dateStr && !PMData.date(dateStr)) return;
+  const state = PMApp.state();
+  localStorage.removeItem('pm_spy_return');
+  if (PMApp.commit({ ...state, preferences: { ...state.preferences, perf_start: dateStr } })) updatePerformance();
 }
 
-// ── クラウド同期（JSONBin.io） ─────────────────────
-const JB_API = 'https://api.jsonbin.io/v3';
 
-function getJbCreds() {
-  const key   = document.getElementById('s-jb-key')?.value.trim()  || localStorage.getItem('pm_jb_key')  || '';
-  const binId = document.getElementById('s-jb-bin')?.value.trim()  || localStorage.getItem('pm_jb_bin')  || '';
-  return { key, binId };
-}
-
-function setCloudStatus(msg, color = 'var(--muted)') {
-  const el = document.getElementById('cloud-status');
-  if (!el) return;
-  el.textContent = msg;
-  el.style.color = color;
-}
-
-function saveJbCreds() {
-  const key   = document.getElementById('s-jb-key')?.value.trim();
-  const binId = document.getElementById('s-jb-bin')?.value.trim();
-  if (key)   localStorage.setItem('pm_jb_key',  key);
-  if (binId) localStorage.setItem('pm_jb_bin',  binId);
-}
-
-// クラウドへ保存
-async function cloudSave(manual = false) {
-  saveJbCreds();
-  const { key, binId } = getJbCreds();
-  if (!key || !binId) {
-    if (manual) setCloudStatus('⚠️ APIキーとBin IDを入力してください', 'var(--yellow)');
-    return;
-  }
-  if (manual) setCloudStatus('保存中…');
-  try {
-    const payload = {
-      positions,
-      plans: JSON.parse(localStorage.getItem('pm_plans') || '[]'),
-      savedAt: new Date().toISOString(),
-    };
-    const res = await fetch(`${JB_API}/b/${binId}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json', 'X-Master-Key': key },
-      body: JSON.stringify(payload),
-    });
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    const now = new Date().toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
-    setCloudStatus(`☁️ 保存済み (${now})`, 'var(--green)');
-  } catch(e) {
-    setCloudStatus('⚠️ 保存失敗: ' + e.message, 'var(--red)');
-  }
-}
-
-// クラウドから読込
-async function cloudLoad(manual = false) {
-  saveJbCreds();
-  const { key, binId } = getJbCreds();
-  if (!key || !binId) {
-    if (manual) setCloudStatus('⚠️ APIキーとBin IDを入力してください', 'var(--yellow)');
-    return false;
-  }
-  if (manual) setCloudStatus('読込中…');
-  try {
-    const res = await fetch(`${JB_API}/b/${binId}/latest`, {
-      headers: { 'X-Master-Key': key, 'X-Bin-Meta': 'false' },
-    });
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    const record = await res.json();
-    if (!record.positions) throw new Error('データ形式エラー');
-
-    positions = record.positions;
-    localStorage.setItem('pm_positions', JSON.stringify(positions));
-
-    if (record.plans) {
-      plans = record.plans;
-      localStorage.setItem('pm_plans', JSON.stringify(plans));
-    }
-    render();
-    renderPlans();
-    const now = new Date().toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
-    setCloudStatus(`⬇️ 読込完了 (${now})`, 'var(--green)');
-    return true;
-  } catch(e) {
-    if (manual) setCloudStatus('⚠️ 読込失敗: ' + e.message, 'var(--red)');
-    return false;
-  }
-}
-
-// 新規Binを自動作成
-async function cloudCreateBin() {
-  const key = document.getElementById('s-jb-key')?.value.trim() || localStorage.getItem('pm_jb_key') || '';
-  if (!key) { setCloudStatus('⚠️ まずMaster Keyを入力してください', 'var(--yellow)'); return; }
-  setCloudStatus('Binを作成中…');
-  try {
-    const payload = { positions, plans: JSON.parse(localStorage.getItem('pm_plans') || '[]'), savedAt: new Date().toISOString() };
-    const res = await fetch(`${JB_API}/b`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Master-Key': key, 'X-Bin-Name': 'portfolio-manager' },
-      body: JSON.stringify(payload),
-    });
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    const data = await res.json();
-    const newBinId = data.metadata?.id;
-    if (!newBinId) throw new Error('Bin ID取得失敗');
-    document.getElementById('s-jb-bin').value = newBinId;
-    localStorage.setItem('pm_jb_bin', newBinId);
-    localStorage.setItem('pm_jb_key', key);
-    setCloudStatus(`✅ Bin作成完了！ID: ${newBinId}`, 'var(--green)');
-  } catch(e) {
-    setCloudStatus('⚠️ 作成失敗: ' + e.message, 'var(--red)');
-  }
-}
-
-// ── アコーディオン ─────────────────────────────────
+// ── 表示設定 ──────────────────────────────────
 function toggleAc(btn) {
   const section = btn.closest('.ac-section');
-  const isClosing = !section.classList.contains('ac-closed');
-  section.classList.toggle('ac-closed', isClosing);
-  // 開閉状態をlocalStorageに保存
-  const id = section.dataset.acId;
-  if (id) {
-    const state = JSON.parse(localStorage.getItem('pm_ac') || '{}');
-    state[id] = isClosing ? 'closed' : 'open';
-    localStorage.setItem('pm_ac', JSON.stringify(state));
-  }
+  const key = section.dataset.acId;
+  const state = PMApp.state();
+  const ac = { ...state.preferences.ac, [key]: !section.classList.contains('ac-closed') };
+  PMApp.commit({ ...state, preferences: { ...state.preferences, ac } });
 }
 
-function initAccordions() {
-  // data-ac-id を自動付与
-  document.querySelectorAll('.ac-section').forEach((el, i) => {
-    if (!el.dataset.acId) el.dataset.acId = 'ac' + i;
-  });
-  const state = JSON.parse(localStorage.getItem('pm_ac') || '{}');
-  document.querySelectorAll('.ac-section').forEach(el => {
-    const id = el.dataset.acId;
-    // 初回（stateなし）はデフォルト: 投資ルール・閾値設定のみ閉じた状態
-    const headerText = el.querySelector('.ac-header span')?.textContent || '';
-    const defaultClosed = ['投資ルール', '保存先', '閾値設定'].includes(headerText);
-    const shouldClose = id in state ? state[id] === 'closed' : defaultClosed;
-    el.classList.toggle('ac-closed', shouldClose);
-  });
-}
-
-// ── Theme ──────────────────────────────────────────
 function toggleTheme() {
-  const isLight = document.body.classList.toggle('light');
-  document.getElementById('theme-toggle').textContent = isLight ? '🌙' : '☀️';
-  localStorage.setItem('pm_theme', isLight ? 'light' : 'dark');
+  const state = PMApp.state();
+  const theme = document.body.classList.contains('light') ? 'dark' : 'light';
+  PMApp.commit({ ...state, preferences: { ...state.preferences, theme } });
 }
-if (localStorage.getItem('pm_theme') === 'light') {
-  document.body.classList.add('light');
-  document.getElementById('theme-toggle').textContent = '🌙';
-}
-
 // ── FMP APIキー保存 ────────────────────────────────
 function saveFmpKey() {
   const key = document.getElementById('s-fmp-key').value.trim();
@@ -2709,55 +2088,47 @@ function applyManualVix() {
   if (sentUpdEl) sentUpdEl.textContent = '手動更新: ' + new Date().toLocaleTimeString('ja-JP', {hour:'2-digit', minute:'2-digit'});
 }
 
+
 // ── Init ───────────────────────────────────────────
-const savedKey = localStorage.getItem('pm_api_key');
-if (savedKey) document.getElementById('s-api-key').value = savedKey;
-// JSONBin 認証情報を復元
-const savedJbKey = localStorage.getItem('pm_jb_key');
-const savedJbBin = localStorage.getItem('pm_jb_bin');
-if (savedJbKey) document.getElementById('s-jb-key').value = savedJbKey;
-if (savedJbBin) document.getElementById('s-jb-bin').value = savedJbBin;
-// FMP APIキーを復元
-const savedFmpKey = localStorage.getItem('pm_fmp_key') || '';
-if (savedFmpKey) document.getElementById('s-fmp-key').value = savedFmpKey;
-const savedRate = localStorage.getItem('pm_usdjpy');
-if (savedRate) document.getElementById('usdjpy-rate').textContent = parseFloat(savedRate).toFixed(2) + ' 円';
-// ── 自動更新 ─────────────────────────────────────────
-async function autoRefreshAll() {
-  const apiKey = localStorage.getItem('pm_api_key') || '';
-  if (!apiKey) return;
-  await fetchPrices();          // 株価 + USD/JPY レート（内部でfetchEarnings()も呼ぶ）
-  await fetchSentiment();       // F&G + VIX（完了後に確度再計算）
-  await fetchBothIndexes();     // SPY + QQQ（確度も自動更新）
-}
-
-// 30分ごとに自動更新（ページを開いている間）
-setInterval(autoRefreshAll, 30 * 60 * 1000);
-
-initAccordions();
-setCurrency(displayCurrency);
-restoreSentimentCache();
-restoreIndexCache();   // SPY + QQQ キャッシュ復元（確度も復元）
-// ページ読み込み時に即時取得
-// ※ VIX/VXN/USD/JPY はすべて allorigins.win 経由のため直列実行でレート制限を回避
-fetchBothIndexes();    // SPY + QQQ（Finnhub直接、即時）
-initData().then(() => {
+document.getElementById('s-api-key').value = localStorage.getItem('pm_api_key') || '';
+document.getElementById('s-fmp-key').value = localStorage.getItem('pm_fmp_key') || '';
+document.getElementById('s-jb-key').value = localStorage.getItem('pm_jb_key') || '';
+document.getElementById('s-jb-bin').value = localStorage.getItem('pm_jb_bin') || '';
+document.getElementById('exec-form').onsubmit = confirmExec;
+document.getElementById('trade-form').onsubmit = event => {
+  event.preventDefault();
+  const fields = Object.fromEntries(new FormData(event.currentTarget));
+  const ticker = fields.ticker.trim().toUpperCase();
+  if (!PMData.ticker(ticker) || !PMData.date(fields.date)) return alert('銘柄と約定日を確認してください。');
+  const entry = tradeEntry({ ...fields, ticker, shares: Number(fields.shares), priceJpy: Number(fields.priceJpy),
+    date: new Date(fields.date + 'T12:00:00+09:00').toISOString() });
+  entry.market = {};
+  if (PMApp.commit({ ...PMApp.state(), confirmed: false, trades: [entry, ...tradeLog] })) {
+    event.currentTarget.reset();
+    document.getElementById('trade-dialog').close();
+  }
+};
+PMApp.init(() => {
+  const state = PMApp.state();
+  ({ positions, plans, trades: tradeLog, watchlist } = state);
+  const light = state.preferences.theme === 'light';
+  document.body.classList.toggle('light', light);
+  document.getElementById('theme-toggle').textContent = light ? '🌙' : '☀️';
+  applyCurrency(state.preferences.currency || 'jpy');
+  document.querySelectorAll('.ac-section[data-ac-id]').forEach(el => {
+    const closed = state.preferences.ac?.[el.dataset.acId] ?? false;
+    el.classList.toggle('ac-closed', closed);
+    el.querySelector('button').setAttribute('aria-expanded', String(!closed));
+  });
   renderPlans();
   renderWatchlist();
   renderTradeLog();
-  renderPerformance(JSON.parse(localStorage.getItem('pm_spy_return') || 'null')?.pct ?? null);
-  const apiKey = localStorage.getItem('pm_api_key') || '';
-  // fetchSentiment（VIX/VXN）→ 完了後に fetchPrices（USD/JPY含む）の順で直列実行
-  fetchSentiment().finally(() => {
-    if (apiKey) {
-      fetchPrices().then(() => {
-        fetchWatchlistPrices(); // 株価更新後にウォッチリストも更新
-      });
-      fetchEarnings();
-    }
-  });
-  updatePerformance(); // S&P500比較リターンを非同期で取得
 });
+restoreSentimentCache();
+restoreIndexCache();
+fetchSentiment();
+setInterval(fetchSentiment, 30 * 60 * 1000);
+updatePerformance();
 </script>
 </body>
 </html>
