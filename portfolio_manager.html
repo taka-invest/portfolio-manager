@@ -989,7 +989,11 @@ function currencySymbol() { return displayCurrency === 'usd' ? '$' : '¥'; }
 // キャッシュキー: pm_technicals = { PLTR: { rsi: 72, maDev: 18.5, t: timestamp }, ... }
 // TTL: 4時間
 let technicalsCache = pmRead('pm_technicals', {});
-function pmTechnicals(ticker) { return technicalsCache[ticker]; }
+function pmTechnicals(ticker) {
+  const value = technicalsCache[ticker];
+  return value && Number.isFinite(value.t) && Date.now() >= value.t &&
+    Date.now() - value.t < 4 * 3600000 ? value : null;
+}
 
 function calcRSI(closes, period = 14) {
   if (closes.length < period + 1) return null;
