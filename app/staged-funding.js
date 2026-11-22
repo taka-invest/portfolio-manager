@@ -150,26 +150,6 @@
       return { rows, buyValue, buyFees, used: buyValue + buyFees };
     }
     let allocation = allocate(funding);
-    // Minimize sale if stock target caps mean the tranche cannot use the
-    // entire fixed budget. Recalculate post-tax target amounts after resizing.
-    for (let i = 0; i < 6; i++) {
-      const needed = allocation.used;
-      if (needed <= 0) { selected = 0; funding = sale(0); allocation = allocate(funding); break; }
-      let lo = 0, hi = selected;
-      while (lo < hi) {
-        const mid = Math.floor((lo + hi) / 2);
-        if (sale(mid).net + EPS >= needed) hi = mid;
-        else lo = mid + 1;
-      }
-      if (lo >= selected) break;
-      const smaller = sale(lo);
-      const realloc = allocate(smaller);
-      // Do not reduce actual purchasing ability when tax changes rounding.
-      if (realloc.used + EPS < allocation.used) break;
-      selected = lo;
-      funding = smaller;
-      allocation = realloc;
-    }
     const floorPctAfter = funding.postTotal > 0
       ? funding.postPltrValue / funding.postTotal * 100 : 0;
     const remaining = Math.max(0, budget - funding.net);
@@ -256,12 +236,12 @@
     if (typeof document === 'undefined') return;
     const select = document.getElementById('pm-staged-funding-stage');
     if (!select) return;
-    const cached = Number(sessionStorage.getItem('pm-staged-funding-stage'));
+    const cached = Number(localStorage.getItem('pm-staged-funding-stage'));
     if ([1, 2, 3].includes(cached)) stage = cached;
     select.value = String(stage);
     select.addEventListener('change', e => {
       stage = Number(e.target.value);
-      sessionStorage.setItem('pm-staged-funding-stage', String(stage));
+      localStorage.setItem('pm-staged-funding-stage', String(stage));
       root.PMApp.render();
     });
     document.getElementById('pm-staged-funding-refresh').addEventListener('click', () =>
