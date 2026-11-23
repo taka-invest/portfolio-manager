@@ -85,6 +85,7 @@
 - 事前テスト: 単体62／ルール12／Playwright 26成功・12スキップ
 - 本番 https://finance-base-edcc7.web.app : アプリ・app/*・research/library.html は200、firestore.rules / firebase.json / package.json / functions / tests / .github / docs / .firebaserc は404。X-Frame-Options DENY・nosniff・HTMLはno-store
 - 画面: SDKが接続し「未ログイン」表示。コンソールエラーは既存の第三者CORSプロキシ（allorigins等、Fear&Greed取得）由来のみ → Phase 2で自前Functionsに置換
+- **本番実機確認（ユーザー、11:53 JST）**: 本番URLでGoogleログイン→許可UIDでFirestore読込→差分「0 → 22件」→承認→保有資産に22件表示 ✅
 - ロールバック: Console → Hosting → リリース履歴、または`docs/DEPLOYMENT.md`
 - GitHub Pages / Netlify は維持（停止は最終工程で別途承認）
 
@@ -106,6 +107,8 @@
 - `eps-revisions.js`（Finvizスクレイピング）の移植可否（利用条件）。
 
 ## 次の作業
+
+0. （本人）本番URLで証券口座と照合しロット・現金・MOD原価を修正 →「実保有・現金を確認」→ クラウド保存（リビジョン2、リビジョン1は自動でクラウドバックアップ）
 
 1. （再認証後）Firebase側の現状確認 → Webアプリ構成値の反映 → `.firebaserc`。
 2. Hostingプレビューチャネル用のGitHub Actions（PR時、手動承認なしで本番に出ない構成）。
