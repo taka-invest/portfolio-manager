@@ -306,6 +306,7 @@
     <p class="pm-nav-caption">ANALYTICS</p>
     <a href="#market" data-pm-view="market" title="市場分析"><span class="pm-nav-symbol" aria-hidden="true">◉</span><span class="pm-nav-label">市場分析</span></a>
     <a href="#companies" data-pm-view="companies" title="企業評価"><span class="pm-nav-symbol" aria-hidden="true">◈</span><span class="pm-nav-label">企業評価</span></a>
+    <a href="#research" data-pm-view="research" title="投資リサーチ"><span class="pm-nav-symbol" aria-hidden="true">⌕</span><span class="pm-nav-label">投資リサーチ</span></a>
     <a href="#history" data-pm-view="history" title="取引・購入計画"><span class="pm-nav-symbol" aria-hidden="true">◷</span><span class="pm-nav-label">取引・購入計画</span></a>
   </nav>
   <div class="pm-side-footer">
@@ -662,6 +663,28 @@
 
   </section>
 
+  <section id="research" aria-labelledby="research-title" hidden>
+    <div class="pm-heading"><h2 id="research-title">投資リサーチ</h2></div>
+    <p class="pm-muted">伝説の会計学・Stock Analyzer統合。既存ポートフォリオとリバランスの計算には影響しません。</p>
+    <div class="pm-card">
+      <h3>投資指標ライブラリ</h3>
+      <p class="pm-muted pm-small" style="margin:8px 0 14px">
+        株価インパクト・ピラミッド、Rule of 40、営業レバレッジ、成長加速度、財務指標、投資判断のフレームワークを確認できます。
+      </p>
+      <a class="btn btn-primary" href="research/library.html">投資指標ライブラリを開く</a>
+    </div>
+    <div class="pm-card">
+      <h3>個別企業分析・バッチスクリーナー</h3>
+      <p class="pm-muted pm-small" style="margin:8px 0">
+        旧Stock AnalyzerのSEC財務分析・Yahoo株価データ取得はNetlify Functionsに依存しています。
+        現段階では旧サービスへの依存を増やさないため、API移行と検証が完了するまで新しい売買判断用の分析画面は公開しません。
+      </p>
+      <p class="pm-muted pm-small" style="margin:8px 0">
+        既存の「企業評価」は引き続き使用できます。分析機能の統合後も保有株数・取得原価・投資記録は自動変更されません。
+      </p>
+      <a class="btn btn-ghost" href="#companies">既存の企業評価へ移動</a>
+    </div>
+  </section>
   <section id="companies" aria-labelledby="companies-title">
     <div class="pm-heading"><h2 id="companies-title">企業価値・決算管理</h2></div>
     <p class="pm-muted">2028年末に投資仮説を見直します。成長が続けば2030年以降の保有も検討します。</p>
