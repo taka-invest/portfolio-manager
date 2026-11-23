@@ -41,9 +41,9 @@
 
 注: Windowsローカルでは並列実行時に`python3 -m http.server`が接続拒否を起こすことがある（CI=Linuxでは発生しない）。EmulatorはWindowsで`JAVA_TOOL_OPTIONS=-Djdk.net.unixdomain.tmpdir=C:/Users/<user>/.uds`が必要な場合がある。
 
-## Firebase実環境の状態（2026-11-23 確認、CLIは個人アカウント maruyasu.jomu@gmail.com）
+## Firebase実環境の状態（2026-11-23 確認、CLIはFinance Baseのオーナーである本人の個人Googleアカウント）
 
-- Firebase CLI: このディレクトリは`firebase login:use maruyasu.jomu@gmail.com`で個人アカウントに固定（会社アカウントは別プロジェクト用）
+- Firebase CLI: このディレクトリは`firebase login:use <個人アカウント>`で本人の個人アカウントに固定（会社アカウントは別プロジェクト用）
 - Webアプリ: 「Finance Base Web」`1:472264087274:web:af5ac46e3e19c34f466993` 登録済み → `app/firebase-config.js`に実値を反映
 - Hosting: サイト`finance-base-edcc7`（https://finance-base-edcc7.web.app）存在。未デプロイ
 - Firestore: ✅ 2026-11-23 ユーザー承認のうえ作成。`(default)`／Native／Standard／**asia-northeast1**。`firestore.rules`をデプロイ済み
@@ -93,7 +93,7 @@
 
 1. ~~CLI再認証~~ ✅ ／ ~~Webアプリ構成値~~ ✅
 2. ~~Firestore作成~~ ✅ ／ ~~Google認証~~ ✅
-2b. `firebase init hosting:github`（デプロイ用SA＋GitHub Secret）は**保留**。GitHub認可で会社アカウント(maruyasushonan)が選ばれやすいため、承認URLは最初からtaka-investでログインしたシークレットウィンドウで開くこと。1回目は反映遅れで失敗し、未使用SA `github-action-1261182527@` が残存（鍵なし、後で削除）
+2b. `firebase init hosting:github`（デプロイ用SA＋GitHub Secret）は**保留**。GitHub認可で会社用アカウントが選ばれやすいため、承認URLは最初からtaka-investでログインしたシークレットウィンドウで開くこと。1回目は反映遅れで失敗し、未使用SA `github-action-1261182527@` が残存（鍵なし、後で削除）
 3. ~~本人UIDの登録~~ ✅（画面表示のUIDは l/I の判別が難しいため、`firebase auth:export`で正確な値を確認してから登録した）
 4. **SEC_USER_AGENT**: 実際の運用連絡先（例:「FinanceBase 氏名 連絡先メール」）の指定。
 5. **Blazeプランへの変更**（Cloud Functionsのデプロイに必須）と予算アラート額の承認。
