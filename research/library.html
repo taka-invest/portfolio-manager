@@ -1,0 +1,816 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>投資指標ライブラリ | Portfolio Manager</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700;900&display=swap');
+  body { font-family: 'Noto Sans JP', sans-serif; }
+  .gradient-bg { background: linear-gradient(135deg, #0d0d1a 0%, #111827 50%, #0a1628 100%); }
+  .card { background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); }
+  .glow-gold  { box-shadow: 0 0 20px rgba(251,191,36,0.15); }
+  .glow-green { box-shadow: 0 0 20px rgba(52,211,153,0.12); }
+  .glow-blue  { box-shadow: 0 0 20px rgba(99,102,241,0.12); }
+
+  /* ピラミッドスタイル */
+  .pyramid-layer {
+    transition: all 0.25s ease;
+    cursor: pointer;
+    position: relative;
+  }
+  .pyramid-layer:hover { filter: brightness(1.15); transform: scaleX(1.01); }
+  .pyramid-layer.active { filter: brightness(1.3); }
+
+  /* タブ */
+  .tab-btn { transition: all 0.2s; }
+  .tab-btn.active { border-bottom: 2px solid #6366f1; color: white; }
+
+  /* アニメーション */
+  .fade-in { animation: fadeIn 0.5s ease; }
+  @keyframes fadeIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+  .pulse-dot { animation: pulseDot 2s infinite; }
+  @keyframes pulseDot { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.5;transform:scale(1.3)} }
+
+  /* バッジ */
+  .badge-gold    { background:rgba(251,191,36,0.15); border:1px solid rgba(251,191,36,0.4); color:#fde68a; }
+  .badge-green   { background:rgba(52,211,153,0.15); border:1px solid rgba(52,211,153,0.4); color:#6ee7b7; }
+  .badge-blue    { background:rgba(99,102,241,0.15); border:1px solid rgba(99,102,241,0.4); color:#a5b4fc; }
+  .badge-orange  { background:rgba(251,146,60,0.15); border:1px solid rgba(251,146,60,0.4); color:#fed7aa; }
+  .badge-purple  { background:rgba(168,85,247,0.15); border:1px solid rgba(168,85,247,0.4); color:#d8b4fe; }
+  .badge-red     { background:rgba(239,68,68,0.12);  border:1px solid rgba(239,68,68,0.3);  color:#fca5a5; }
+</style>
+</head>
+<body class="gradient-bg min-h-screen text-white">
+<!-- Portfolio Manager 統合フェーズ1: ライブラリの単体静的移植。既存ポートフォリオ保存データを変更しない。 -->
+
+<!-- ヘッダー -->
+<header class="border-b border-white/8 py-5 px-4 sticky top-0 z-50" style="background:rgba(13,13,26,0.95);backdrop-filter:blur(12px)">
+  <div class="max-w-6xl mx-auto flex items-center gap-4">
+    <a href="../portfolio_manager.html#companies" class="text-white/40 hover:text-white/80 text-sm transition-colors">← アプリに戻る</a>
+    <div class="h-4 w-px bg-white/20"></div>
+    <div class="text-xl">📚</div>
+    <div>
+      <h1 class="text-lg font-black">投資指標ライブラリ</h1>
+      <p class="text-xs text-white/40">マシャ塾メソッド × 伝説の会計学 × 定量分析</p>
+    </div>
+    <div class="ml-auto flex gap-2">
+      <a href="#pyramid"    class="text-xs text-white/40 hover:text-white px-3 py-1.5 rounded-lg hover:bg-white/5 transition-all">ピラミッド</a>
+      <a href="#signals"    class="text-xs text-white/40 hover:text-white px-3 py-1.5 rounded-lg hover:bg-white/5 transition-all">シグナル辞典</a>
+      <a href="#masya-score" class="text-xs text-white/40 hover:text-white px-3 py-1.5 rounded-lg hover:bg-white/5 transition-all">マシャスコア</a>
+      <a href="#cases"      class="text-xs text-white/40 hover:text-white px-3 py-1.5 rounded-lg hover:bg-white/5 transition-all">参入検証</a>
+      <a href="#framework"  class="text-xs text-white/40 hover:text-white px-3 py-1.5 rounded-lg hover:bg-white/5 transition-all">判断フロー</a>
+    </div>
+  </div>
+</header>
+
+<div class="max-w-6xl mx-auto px-4 py-10 space-y-16">
+
+  <!-- ━━━━━ ① PIRAMIDセクション ━━━━━ -->
+  <section id="pyramid" class="fade-in">
+    <div class="text-center mb-8">
+      <h2 class="text-3xl font-black mb-2">📐 株価インパクト ピラミッド</h2>
+      <p class="text-white/50 text-sm">上位ほど株価へのインパクトが大きく、発見が困難。各層をクリックで詳細表示。</p>
+    </div>
+
+    <div class="flex gap-8 items-start flex-wrap lg:flex-nowrap">
+      <!-- ピラミッド本体 -->
+      <div class="flex-1 min-w-[320px]">
+        <div class="flex flex-col items-center gap-1.5" id="pyramidStack">
+
+          <!-- Tier 1 (最上位・最小) -->
+          <div class="pyramid-layer w-[28%] min-w-[160px] rounded-xl p-3 text-center glow-gold"
+            style="background:linear-gradient(135deg,rgba(251,191,36,0.25),rgba(245,158,11,0.15));border:1px solid rgba(251,191,36,0.5)"
+            onclick="showDetail('tier1')">
+            <div class="text-xs text-yellow-200/70 mb-0.5">Tier 1 — 最強</div>
+            <div class="font-black text-yellow-200 text-sm leading-tight">OpLev × RoF40<br>複合シグナル</div>
+            <div class="text-yellow-400/60 text-xs mt-1">RoF≥100 + OpLev≥3x</div>
+          </div>
+
+          <!-- Tier 2 -->
+          <div class="pyramid-layer w-[44%] min-w-[200px] rounded-xl p-3 text-center"
+            style="background:linear-gradient(135deg,rgba(52,211,153,0.2),rgba(16,185,129,0.12));border:1px solid rgba(52,211,153,0.45)"
+            onclick="showDetail('tier2')">
+            <div class="text-xs text-emerald-200/60 mb-0.5">Tier 2 — 転換検知</div>
+            <div class="font-black text-emerald-200 text-sm">YoY加速 + OpM急拡大</div>
+            <div class="text-emerald-400/60 text-xs mt-1">YoY↑↑ + OpMΔ ≥ +5pp</div>
+          </div>
+
+          <!-- Tier 3 -->
+          <div class="pyramid-layer w-[60%] min-w-[240px] rounded-xl p-3 text-center"
+            style="background:linear-gradient(135deg,rgba(99,102,241,0.2),rgba(79,70,229,0.12));border:1px solid rgba(99,102,241,0.45)"
+            onclick="showDetail('tier3')">
+            <div class="text-xs text-indigo-200/60 mb-0.5">Tier 3 — 質的確認</div>
+            <div class="font-black text-indigo-200 text-sm">Rule of 40 突破</div>
+            <div class="text-indigo-400/60 text-xs mt-1">YoY% + OpM% ≥ 40</div>
+          </div>
+
+          <!-- Tier 4 -->
+          <div class="pyramid-layer w-[76%] min-w-[280px] rounded-xl p-3 text-center"
+            style="background:linear-gradient(135deg,rgba(251,146,60,0.18),rgba(234,88,12,0.1));border:1px solid rgba(251,146,60,0.4)"
+            onclick="showDetail('tier4')">
+            <div class="text-xs text-orange-200/60 mb-0.5">Tier 4 — 構造変化</div>
+            <div class="font-black text-orange-200 text-sm">原価率の構造的低下 / 赤字→黒字</div>
+            <div class="text-orange-400/60 text-xs mt-1">コスト比 4Q連続低下 or 黒字化</div>
+          </div>
+
+          <!-- Tier 5 (最下位・最広) -->
+          <div class="pyramid-layer w-full rounded-xl p-3 text-center"
+            style="background:linear-gradient(135deg,rgba(148,163,184,0.12),rgba(100,116,139,0.08));border:1px solid rgba(148,163,184,0.25)"
+            onclick="showDetail('tier5')">
+            <div class="text-xs text-slate-300/60 mb-0.5">Tier 5 — 基礎スクリーニング（マシャ塾 × バフェット）</div>
+            <div class="font-bold text-slate-200 text-sm">BS健全 ／ 希薄化なし ／ 原価率グレード ／ キャッシュリッチ判定</div>
+            <div class="text-slate-400/60 text-xs mt-1">ここを通過しない銘柄は上位分析不要</div>
+          </div>
+
+        </div>
+
+        <!-- 矢印ラベル -->
+        <div class="flex justify-between mt-4 text-xs text-white/25 px-4">
+          <span>← 発見が困難・希少</span>
+          <span>株価インパクト：大 → 小 ↓</span>
+          <span>発見が容易・一般的 →</span>
+        </div>
+      </div>
+
+      <!-- 詳細パネル -->
+      <div class="flex-1 min-w-[300px]" id="pyramidDetail">
+        <!-- デフォルト表示 -->
+        <div id="detail-default" class="card rounded-2xl p-6 h-full flex flex-col justify-center items-center text-center">
+          <div class="text-4xl mb-4">👆</div>
+          <p class="text-white/40 text-sm">ピラミッドの各層をクリックすると<br>詳細・具体例・検出方法が表示されます</p>
+        </div>
+
+        <div id="detail-tier1" class="hidden card rounded-2xl p-6 glow-gold fade-in" style="border-color:rgba(251,191,36,0.3)">
+          <div class="badge-gold rounded-full px-3 py-1 text-xs inline-block mb-3">Tier 1 — 最強複合シグナル</div>
+          <h3 class="text-xl font-black text-yellow-200 mb-3">営業レバレッジ × RoF40</h3>
+          <p class="text-sm text-white/60 mb-4">売上成長が営業利益に3倍以上の効果をもたらし、かつ成長×収益性の合計が100を超える状態。世界でもごく少数の企業しか達成できない最高位の経営品質。</p>
+          <div class="space-y-2 text-xs">
+            <div class="bg-yellow-500/10 rounded-lg p-3">
+              <div class="text-yellow-300 font-bold mb-1">🔢 計算式</div>
+              <div class="text-white/60 font-mono">OpLev = ΔOpIncome(%) ÷ ΔRevenue(%)<br>RoF100 = YoY成長率% + 営業利益率%</div>
+            </div>
+            <div class="bg-white/5 rounded-lg p-3">
+              <div class="text-yellow-300 font-bold mb-1">💎 実例（PLTR 2026 Q1）</div>
+              <div class="text-white/60">売上+38% → 営業利益+92% → OpLev 2.4x<br>YoY 125% + OpM 46% = <span class="text-yellow-300 font-bold">RoF171</span></div>
+            </div>
+            <div class="bg-white/5 rounded-lg p-3">
+              <div class="text-yellow-300 font-bold mb-1">💎 実例（NVDA 2026 Q2）</div>
+              <div class="text-white/60">YoY 133% + OpM 66% = <span class="text-yellow-300 font-bold">RoF198</span></div>
+            </div>
+            <div class="bg-white/5 rounded-lg p-3">
+              <div class="text-yellow-300 font-bold mb-1">⚡ 株価への影響</div>
+              <div class="text-white/60">この状態が継続している限り、株価上昇は構造的に正当化される。PERが高くても「割高」ではない。</div>
+            </div>
+          </div>
+        </div>
+
+        <div id="detail-tier2" class="hidden card rounded-2xl p-6 glow-green fade-in" style="border-color:rgba(52,211,153,0.3)">
+          <div class="badge-green rounded-full px-3 py-1 text-xs inline-block mb-3">Tier 2 — 転換検知シグナル</div>
+          <h3 class="text-xl font-black text-emerald-200 mb-3">YoY加速 + OpM急拡大</h3>
+          <p class="text-sm text-white/60 mb-4">売上成長率が加速（2階微分がプラス）しながら、同時に営業利益率が1四半期で5pp以上拡大する状態。株価が動く前夜に発生する最重要シグナル。</p>
+          <div class="space-y-2 text-xs">
+            <div class="bg-emerald-500/10 rounded-lg p-3">
+              <div class="text-emerald-300 font-bold mb-1">🔢 検出条件</div>
+              <div class="text-white/60 font-mono">YoY(今期) > YoY(前期) by +10pp 以上<br>かつ OpM(今期) - OpM(前期) ≥ +5pp</div>
+            </div>
+            <div class="bg-white/5 rounded-lg p-3">
+              <div class="text-emerald-300 font-bold mb-1">🚀 実例（PLTR 2024 Q1）</div>
+              <div class="text-white/60">OpM: 7.2% → 12.8%（+5.6pp急拡大）<br>株価当時: ~$20 → 1年後: $80+ <span class="text-emerald-400">(+300%)</span></div>
+            </div>
+            <div class="bg-white/5 rounded-lg p-3">
+              <div class="text-emerald-300 font-bold mb-1">🚀 実例（NVDA 2023 Q2）</div>
+              <div class="text-white/60">OpM 急拡大 + ガイダンス+50%超<br>株価: $300 → $500 <span class="text-emerald-400">(3ヶ月で+67%)</span></div>
+            </div>
+            <div class="bg-white/5 rounded-lg p-3">
+              <div class="text-emerald-300 font-bold mb-1">⏱ タイミング</div>
+              <div class="text-white/60">決算発表直後の翌営業日が理想の参入ポイント。2Q連続で確認できれば確信度UP。</div>
+            </div>
+          </div>
+        </div>
+
+        <div id="detail-tier3" class="hidden card rounded-2xl p-6 glow-blue fade-in" style="border-color:rgba(99,102,241,0.3)">
+          <div class="badge-blue rounded-full px-3 py-1 text-xs inline-block mb-3">Tier 3 — 質的確認シグナル</div>
+          <h3 class="text-xl font-black text-indigo-200 mb-3">Rule of 40 突破</h3>
+          <p class="text-sm text-white/60 mb-4">テクノロジー企業の健全性を測るグローバル標準指標。成長と収益性のトレードオフを1つの数字で表現。40以上が優良、60以上が超優良、80以上はレア。</p>
+          <div class="space-y-2 text-xs">
+            <div class="bg-indigo-500/10 rounded-lg p-3">
+              <div class="text-indigo-300 font-bold mb-1">🔢 計算式</div>
+              <div class="text-white/60 font-mono">RoF40 = 売上YoY成長率(%) + 営業利益率(%)<br><br>例: 成長30% + 利益率20% = RoF50 ✅</div>
+            </div>
+            <div class="bg-white/5 rounded-lg p-3 space-y-1">
+              <div class="text-indigo-300 font-bold">📊 水準別の意味</div>
+              <div class="flex items-center gap-2"><span class="w-14 text-right text-white/30">&lt; 20</span><span class="text-red-400">⚠ 要注意（成長も収益も不十分）</span></div>
+              <div class="flex items-center gap-2"><span class="w-14 text-right text-yellow-400">20〜39</span><span class="text-yellow-300">成長途上（まだ投資フェーズ）</span></div>
+              <div class="flex items-center gap-2"><span class="w-14 text-right text-emerald-400">40〜59</span><span class="text-emerald-300">✅ 優良（参入検討圏）</span></div>
+              <div class="flex items-center gap-2"><span class="w-14 text-right text-emerald-300">60〜79</span><span class="text-emerald-200">⭐ 超優良（強いモメンタム）</span></div>
+              <div class="flex items-center gap-2"><span class="w-14 text-right text-yellow-200">80〜99</span><span class="text-yellow-100">🌟 エリート（10年に1度級）</span></div>
+              <div class="flex items-center gap-2"><span class="w-14 text-right text-yellow-100">100+</span><span class="text-yellow-50 font-bold">💎 伝説（NVDA・PLTR現在地）</span></div>
+            </div>
+            <div class="bg-white/5 rounded-lg p-3">
+              <div class="text-indigo-300 font-bold mb-1">🔑 重要な洞察</div>
+              <div class="text-white/60">RoF40の「初突破」四半期がほぼそのまま株価の大きなブレイクアウトの起点になっている。アプリ内では緑色で強調表示。</div>
+            </div>
+          </div>
+        </div>
+
+        <div id="detail-tier4" class="hidden card rounded-2xl p-6 fade-in" style="border-color:rgba(251,146,60,0.3)">
+          <div class="badge-orange rounded-full px-3 py-1 text-xs inline-block mb-3">Tier 4 — 構造変化シグナル</div>
+          <h3 class="text-xl font-black text-orange-200 mb-3">原価率の構造的低下 / 赤字→黒字転換</h3>
+          <p class="text-sm text-white/60 mb-4">ビジネスモデルが「スケール」し始めた証拠。一時的な改善ではなく、4四半期以上連続して原価率が低下しているか、長年の赤字から黒字に転換した四半期。</p>
+          <div class="space-y-2 text-xs">
+            <div class="bg-orange-500/10 rounded-lg p-3">
+              <div class="text-orange-300 font-bold mb-1">🔢 検出条件（原価率）</div>
+              <div class="text-white/60 font-mono">直近4四半期で原価率が単調減少<br>かつ 累計低下幅 ≥ 3pp</div>
+            </div>
+            <div class="bg-white/5 rounded-lg p-3">
+              <div class="text-orange-300 font-bold mb-1">📉 実例（PLTR 原価率の旅）</div>
+              <div class="text-white/60">2024 Q1: 18.3% → 2025 Q1: 19.6% → 2026 Q1: 13.2%<br>売上増加でも原価率が低下 = <span class="text-orange-300">固定費の希薄化</span></div>
+            </div>
+            <div class="bg-white/5 rounded-lg p-3">
+              <div class="text-orange-300 font-bold mb-1">🔄 実例（MU 赤字→黒字）</div>
+              <div class="text-white/60">2024 Q1: メモリサイクル底、HBM需要で黒字化<br>株価: $80 → $155 <span class="text-orange-300">(6ヶ月で+94%)</span></div>
+            </div>
+            <div class="bg-white/5 rounded-lg p-3">
+              <div class="text-orange-300 font-bold mb-1">💡 マシャ塾との関係</div>
+              <div class="text-white/60">バフェット水準（原価率50%以下）はここに相当。ただし業種別基準（半導体65%等）が重要。</div>
+            </div>
+          </div>
+        </div>
+
+        <div id="detail-tier5" class="hidden card rounded-2xl p-6 fade-in" style="border-color:rgba(148,163,184,0.2)">
+          <div class="rounded-full px-3 py-1 text-xs inline-block mb-3" style="background:rgba(148,163,184,0.1);border:1px solid rgba(148,163,184,0.3);color:#cbd5e1">Tier 5 — 基礎スクリーニング</div>
+          <h3 class="text-xl font-black text-slate-200 mb-3">マシャ塾 × バフェット基礎フィルター</h3>
+          <p class="text-sm text-white/60 mb-4">ここを通過しない銘柄は上位の分析に進む必要すらない。Tier5全クリアでようやくスタートライン。</p>
+          <div class="space-y-2 text-xs">
+            <div class="grid grid-cols-2 gap-2">
+              <div class="bg-white/5 rounded-lg p-3">
+                <div class="text-slate-300 font-bold mb-1">✅ 資本の部プラス（B/S）</div>
+                <div class="text-white/50">債務超過でないこと。倒産リスクの除外。</div>
+              </div>
+              <div class="bg-white/5 rounded-lg p-3">
+                <div class="text-slate-300 font-bold mb-1">✅ 希薄化なし</div>
+                <div class="text-white/50">年間株式発行 &lt; 時価総額3%。株主価値を毀損していない。</div>
+              </div>
+              <div class="bg-white/5 rounded-lg p-3">
+                <div class="text-slate-300 font-bold mb-1">✅ 原価率グレード（マシャ5段階）</div>
+                <div class="text-white/50">&lt;15%最強 / &lt;20%優秀 / &lt;30%良 / &lt;50%合格 / 50%超は要注意。低いほど価格支配力の証明。</div>
+              </div>
+              <div class="bg-white/5 rounded-lg p-3">
+                <div class="text-slate-300 font-bold mb-1">✅ キャッシュリッチ判定</div>
+                <div class="text-white/50">原価率&lt;50% かつ 営業利益前年比プラス。マシャ塾が最重視する「本業で稼げる」2条件。</div>
+              </div>
+            </div>
+            <div class="bg-indigo-500/8 rounded-lg p-3 border border-indigo-500/20">
+              <div class="text-indigo-300 font-bold mb-2">🎯 マシャ塾 10年後EPS×PER 3価格モデル</div>
+              <div class="text-white/50 space-y-1">
+                <div>売上CAGR(調整後) → 10年後売上 × 目標OpM × 0.75 ÷ 株数 = <span class="text-indigo-300">10年後EPS</span></div>
+                <div class="flex gap-4 mt-1">
+                  <span class="text-emerald-400">🐻 ベア: EPS × PER(低)</span>
+                  <span class="text-yellow-400">🎯 標準: EPS × PER(中)</span>
+                  <span class="text-red-400">🚀 ブル: EPS × PER × 2（奥義）</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ━━━━━ ② 参入シグナル辞典 ━━━━━ -->
+  <section id="signals">
+    <div class="text-center mb-8">
+      <h2 class="text-3xl font-black mb-2">📖 参入シグナル辞典</h2>
+      <p class="text-white/50 text-sm">各指標の定義・計算式・判断基準をまとめた参照ガイド</p>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+
+      <!-- RoF40 -->
+      <div class="card rounded-2xl p-5">
+        <div class="flex items-start justify-between mb-3">
+          <div>
+            <div class="badge-green rounded-full px-2 py-0.5 text-xs inline-block mb-2">Tier 3</div>
+            <h3 class="font-black text-lg">Rule of 40</h3>
+          </div>
+          <div class="text-3xl">40</div>
+        </div>
+        <div class="text-xs text-white/40 font-mono bg-black/20 rounded-lg p-3 mb-3">
+          RoF = 売上YoY(%) + 営業利益率(%)
+        </div>
+        <div class="space-y-1 text-xs">
+          <div class="flex justify-between"><span class="text-white/50">SaaS業界標準</span><span class="text-white/70">40以上で優良</span></div>
+          <div class="flex justify-between"><span class="text-white/50">VC投資基準</span><span class="text-white/70">60以上でトップ企業</span></div>
+          <div class="flex justify-between"><span class="text-white/50">PLTR現在</span><span class="text-emerald-400 font-bold">171</span></div>
+          <div class="flex justify-between"><span class="text-white/50">NVDA現在</span><span class="text-yellow-300 font-bold">198</span></div>
+        </div>
+        <div class="mt-3 text-xs text-white/30">アプリ：トレンドテーブルのRoF40列で確認</div>
+      </div>
+
+      <!-- OpLev -->
+      <div class="card rounded-2xl p-5">
+        <div class="flex items-start justify-between mb-3">
+          <div>
+            <div class="badge-gold rounded-full px-2 py-0.5 text-xs inline-block mb-2">Tier 1</div>
+            <h3 class="font-black text-lg">営業レバレッジ</h3>
+          </div>
+          <div class="text-3xl">⚡</div>
+        </div>
+        <div class="text-xs text-white/40 font-mono bg-black/20 rounded-lg p-3 mb-3">
+          OpLev = ΔOpIncome(%) ÷ ΔRevenue(%)
+        </div>
+        <div class="space-y-1 text-xs">
+          <div class="flex justify-between"><span class="text-white/50">1.0未満</span><span class="text-white/40">収益拡大なし</span></div>
+          <div class="flex justify-between"><span class="text-white/50">1.0〜1.9</span><span class="text-white/70">標準的な成長</span></div>
+          <div class="flex justify-between"><span class="text-white/50">2.0〜2.9</span><span class="text-emerald-400">✅ 良好なスケール効果</span></div>
+          <div class="flex justify-between"><span class="text-white/50">3.0以上</span><span class="text-emerald-300 font-bold">⭐ 爆発的スケール</span></div>
+        </div>
+        <div class="mt-3 text-xs text-white/30">意味：売上1%増加 → 営業利益N%増加</div>
+      </div>
+
+      <!-- YoY Acceleration -->
+      <div class="card rounded-2xl p-5">
+        <div class="flex items-start justify-between mb-3">
+          <div>
+            <div class="badge-green rounded-full px-2 py-0.5 text-xs inline-block mb-2">Tier 2</div>
+            <h3 class="font-black text-lg">成長加速度</h3>
+          </div>
+          <div class="text-3xl">↑↑</div>
+        </div>
+        <div class="text-xs text-white/40 font-mono bg-black/20 rounded-lg p-3 mb-3">
+          YoY加速 = YoY(今期) − YoY(前期)
+        </div>
+        <div class="space-y-1 text-xs">
+          <div class="flex justify-between"><span class="text-white/50">+15pp以上</span><span class="text-emerald-300 font-bold">↑↑ 強い加速</span></div>
+          <div class="flex justify-between"><span class="text-white/50">+5〜14pp</span><span class="text-emerald-400">↑ 加速中</span></div>
+          <div class="flex justify-between"><span class="text-white/50">±4pp</span><span class="text-white/30">→ 横ばい</span></div>
+          <div class="flex justify-between"><span class="text-white/50">-5pp以下</span><span class="text-orange-400">↓ 減速注意</span></div>
+        </div>
+        <div class="mt-3 text-xs text-white/30">2Q連続↑↑ = 最強の参入シグナル</div>
+      </div>
+
+      <!-- OpM Inflection -->
+      <div class="card rounded-2xl p-5">
+        <div class="flex items-start justify-between mb-3">
+          <div>
+            <div class="badge-orange rounded-full px-2 py-0.5 text-xs inline-block mb-2">Tier 2〜4</div>
+            <h3 class="font-black text-lg">OpMインフレクション</h3>
+          </div>
+          <div class="text-3xl">🔥</div>
+        </div>
+        <div class="text-xs text-white/40 font-mono bg-black/20 rounded-lg p-3 mb-3">
+          OpMΔ = OpM(今期) − OpM(前期) ≥ +5pp
+        </div>
+        <div class="space-y-1 text-xs">
+          <div class="flex justify-between text-white/60" ><span>何が起きているか</span></div>
+          <div class="text-white/50 text-xs leading-relaxed">固定費が「希薄化」し始めた瞬間。売上が増えても費用があまり増えない構造に変化した証拠。ビジネスモデルの転換点。</div>
+          <div class="mt-2 flex justify-between"><span class="text-white/50">PLTR 2024 Q1</span><span class="text-orange-300 font-bold">+5.6pp（7%→13%）</span></div>
+          <div class="flex justify-between"><span class="text-white/50">APP 2023 Q2</span><span class="text-orange-300 font-bold">黒字化+大幅拡大</span></div>
+        </div>
+      </div>
+
+      <!-- Cost Ratio -->
+      <div class="card rounded-2xl p-5">
+        <div class="flex items-start justify-between mb-3">
+          <div>
+            <div class="badge-purple rounded-full px-2 py-0.5 text-xs inline-block mb-2">Tier 4〜5</div>
+            <h3 class="font-black text-lg">原価率（業種別）</h3>
+          </div>
+          <div class="text-3xl">🏭</div>
+        </div>
+        <div class="text-xs text-white/40 font-mono bg-black/20 rounded-lg p-3 mb-3">
+          原価率 = 売上原価 ÷ 売上高
+        </div>
+        <div class="space-y-1 text-xs">
+          <div class="flex justify-between"><span class="text-white/50">SaaS/ソフト</span><span class="text-emerald-300">&lt; 30%</span></div>
+          <div class="flex justify-between"><span class="text-white/50">インターネット</span><span class="text-emerald-400">&lt; 40%</span></div>
+          <div class="flex justify-between"><span class="text-white/50">バフェット標準</span><span class="text-white/70">&lt; 50%</span></div>
+          <div class="flex justify-between"><span class="text-white/50">半導体</span><span class="text-yellow-400">&lt; 65%</span></div>
+          <div class="flex justify-between"><span class="text-white/50">製造業</span><span class="text-orange-400">&lt; 70%</span></div>
+        </div>
+        <div class="mt-3 text-xs text-white/30">↓下がる＝良い（価格支配力の証明）</div>
+      </div>
+
+      <!-- Masya 3-Price Model (updated) -->
+      <div class="card rounded-2xl p-5" style="border-color:rgba(99,102,241,0.3)">
+        <div class="flex items-start justify-between mb-3">
+          <div>
+            <div class="badge-blue rounded-full px-2 py-0.5 text-xs inline-block mb-2">マシャ塾独自</div>
+            <h3 class="font-black text-lg">10年後EPS×PER 3価格モデル</h3>
+          </div>
+          <div class="text-3xl">⚡</div>
+        </div>
+        <div class="text-xs text-white/40 font-mono bg-black/20 rounded-lg p-3 mb-3">
+          10年後EPS × PER = 目標株価
+        </div>
+        <div class="text-xs space-y-2">
+          <div class="bg-emerald-500/10 rounded-lg p-2">
+            <span class="text-emerald-300 font-bold">🐻 ベア価格</span>
+            <span class="text-white/30 ml-1">（保守的PER）</span><br>
+            <span class="text-white/50">10年後EPS × 業種PER下限（例:SaaS=40倍）</span>
+          </div>
+          <div class="bg-yellow-500/10 rounded-lg p-2">
+            <span class="text-yellow-300 font-bold">🎯 標準価格</span>
+            <span class="text-white/30 ml-1">（メインシナリオ）</span><br>
+            <span class="text-white/50">10年後EPS × 業種標準PER（例:SaaS=60倍）</span>
+          </div>
+          <div class="bg-red-500/10 rounded-lg p-2">
+            <span class="text-red-300 font-bold">🚀 ブル価格（奥義）</span><br>
+            <span class="text-white/50">10年後EPS × 標準PER × <strong class="text-red-400">2倍</strong>（市場が熱狂した場合）</span>
+          </div>
+        </div>
+        <div class="mt-3 text-xs text-white/30">業種別PER: SaaS 40〜60倍 / Internet 25〜40倍 / 半導体 20〜30倍</div>
+      </div>
+
+      <!-- 原価率グレード（マシャ5段階）-->
+      <div class="card rounded-2xl p-5">
+        <div class="flex items-start justify-between mb-3">
+          <div>
+            <div class="badge-gold rounded-full px-2 py-0.5 text-xs inline-block mb-2">マシャ塾独自</div>
+            <h3 class="font-black text-lg">原価率 5段階評価</h3>
+          </div>
+          <div class="text-3xl">🏆</div>
+        </div>
+        <div class="text-xs text-white/40 font-mono bg-black/20 rounded-lg p-3 mb-3">
+          原価率 = 売上原価 ÷ 売上高
+        </div>
+        <div class="space-y-1.5 text-xs">
+          <div class="flex items-center gap-2"><span class="w-16 text-yellow-200 font-bold">🏆 &lt;15%</span><span class="text-yellow-200">最強・化け物級（PLTRクラス）</span></div>
+          <div class="flex items-center gap-2"><span class="w-16 text-emerald-200 font-bold">✨ &lt;20%</span><span class="text-emerald-300">優秀（AI/ITエリート）</span></div>
+          <div class="flex items-center gap-2"><span class="w-16 text-emerald-400 font-bold">✅ &lt;30%</span><span class="text-emerald-400">良（マシャ推奨水準）</span></div>
+          <div class="flex items-center gap-2"><span class="w-16 text-yellow-400 font-bold">⚡ &lt;50%</span><span class="text-yellow-400">合格（バフェット水準）</span></div>
+          <div class="flex items-center gap-2"><span class="w-16 text-orange-400 font-bold">⚠️ 50%+</span><span class="text-orange-400">要注意・キャッシュリッチ外</span></div>
+        </div>
+        <div class="mt-3 text-xs text-white/30">低原価率 = 在庫を持たないソフトウェア的ビジネスの証明</div>
+      </div>
+
+      <!-- EPS・期待リターン -->
+      <div class="card rounded-2xl p-5">
+        <div class="flex items-start justify-between mb-3">
+          <div>
+            <div class="badge-green rounded-full px-2 py-0.5 text-xs inline-block mb-2">期待リターン最大化</div>
+            <h3 class="font-black text-lg">期待リターン倍率</h3>
+          </div>
+          <div class="text-3xl">📈</div>
+        </div>
+        <div class="text-xs text-white/40 font-mono bg-black/20 rounded-lg p-3 mb-3">
+          期待リターン = 10年後目標株価 ÷ 現在株価<br>
+          年率CAGR = (倍率)^(1/10) − 1
+        </div>
+        <div class="space-y-1 text-xs">
+          <div class="flex justify-between"><span class="text-white/50">年率 +30%以上</span><span class="text-yellow-200 font-bold">💎 伝説クラス</span></div>
+          <div class="flex justify-between"><span class="text-white/50">年率 +20〜30%</span><span class="text-emerald-300 font-bold">⭐ 超優良</span></div>
+          <div class="flex justify-between"><span class="text-white/50">年率 +15〜20%</span><span class="text-emerald-400">✅ 優良（市場平均の2倍）</span></div>
+          <div class="flex justify-between"><span class="text-white/50">年率 +10〜15%</span><span class="text-yellow-400">⚡ 標準的グロース</span></div>
+          <div class="flex justify-between"><span class="text-white/50">年率 +10%未満</span><span class="text-white/40">S&P500インデックス水準</span></div>
+        </div>
+        <div class="mt-3 text-xs text-white/30">アプリ：10年後株価推定パネルに3シナリオ別で表示</div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ━━━━━ ② b マシャ会計スコア詳細解説 ━━━━━ -->
+  <section id="masya-score">
+    <div class="text-center mb-8">
+      <h2 class="text-3xl font-black mb-2">🎓 マシャ会計スコア 完全解説</h2>
+      <p class="text-white/50 text-sm">マシャ塾メソッドの全指標を体系化。アプリの「マシャ会計スコア」パネルの見方</p>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+      <!-- 10年後EPS×PER計算フロー -->
+      <div class="card rounded-2xl p-6" style="border-color:rgba(99,102,241,0.3)">
+        <h3 class="text-lg font-black text-indigo-200 mb-4">📐 10年後EPS計算の全ステップ</h3>
+        <div class="space-y-2 text-xs font-mono">
+          <div class="flex items-start gap-3 bg-white/5 rounded-lg p-3">
+            <span class="text-indigo-300 font-bold w-4">①</span>
+            <div><span class="text-white/70">直近年次売上（SEC EDGAR実績）</span><br><span class="text-white/40">例: SOFI $2.8B</span></div>
+          </div>
+          <div class="text-center text-white/20 text-lg">× (1 + 売上CAGR)^10</div>
+          <div class="flex items-start gap-3 bg-white/5 rounded-lg p-3">
+            <span class="text-indigo-300 font-bold w-4">②</span>
+            <div><span class="text-white/70">10年後売上推定</span><br><span class="text-white/40">CAGR上限40%・超高成長は保守化調整</span></div>
+          </div>
+          <div class="text-center text-white/20 text-lg">× 目標営業利益率</div>
+          <div class="flex items-start gap-3 bg-white/5 rounded-lg p-3">
+            <span class="text-indigo-300 font-bold w-4">③</span>
+            <div><span class="text-white/70">目標OpM: max(現在OpM, 業種成熟目標)</span><br><span class="text-white/40">SaaS=30% / Internet=25% / 半導体=22%</span></div>
+          </div>
+          <div class="text-center text-white/20 text-lg">× 0.75（税・調整）÷ 発行株数</div>
+          <div class="flex items-start gap-3 bg-indigo-500/10 rounded-lg p-3 border border-indigo-500/20">
+            <span class="text-indigo-300 font-bold w-4">④</span>
+            <div><span class="text-indigo-300 font-bold">10年後EPS（ドル/株）</span><br><span class="text-white/40">この数字 × PER = 目標株価</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- キャッシュリッチ判定 + 財務3表 -->
+      <div class="space-y-4">
+        <div class="card rounded-2xl p-5" style="border-color:rgba(52,211,153,0.25)">
+          <h3 class="text-base font-black text-emerald-200 mb-3">💰 キャッシュリッチ企業の条件（マシャ塾）</h3>
+          <div class="space-y-2 text-xs">
+            <div class="flex items-start gap-2 bg-emerald-500/8 rounded-lg p-3 border border-emerald-500/20">
+              <span class="text-emerald-400 font-bold text-sm">①</span>
+              <div><span class="text-emerald-300 font-bold">原価率 &lt; 50%</span><br><span class="text-white/50">在庫を持たない・低コスト構造のビジネス証明</span></div>
+            </div>
+            <div class="flex items-start gap-2 bg-emerald-500/8 rounded-lg p-3 border border-emerald-500/20">
+              <span class="text-emerald-400 font-bold text-sm">②</span>
+              <div><span class="text-emerald-300 font-bold">営業利益 前年比プラス</span><br><span class="text-white/50">本業の稼ぎが成長している。赤字縮小でも可。</span></div>
+            </div>
+            <div class="bg-white/5 rounded-lg p-3 mt-2">
+              <div class="text-white/60 leading-relaxed">「赤字は悪くない、<strong class="text-white/80">現金キャッシュプアが悪い</strong>」— マシャ塾の核心。赤字でも原価率が低く成長していれば、黒字化は時間の問題。</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card rounded-2xl p-5" style="border-color:rgba(251,191,36,0.2)">
+          <h3 class="text-base font-black text-yellow-200 mb-3">📚 財務3表を読む順序（マシャ塾）</h3>
+          <div class="flex gap-2 items-center text-sm mb-3">
+            <div class="bg-yellow-500/15 border border-yellow-500/30 rounded-lg px-3 py-2 text-center flex-1">
+              <div class="text-yellow-300 font-black">P/L</div>
+              <div class="text-xs text-white/50">損益計算書</div>
+              <div class="text-xs text-yellow-400 mt-1">本業の実力</div>
+            </div>
+            <div class="text-white/30 font-bold">→</div>
+            <div class="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-center flex-1">
+              <div class="text-white/80 font-black">B/S</div>
+              <div class="text-xs text-white/50">貸借対照表</div>
+              <div class="text-xs text-white/40 mt-1">財務健全性</div>
+            </div>
+            <div class="text-white/30 font-bold">→</div>
+            <div class="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-center flex-1">
+              <div class="text-white/80 font-black">C/F</div>
+              <div class="text-xs text-white/50">CF計算書</div>
+              <div class="text-xs text-white/40 mt-1">黒字倒産防止</div>
+            </div>
+          </div>
+          <div class="text-xs text-white/40 space-y-1">
+            <div>• P/L: 営業利益を最重視（当期純利益は一時的ノイズ多）</div>
+            <div>• B/S: 資本の部がマイナス = 債務超過 = 倒産リスク</div>
+            <div>• C/F: P/L黒字でも現金がなければ「黒字倒産」あり</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ━━━━━ ③ 4銘柄 参入ベストポイント検証 ━━━━━ -->
+  <section id="cases">
+    <div class="text-center mb-8">
+      <h2 class="text-3xl font-black mb-2">🔍 4銘柄 参入ベストポイント 実証検証</h2>
+      <p class="text-white/50 text-sm">SEC実データ + 株価履歴から「あの時何が起きていたか」を定量的に検証</p>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+      <!-- NVDA -->
+      <div class="card rounded-2xl p-6" style="border-color:rgba(52,211,153,0.2)">
+        <div class="flex items-center gap-3 mb-4">
+          <div class="text-2xl font-black text-emerald-300">NVDA</div>
+          <div class="badge-green rounded-full px-2 py-0.5 text-xs">NVIDIA Corporation</div>
+          <div class="ml-auto text-right">
+            <div class="text-xs text-white/40">現在株価</div>
+            <div class="font-bold">~$208</div>
+          </div>
+        </div>
+        <div class="space-y-3 text-xs">
+          <div class="bg-emerald-500/8 rounded-xl p-4 border border-emerald-500/15">
+            <div class="text-emerald-300 font-bold mb-2">🚨 参入ベストポイント: 2023年5月（FY2024 Q1決算後）</div>
+            <div class="grid grid-cols-2 gap-2 text-white/60">
+              <div>当時株価: <span class="text-white">~$300</span></div>
+              <div>現在株価: <span class="text-emerald-300">~$208（10:1分割後）</span></div>
+              <div>DataCenter売上: <span class="text-white">初めてゲーミングを逆転</span></div>
+              <div>ガイダンス: <span class="text-emerald-300">$11B（予想+57%超）</span></div>
+            </div>
+          </div>
+          <div class="text-white/50 leading-relaxed">
+            <span class="text-white/70 font-bold">何が見えていたか：</span>
+            データセンター部門の売上がゲーミングを初めて上回り、粗利率が急拡大。ChatGPT普及でGPU需要が爆発する直前。アプリのTier2シグナル（OpM急拡大）が点灯する四半期。
+          </div>
+          <div class="flex gap-2 flex-wrap">
+            <span class="badge-green rounded-full px-2 py-0.5 text-xs">⚡ OpM急拡大</span>
+            <span class="badge-gold rounded-full px-2 py-0.5 text-xs">RoF40初突破</span>
+            <span class="badge-blue rounded-full px-2 py-0.5 text-xs">新市場の兆候</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- PLTR -->
+      <div class="card rounded-2xl p-6" style="border-color:rgba(168,85,247,0.2)">
+        <div class="flex items-center gap-3 mb-4">
+          <div class="text-2xl font-black text-purple-300">PLTR</div>
+          <div class="badge-purple rounded-full px-2 py-0.5 text-xs">Palantir Technologies</div>
+          <div class="ml-auto text-right">
+            <div class="text-xs text-white/40">現在株価</div>
+            <div class="font-bold">~$136</div>
+          </div>
+        </div>
+        <div class="space-y-3 text-xs">
+          <div class="bg-purple-500/8 rounded-xl p-4 border border-purple-500/15">
+            <div class="text-purple-300 font-bold mb-2">🚨 参入ベストポイント: 2024年Q1（2024年5月決算後）</div>
+            <div class="grid grid-cols-2 gap-2 text-white/60">
+              <div>当時株価: <span class="text-white">~$20</span></div>
+              <div>現在株価: <span class="text-purple-300">~$136（+580%）</span></div>
+              <div>OpM: <span class="text-white">7.2% → 12.8%（+5.6pp）</span></div>
+              <div>RoF40: <span class="text-purple-300">30 → 43（初突破）</span></div>
+            </div>
+          </div>
+          <div class="text-white/50 leading-relaxed">
+            <span class="text-white/70 font-bold">何が見えていたか：</span>
+            AIPプラットフォームの商業展開開始。OpMが7%から13%へ急拡大し、RoF40が初めて40を突破。「赤字常連」から「黒字・高成長」への構造転換の瞬間だった。
+          </div>
+          <div class="flex gap-2 flex-wrap">
+            <span class="badge-purple rounded-full px-2 py-0.5 text-xs">⚡ OpM+5.6pp</span>
+            <span class="badge-blue rounded-full px-2 py-0.5 text-xs">RoF40初突破</span>
+            <span class="badge-green rounded-full px-2 py-0.5 text-xs">商業AI転換</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- APP -->
+      <div class="card rounded-2xl p-6" style="border-color:rgba(251,146,60,0.2)">
+        <div class="flex items-center gap-3 mb-4">
+          <div class="text-2xl font-black text-orange-300">APP</div>
+          <div class="badge-orange rounded-full px-2 py-0.5 text-xs">AppLovin Corporation</div>
+          <div class="ml-auto text-right">
+            <div class="text-xs text-white/40">現在株価</div>
+            <div class="font-bold">~$564</div>
+          </div>
+        </div>
+        <div class="space-y-3 text-xs">
+          <div class="bg-orange-500/8 rounded-xl p-4 border border-orange-500/15">
+            <div class="text-orange-300 font-bold mb-2">🚨 参入ベストポイント: 2023年Q2（2023年8月決算後）</div>
+            <div class="grid grid-cols-2 gap-2 text-white/60">
+              <div>当時株価: <span class="text-white">~$25</span></div>
+              <div>現在株価: <span class="text-orange-300">~$564（+2156%）</span></div>
+              <div>変化: <span class="text-white">ゲーム事業売却・AXON AI集中</span></div>
+              <div>OpM: <span class="text-orange-300">マイナス → プラス転換</span></div>
+            </div>
+          </div>
+          <div class="text-white/50 leading-relaxed">
+            <span class="text-white/70 font-bold">何が見えていたか：</span>
+            ゲーム事業を売却してAXON広告AIプラットフォームに集中。赤字→黒字の転換とともに、OpMが急拡大。RoF40を突破したのもこの前後。最大リターンの銘柄。
+          </div>
+          <div class="flex gap-2 flex-wrap">
+            <span class="badge-orange rounded-full px-2 py-0.5 text-xs">🔄 赤字→黒字</span>
+            <span class="badge-gold rounded-full px-2 py-0.5 text-xs">事業構造転換</span>
+            <span class="badge-green rounded-full px-2 py-0.5 text-xs">AI特化戦略</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- MU -->
+      <div class="card rounded-2xl p-6" style="border-color:rgba(99,102,241,0.2)">
+        <div class="flex items-center gap-3 mb-4">
+          <div class="text-2xl font-black text-indigo-300">MU</div>
+          <div class="badge-blue rounded-full px-2 py-0.5 text-xs">Micron Technology</div>
+          <div class="ml-auto text-right">
+            <div class="text-xs text-white/40">現在株価</div>
+            <div class="font-bold">~$949（推定）</div>
+          </div>
+        </div>
+        <div class="space-y-3 text-xs">
+          <div class="bg-indigo-500/8 rounded-xl p-4 border border-indigo-500/15">
+            <div class="text-indigo-300 font-bold mb-2">🚨 参入ベストポイント: 2024年Q1（メモリサイクル底）</div>
+            <div class="grid grid-cols-2 gap-2 text-white/60">
+              <div>当時株価: <span class="text-white">~$80</span></div>
+              <div>転換根拠: <span class="text-indigo-300">赤字→黒字、HBM需要</span></div>
+              <div>サイクル: <span class="text-white">メモリ需給が底打ち</span></div>
+              <div>RoF40: <span class="text-indigo-300">急速に上昇開始</span></div>
+            </div>
+          </div>
+          <div class="text-white/50 leading-relaxed">
+            <span class="text-white/70 font-bold">何が見えていたか：</span>
+            メモリ半導体の需給サイクルが底打ちし、AIサーバー向けHBM（高帯域幅メモリ）需要が急増。赤字→黒字転換が最大のシグナル。製品ミックスの改善で原価率も急低下。
+          </div>
+          <div class="flex gap-2 flex-wrap">
+            <span class="badge-purple rounded-full px-2 py-0.5 text-xs">🔄 赤字→黒字</span>
+            <span class="badge-blue rounded-full px-2 py-0.5 text-xs">サイクル底打ち</span>
+            <span class="badge-gold rounded-full px-2 py-0.5 text-xs">HBM需要</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 共通パターンサマリー -->
+    <div class="mt-6 card rounded-2xl p-6" style="border-color:rgba(251,191,36,0.25)">
+      <h3 class="text-lg font-black text-yellow-200 mb-4">🧬 4銘柄に共通する「参入シグナル」パターン</h3>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+        <div class="bg-white/5 rounded-xl p-4">
+          <div class="text-yellow-300 font-bold mb-2">① 黒字化 or OpM急拡大が必ずある</div>
+          <div class="text-white/50">4銘柄全て、参入ベストポイントの四半期に<br>「OpM +5pp以上」または「赤字→黒字転換」が発生</div>
+        </div>
+        <div class="bg-white/5 rounded-xl p-4">
+          <div class="text-yellow-300 font-bold mb-2">② RoF40が急上昇し40突破</div>
+          <div class="text-white/50">成長と収益性が同時に改善する瞬間。<br>「初突破」の四半期が最も株価インパクトが大きい</div>
+        </div>
+        <div class="bg-white/5 rounded-xl p-4">
+          <div class="text-yellow-300 font-bold mb-2">③ 「なぜ今まで安かったか」の理由が消える</div>
+          <div class="text-white/50">PLTR→赤字、APP→ゲーム事業の重さ<br>MU→サイクル底、NVDA→ゲーム需要低迷<br>その「不安材料」が会計数字で解消された瞬間</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ━━━━━ ④ 投資判断フローチャート ━━━━━ -->
+  <section id="framework">
+    <div class="text-center mb-8">
+      <h2 class="text-3xl font-black mb-2">🗺 投資判断フレームワーク</h2>
+      <p class="text-white/50 text-sm">参入を検討する際のステップバイステップ判断フロー（マシャ塾 × 定量分析の統合版）</p>
+    </div>
+
+    <div class="max-w-3xl mx-auto">
+      <div class="space-y-3">
+
+        <div class="flex gap-4 items-start">
+          <div class="w-10 h-10 rounded-full bg-slate-700 flex items-center justify-center text-white font-black text-sm flex-shrink-0 mt-0.5">1</div>
+          <div class="card rounded-2xl p-4 flex-1">
+            <div class="font-bold mb-1">🔍 Tier5スクリーニング（マシャ塾基礎フィルター）</div>
+            <div class="text-xs text-white/50">BS健全 + 希薄化なし + 原価率グレード合格（&lt;50%）+ キャッシュリッチ条件確認<br>→ どれか1つでも❌ならここで終了</div>
+          </div>
+        </div>
+        <div class="ml-12 text-white/30 text-xs">↓ 全クリア</div>
+
+        <div class="flex gap-4 items-start">
+          <div class="w-10 h-10 rounded-full bg-orange-700 flex items-center justify-center text-white font-black text-sm flex-shrink-0 mt-0.5">2</div>
+          <div class="card rounded-2xl p-4 flex-1" style="border-color:rgba(251,146,60,0.3)">
+            <div class="font-bold mb-1 text-orange-300">🔄 Tier4: 構造変化を確認</div>
+            <div class="text-xs text-white/50">原価率が4Q連続低下 or 赤字→黒字転換<br>→ なければ「成長しているが構造変化なし」→ 参入優先度低</div>
+          </div>
+        </div>
+        <div class="ml-12 text-white/30 text-xs">↓ 確認できた</div>
+
+        <div class="flex gap-4 items-start">
+          <div class="w-10 h-10 rounded-full bg-indigo-700 flex items-center justify-center text-white font-black text-sm flex-shrink-0 mt-0.5">3</div>
+          <div class="card rounded-2xl p-4 flex-1" style="border-color:rgba(99,102,241,0.3)">
+            <div class="font-bold mb-1 text-indigo-300">📊 Tier3: RoF40を確認</div>
+            <div class="text-xs text-white/50">RoF40 ≥ 40 → 参入候補に昇格<br>RoF40 ≥ 60 → 強い確信 | ≥ 80 → 積極的に検討</div>
+          </div>
+        </div>
+        <div class="ml-12 text-white/30 text-xs">↓ 40以上</div>
+
+        <div class="flex gap-4 items-start">
+          <div class="w-10 h-10 rounded-full bg-emerald-700 flex items-center justify-center text-white font-black text-sm flex-shrink-0 mt-0.5">4</div>
+          <div class="card rounded-2xl p-4 flex-1" style="border-color:rgba(52,211,153,0.3)">
+            <div class="font-bold mb-1 text-emerald-300">🚀 Tier2: 転換シグナルを待つ</div>
+            <div class="text-xs text-white/50">OpMΔ ≥ +5pp（1四半期） AND YoY加速（↑矢印）<br>→ この条件が揃った四半期の決算発表翌日が理想の参入タイミング</div>
+          </div>
+        </div>
+        <div class="ml-12 text-white/30 text-xs">↓ 揃った</div>
+
+        <div class="flex gap-4 items-start">
+          <div class="w-10 h-10 rounded-full bg-yellow-600 flex items-center justify-center text-black font-black text-sm flex-shrink-0 mt-0.5">5</div>
+          <div class="card rounded-2xl p-4 flex-1 glow-gold" style="border-color:rgba(251,191,36,0.4)">
+            <div class="font-bold mb-1 text-yellow-200">💎 Tier1: OpLev × RoF複合で確認し追加投資</div>
+            <div class="text-xs text-white/50">OpLev ≥ 2.5x + RoF ≥ 60 が2Q連続<br>→ 「構造的な勝者」確定。マシャ塾のポテンシャル推定〜レバレッジ経済水準まで保有継続</div>
+          </div>
+        </div>
+        <div class="ml-12 text-white/30 text-xs">↓ 継続</div>
+
+        <div class="flex gap-4 items-start">
+          <div class="w-10 h-10 rounded-full bg-red-800 flex items-center justify-center text-white font-black text-sm flex-shrink-0 mt-0.5">⚠</div>
+          <div class="card rounded-2xl p-4 flex-1" style="border-color:rgba(239,68,68,0.25)">
+            <div class="font-bold mb-1 text-red-300">🔔 撤退シグナル（参考）</div>
+            <div class="text-xs text-white/50">RoF40が2Q連続で20pt以上低下 / OpMが3Q連続で低下 / YoY成長が2Q連続で-15pp以上減速<br>→ 「構造的優位性」が失われつつある可能性</div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- フッター -->
+  <footer class="text-center text-xs text-white/20 pb-8 space-y-1">
+    <p>このライブラリはマシャ塾の投資哲学と定量分析の融合による学習目的のコンテンツです</p>
+    <p>投資判断はご自身の責任で行ってください ／ データ出所: SEC EDGAR (XBRL) / 市場データ</p>
+    <p class="mt-2"><a href="../portfolio_manager.html#companies" class="text-indigo-400 hover:text-indigo-300">← 分析アプリに戻る</a></p>
+  </footer>
+
+</div>
+
+<script>
+function showDetail(tierId) {
+  // 全パネルを隠す
+  ['default','tier1','tier2','tier3','tier4','tier5'].forEach(id => {
+    document.getElementById(`detail-${id}`)?.classList.add('hidden');
+  });
+  // 対象を表示
+  document.getElementById(`detail-${tierId}`)?.classList.remove('hidden');
+  // アクティブスタイル（ピラミッド層）
+  document.querySelectorAll('.pyramid-layer').forEach(el => el.classList.remove('active'));
+}
+
+// スムーズスクロール
+document.querySelectorAll('a[href^="#"]').forEach(a => {
+  a.addEventListener('click', e => {
+    e.preventDefault();
+    const el = document.querySelector(a.getAttribute('href'));
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+});
+</script>
+</body>
+</html>
