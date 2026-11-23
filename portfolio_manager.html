@@ -684,6 +684,24 @@
       </p>
       <a class="btn btn-ghost" href="#companies">既存の企業評価へ移動</a>
     </div>
+    <div class="pm-card">
+      <h3>旧Stock Analyzerのウォッチリストを引き継ぐ</h3>
+      <p class="pm-muted pm-small" style="margin:8px 0">
+        旧Netlifyのブラウザーで保存したティッカーのJSON配列（例: ["PLTR","NVDA"]）を貼り付けます。
+        違うドメインの保存領域は自動で読み取れません。重複銘柄を除いて差分表示し、承認後に追加します。
+      </p>
+      <label for="pm-research-legacy-json" class="pm-small">旧ウォッチリストJSON</label>
+      <textarea id="pm-research-legacy-json" rows="4" maxlength="20000" placeholder='["PLTR","NVDA","APP"]' style="display:block;width:100%;margin:8px 0 12px"></textarea>
+      <div class="pm-actions">
+        <button type="button" class="btn btn-ghost" id="pm-research-preview">差分を確認</button>
+        <button type="button" class="btn btn-primary" id="pm-research-accept" disabled>追加を確定</button>
+      </div>
+      <p id="pm-research-import-status" class="pm-muted pm-small" role="status"></p>
+      <p id="pm-research-import-summary" class="pm-muted pm-small" style="margin-top:8px;overflow-wrap:anywhere"></p>
+      <p class="pm-muted pm-small" style="margin-top:8px">
+        ※ 旧アプリのデータをコピーした後、ここへ貼り付けてください。既存の保有ロット・現金・配分・取引履歴には書き込みません。
+      </p>
+    </div>
   </section>
   <section id="companies" aria-labelledby="companies-title">
     <div class="pm-heading"><h2 id="companies-title">企業価値・決算管理</h2></div>
@@ -966,6 +984,7 @@
 <script src="app/ui.js"></script>
 <script src="app/staged-funding.js"></script>
 <script src="app/navigation.js"></script>
+<script src="app/research-import.js"></script>
 <script>
 
 const pmEscape = PMApp.escape;
@@ -2242,6 +2261,7 @@ PMApp.init(() => {
   renderTradeLog();
 });
 PMNavigation.init();
+PMResearchImport.init();
 restoreSentimentCache();
 restoreIndexCache();
 fetchSentiment();
