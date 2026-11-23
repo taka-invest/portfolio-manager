@@ -4,7 +4,9 @@
   "private": true,
   "scripts": {
     "test": "node --test tests/*.test.js",
-    "test:browser": "playwright test"
+    "test:browser": "playwright test",
+    "build:firebase": "node scripts/build-firebase.mjs",
+    "verify:firebase": "npm run build:firebase && node --test tests/firebase-foundation.test.js"
   },
   "devDependencies": {
     "@playwright/test": "1.65.1"
