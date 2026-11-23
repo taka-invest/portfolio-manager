@@ -6,6 +6,7 @@
     rebalance: ['allocation', 'rebalance', 'after'],
     market: ['market'],
     companies: ['companies'],
+    research: ['research'],
     history: ['history']
   };
   const titles = {
@@ -14,6 +15,7 @@
     rebalance: 'リバランス',
     market: '市場分析',
     companies: '企業評価',
+    research: '投資リサーチ',
     history: '取引・購入計画'
   };
   const hashToPage = Object.fromEntries(
