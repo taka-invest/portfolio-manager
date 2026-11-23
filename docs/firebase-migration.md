@@ -46,7 +46,7 @@ firebase deploy --only hosting,firestore:rules
 
 - \`firebase.json\` が静的配信を \`dist/firebase\` に限定。GitHubの全ファイルを公開しない。
 - \`app/firebase-config.js\` は初期値\`null\`なので、**未設定ではGoogleログイン・クラウド同期が使用不可**。従来のJSON保存とGitHub Pagesがそのまま動く。
-- \`.firebaserc\` は個人プロジェクトIDを含むローカル環境用としてgitignore済み。\`.firebaserc.example\`は雛形。
+- \`.firebaserc\` はプロジェクトID \`finance-base-edcc7\` を指定（公開情報であり秘密ではない）。
 - FirebaseのWeb設定は秘密のサービスアカウント鍵とは違うが、IAMの編集・APIキー制限、App Check、Firestore Rulesは重要。
 - **公開前の最終承認を経ずにFirebaseへ自動デプロイするGitHub Actionsはまだ追加していない**。レビュー→テスト→承認のポリシーを維持する。
 
