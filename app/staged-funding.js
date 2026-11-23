@@ -32,8 +32,8 @@
     if (!plan || !plan.baselineShares)
       errors.push('A日の購入前に「買付計画を開始」を押し、当初保有株数を保存してください。');
     if (Market.fxStatus(market && market.fx, now) !== 'ready' ||
-        !['spot', 'hourly'].includes(market && market.fx && market.fx.kind))
-      errors.push('売買計算には新しいUSD/JPYレートが必要です（日次ECB参考値は使用しません）。');
+        !['spot', 'hourly', 'manual'].includes(market && market.fx && market.fx.kind))
+      errors.push('売買計算には更新時刻の確認できるUSD/JPYレート、または10分以内に証券会社で確認した手入力レートが必要です（日次ECB参考値は使用しません）。');
     const rate = market && market.fx && market.fx.rate;
     const lots = (state && state.positions || []).filter(p => p.kind === 'stock');
     const tickers = new Set([...lots.map(p => p.ticker), ...TICKERS, 'PLTR']);
@@ -266,7 +266,7 @@
     host.innerHTML =
       '<div class="pm-stage-grid">' +
       cell('現時点の対象資産', yen(out.total)) +
-      cell('USD/JPY（' + (out.fx.kind === 'spot' ? 'スポット' : '時間更新') + '）', out.rate.toFixed(4)) +
+      cell('USD/JPY（' + (out.fx.kind === 'spot' ? 'スポット' : out.fx.kind === 'manual' ? '証券会社・手入力' : '時間更新') + '）', out.rate.toFixed(4)) +
       cell('第' + stage + '弾・累積到達率', pct(out.stagePct)) +
       cell('今回の購入必要額・概算手数料込', yen(out.idealBudget)) +
       cell('PLTR売却する株数', out.sale.shares + '株') +
