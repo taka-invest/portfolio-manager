@@ -38,11 +38,17 @@ test('Firebase integration is opt-in and cloud data can only enter via reviewed 
   assert.match(client, /getDocFromServer\(ref\(\)\)/);
   assert.match(client, /runTransaction/);
   assert.match(client, /actual !== old/);
+  assert.match(client, /backupJson\(\)/);
+  assert.match(client, /'backups'/);
+  assert.match(client, /storageError\(\)/);
+  assert.match(client, /canonical\(window\.PMData\.validate\(remoteData\.payload\)\) === canonical\(local\)/);
   assert.match(ui, /previewImport: preview/);
 });
 test('Security rules restrict portfolio to authenticated owner and disable deletes', () => {
   const rules = fs.readFileSync(path.join(root, 'firestore.rules'), 'utf8');
   assert.match(rules, /request\.auth\.uid == userId/);
+  assert.match(rules, /allowlist\/\$\(request\.auth\.uid\)/);
+  assert.match(rules, /allow list, write: if false/);
   assert.match(rules, /sign_in_provider == 'google\.com'/);
   assert.match(rules, /allow delete: if false/);
   assert.match(rules, /docId == 'portfolio'/);

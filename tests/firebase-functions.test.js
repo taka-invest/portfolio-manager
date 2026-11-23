@@ -48,8 +48,10 @@ test('Firebase analysis functions are not exposed as a public Hosting rewrite ye
   assert.equal(config.functions[0].source, 'functions');
   assert.ok(!config.hosting.rewrites.some(r => r.source.startsWith('/api/')));
   const src=readFileSync(join(base,'functions/src/index.js'),'utf8');
-  assert.match(src,/verifyIdToken/);
-  assert.match(src,/sign_in_provider !== 'google.com'/);
+  const gate=readFileSync(join(base,'functions/src/auth.js'),'utf8');
+  assert.match(src,/verifyIdToken\(t, revoked\)/);
+  assert.match(src,/allowlist\//);
+  assert.match(gate,/sign_in_provider !== 'google.com'/);
   assert.match(src,/maxInstances: 1/);
   assert.match(src,/timeoutSeconds: 180/);
   assert.match(src,/SEC_USER_AGENT/);
@@ -60,11 +62,29 @@ test('Firebase analysis functions are not exposed as a public Hosting rewrite ye
 test('Migrated legacy engine modules and Firebase adapter have valid Node ESM syntax', () => {
   const { execFileSync } = require('node:child_process');
   for (const file of [
-    'functions/src/index.js', 'functions/src/sec-gateway.js', 'functions/src/input.js',
+    'functions/src/index.js', 'functions/src/sec-gateway.js', 'functions/src/input.js', 'functions/src/auth.js',
     'functions/src/legacy/analyze.js', 'functions/src/legacy/screener.js',
     'functions/src/legacy/chart.js'
   ]) {
     assert.doesNotThrow(() => execFileSync(process.execPath, ['--check', join(base, file)]),
       {message:'Invalid JavaScript syntax: ' + file});
   }
+});
+
+test('API access gate: valid Google token AND enabled allowlist UID are both required', async () => {
+  const { authorize, clearAuthCacheForTest } = await importSource('functions/src/auth.js');
+  clearAuthCacheForTest();
+  const jwt = 'Bearer aaa.bbb.ccc';
+  const google = uid => async (_t, revoked) => { assert.equal(revoked, true); return { uid, firebase: { sign_in_provider: 'google.com' } }; };
+  const allow = new Set(['owner']);
+  const isAllowed = async uid => allow.has(uid);
+  assert.equal(await authorize(jwt, { verifyIdToken: google('owner'), isAllowed }), 'owner');
+  await assert.rejects(authorize(jwt, { verifyIdToken: google('stranger'), isAllowed }), e => e.status === 403);
+  await assert.rejects(authorize('', { verifyIdToken: google('owner'), isAllowed }), e => e.status === 401);
+  await assert.rejects(authorize('Bearer not-a-jwt', { verifyIdToken: google('owner'), isAllowed }), e => e.status === 401);
+  await assert.rejects(authorize(jwt, { verifyIdToken: async () => { throw new Error('revoked'); }, isAllowed }), e => e.status === 401);
+  await assert.rejects(authorize(jwt, {
+    verifyIdToken: async () => ({ uid: 'owner', firebase: { sign_in_provider: 'password' } }), isAllowed
+  }), e => e.status === 403);
+  clearAuthCacheForTest();
 });

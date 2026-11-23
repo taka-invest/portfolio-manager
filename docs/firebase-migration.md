@@ -19,12 +19,13 @@
 
 ## Firebase Consoleでの手動準備
 
-1. https://console.firebase.google.com/ で**金融アプリ専用の新規Firebaseプロジェクト**を作成。既存のBodyCompやTripCraftとは分離する。
+1. 既存プロジェクト **Finance Base（`finance-base-edcc7`）** を使用する。新規プロジェクトは作成しない。
 2. アプリ用のWeb登録を行い、Firebase Consoleの「プロジェクト設定 → マイアプリ」にある**Web設定**を取得。ブラウザー用の \`apiKey\` はSDK識別子であり**サーバー秘密鍵ではない**が、サービスアカウントJSONや第三者APIキーは絶対に公開しない。
 3. Authentication → Sign-in method → **Google** を有効にする。HostingのURL／後に利用する独自ドメインが必要に応じて承認済みドメインに入っていることを確認。
-4. Firestore Databaseを**東京 \`asia-northeast1\`**に作成し、初期状態は拒否ルールとする。テストモードの公開ルールをそのまま運用しない。
-5. Google Cloud Billingの予算アラートとCloud Functionsの最大インスタンス数などの支出管理を設定。**予算アラートは課金を強制停止する仕組みではない。**
-6. Cloud Functionsをデプロイする段階で**Blaze従量課金プラン**が必要。Phase 1のHosting/FirestoreとPhase 2のAPIを同日に切り替える必要はない。
+4. **本人UIDを許可リストに登録**: アプリでGoogleログインすると「設定・データ管理」にUIDが表示される。Firebase Console → Firestore → コレクション`allowlist` → ドキュメントID=そのUID、フィールド`enabled`（boolean）=`true`を作成。未登録のアカウントは金融データにも非公開APIにもアクセスできない。
+5. Firestore Databaseを**東京 \`asia-northeast1\`**に作成し、初期状態は拒否ルールとする。テストモードの公開ルールをそのまま運用しない。
+6. Google Cloud Billingの予算アラートとCloud Functionsの最大インスタンス数などの支出管理を設定。**予算アラートは課金を強制停止する仕組みではない。**
+7. Cloud Functionsをデプロイする段階で**Blaze従量課金プラン**が必要。Phase 1のHosting/FirestoreとPhase 2のAPIを同日に切り替える必要はない。
 
 ## 開発環境での手順
 
@@ -36,7 +37,7 @@ npm run build:firebase
 # 以下は本人の Firebase プロジェクト作成・ログイン・設定後のみ
 npm install -g firebase-tools
 firebase login
-firebase use --add
+firebase use finance-base-edcc7
 # ファイル app/firebase-config.js 内の PMFirebaseWebConfig = null を
 # Firebase Webアプリからコピーした構成値で置換
 npm run build:firebase

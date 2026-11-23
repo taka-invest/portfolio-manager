@@ -286,3 +286,6 @@ body.light { color-scheme: light; }
   .pm-audit-brief { align-items: stretch; flex-direction: column; }
   .pm-audit-brief p { max-width: 100%; }
 }
+
+/* Firebase cloud sync diff panel */
+#pm-cloud-diff-text { white-space: pre-wrap; word-break: break-word; max-height: 320px; overflow: auto; }

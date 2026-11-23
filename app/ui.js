@@ -108,7 +108,8 @@
       }
       lines.push(`\n${label} ${before.size} → ${after.size} 件`, ...changes);
     }
-    for (const [key, label] of Object.entries({ cash: '現金', cashTarget: '現金目標（%）', tax: '税設定', preferences: '表示設定' })) {
+    for (const [key, label] of Object.entries({ cash: '現金', cashTarget: '現金目標（%）', tax: '税設定', preferences: '表示設定',
+      stagedFunding: '段階買付の基準株数', confirmed: '実保有の確認状態' })) {
       if (JSON.stringify(current[key]) !== JSON.stringify(next[key])) {
         lines.push(`\n${label}\n${JSON.stringify(current[key])} → ${JSON.stringify(next[key])}`);
       }
@@ -683,5 +684,6 @@
     }, 60 * 1000);
   }
 
-  root.PMApp = { init, state: () => state, market: () => market, commit, render, renderCompany, result, freshPrice, fxRate, refreshPrices, escape, id, showNotice, previewImport: preview };
+  root.PMApp = { init, state: () => state, market: () => market, commit, render, renderCompany, result, freshPrice, fxRate, refreshPrices, escape, id, showNotice, previewImport: preview,
+    backupJson: backup, storageError: () => storageError, diffText: (current, next, source) => diff(current, next, 0, source) };
 })(globalThis);

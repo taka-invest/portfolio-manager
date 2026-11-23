@@ -20,6 +20,12 @@ jobs:
       - run: npm ci
       - name: Unit tests
         run: npm test
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Firestore security rules (emulator, demo project only)
+        run: npm run test:rules
       - name: Install browser
         run: npx playwright install --with-deps chromium
       - name: Browser tests (desktop and mobile)

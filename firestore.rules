@@ -1,32 +1,71 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // A signed-in Google account may read and write only its OWN workspace.
-    // Neither public reads nor cross-user reads are allowed.
+    // ---- Access model -------------------------------------------------------
+    // 1. Default deny for every path (see the catch-all at the bottom).
+    // 2. Only a Google-signed-in user whose UID is registered in
+    //    /allowlist/{uid} with enabled == true may touch financial data.
+    // 3. Even an allowed user may only access documents under their OWN uid.
+    // /allowlist is managed exclusively with the Firebase Console or the
+    // Admin SDK (scripts/allowlist-uid.mjs); clients can never write it.
+    function signedInWithGoogle() {
+      return request.auth != null
+        && request.auth.token.firebase.sign_in_provider == 'google.com';
+    }
+    function allowed() {
+      return signedInWithGoogle()
+        && exists(/databases/$(database)/documents/allowlist/$(request.auth.uid))
+        && get(/databases/$(database)/documents/allowlist/$(request.auth.uid)).data.enabled == true;
+    }
+    function owner(userId) {
+      return allowed() && request.auth.uid == userId;
+    }
+
+    // A user may check whether their own UID is registered (to show a
+    // helpful message in the app). They can never list or modify entries.
+    match /allowlist/{uid} {
+      allow get: if signedInWithGoogle() && request.auth.uid == uid;
+      allow list, write: if false;
+    }
+
+    // Portfolio Manager workspace (schema version 3). Optimistic concurrency:
+    // every write must increment `revision` by exactly one.
     match /users/{userId}/workspaces/{docId} {
-      allow read: if request.auth != null
-        && request.auth.uid == userId
-        && request.auth.token.firebase.sign_in_provider == 'google.com'
-        && docId == 'portfolio';
-      allow create, update: if request.auth != null
-        && request.auth.uid == userId
-        && request.auth.token.firebase.sign_in_provider == 'google.com'
+      allow read: if owner(userId) && docId == 'portfolio';
+      allow create, update: if owner(userId)
         && docId == 'portfolio'
-        && request.resource.data.keys().hasOnly(['payload', 'revision', 'updatedAt'])
+        && request.resource.data.keys().hasOnly(['payload', 'revision', 'updatedAt', 'device'])
         && request.resource.data.payload is map
         && request.resource.data.revision is int
         && request.resource.data.revision >= 1
-        && request.resource.data.updatedAt is timestamp
+        && request.resource.data.updatedAt == request.time
+        && (!('device' in request.resource.data) || (request.resource.data.device is string
+            && request.resource.data.device.size() <= 80))
         && request.resource.data.payload.version == 3
         && request.resource.data.payload.keys().size() <= 20
         && request.resource.data.payload.positions is list
         && request.resource.data.payload.positions.size() <= 10000
         && (
-          !exists(/databases/$(database)/documents/users/$(userId)/workspaces/$(docId))
-          || request.resource.data.revision == resource.data.revision + 1
+          (resource == null && request.resource.data.revision == 1)
+          || (resource != null && request.resource.data.revision == resource.data.revision + 1)
         );
       allow delete: if false;
     }
+
+    // Server-side snapshots taken before every overwrite (append-only).
+    match /users/{userId}/backups/{backupId} {
+      allow read: if owner(userId);
+      allow create: if owner(userId)
+        && request.resource.data.keys().hasOnly(['payload', 'revision', 'createdAt', 'reason'])
+        && request.resource.data.payload is map
+        && request.resource.data.payload.version == 3
+        && request.resource.data.revision is int
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.reason is string
+        && request.resource.data.reason.size() <= 80;
+      allow update, delete: if false;
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }
