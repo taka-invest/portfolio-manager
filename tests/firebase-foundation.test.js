@@ -64,3 +64,19 @@ test('allowlist registration script is valid and refuses non-Google or malformed
   assert.match(src, /\^\[A-Za-z0-9\]\{20,128\}\$/);
   assert.doesNotMatch(src, /@gmail\.com|@maruyasu/);
 });
+
+test('deploy workflows: PRs reach only the preview channel; production is manual + approval-gated', () => {
+  const verify = fs.readFileSync(path.join(root, '.github/workflows/verify.yml'), 'utf8');
+  const prod = fs.readFileSync(path.join(root, '.github/workflows/firebase-production.yml'), 'utf8');
+  assert.match(verify, /needs: verify/);
+  assert.match(verify, /channelId: preview/);
+  assert.doesNotMatch(verify, /channelId: live/);
+  assert.match(verify, /head\.repo\.full_name == github\.repository/);
+  const triggers = prod.slice(prod.indexOf('\non:'), prod.indexOf('\npermissions:'));
+  assert.match(triggers, /workflow_dispatch/);
+  assert.doesNotMatch(triggers, /\bpush\b|pull_request|schedule/);
+  assert.match(prod, /github\.ref == 'refs\/heads\/main' && inputs\.confirm == 'DEPLOY'/);
+  assert.match(prod, /needs: test/);
+  assert.match(prod, /name: production/);
+  assert.match(prod, /channelId: live/);
+});

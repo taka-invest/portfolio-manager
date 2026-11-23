@@ -20,6 +20,7 @@ const status = (message, warning = false) => {
   if (output) { output.textContent = message; output.dataset.warn = String(warning); }
 };
 const MAX_BYTES = 750_000;
+const CLOUD_SOURCE = 'Firebase同期';
 const PROJECT_SDK = '12.11.0';
 const base = 'https://www.gstatic.com/firebasejs/' + PROJECT_SDK + '/';
 let auth, db, firebase, store, currentUser, remoteRevision = null, remoteData = null;
@@ -151,7 +152,7 @@ async function download() {
     const payload = window.PMData.validate(remoteData.payload);
     if (bytes(payload) > MAX_BYTES) throw Error('クラウドデータが想定サイズを超えています。');
     // Existing diff-review dialog confirms and backs up prior local data.
-    window.PMApp.previewImport(payload, 'Firebase同期（クラウド リビジョン ' + remoteData.revision + ' の差分を確認）');
+    window.PMApp.previewImport(payload, CLOUD_SOURCE + '（クラウド リビジョン ' + remoteData.revision + ' の差分を確認）');
     status('差分確認ダイアログを開きました。承認した場合のみこのPCのデータが変更されます。');
   });
 }
@@ -193,6 +194,10 @@ export async function init() {
     el('pm-cloud-logout').addEventListener('click', logout);
     el('pm-cloud-upload').addEventListener('click', upload);
     el('pm-cloud-download').addEventListener('click', download);
+    window.addEventListener('pm:import-accepted', e => {
+      if (!String(e.detail?.source || '').startsWith(CLOUD_SOURCE)) return;
+      status('クラウド（リビジョン ' + (remoteData?.revision ?? '?') + '）の内容をこのPCに取り込みました。保有ロットと現金を確認してください。');
+    });
     f.onAuthStateChanged(auth, async user => {
       currentUser = user;
       remoteRevision = null; remoteData = null; allowed = false;

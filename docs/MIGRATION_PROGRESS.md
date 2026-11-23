@@ -17,7 +17,7 @@
 | 3 | 画面統合 | ⬜ |
 | 4 | 既存機能保護（リバランス・ピラミッディング） | 🟡 既存テストで保護中。弾(A/B/C)の同期が未対応 |
 | 5 | セキュリティ・費用 | 🟡 maxInstances=1等は設定済。Blaze・予算アラートは承認待ち |
-| 6 | CI/CD | 🟡 ルールテストをCIに追加。プレビュー・本番ワークフロー未作成 |
+| 6 | CI/CD | 🟡 プレビュー/本番ワークフローと承認ゲート作成済。デプロイ用SA（本人操作）待ち |
 | 7 | 総合検証 | ⬜ |
 | 8 | 本番切替 | ⬜ |
 
@@ -69,10 +69,20 @@
 - 自動バックアップのファイル名が旧名`portfolio-manager-v2.3.json`（日付入りに変更予定）
 - 取込データは参考データのため全22ロットが「口座未確認」、現金0。`MOD`は原価¥0（要確認）
 
+## CI/CD（2026-11-23 セッション1後半）
+
+- プレビューチャネル`preview`へCLIから手動デプロイ: https://finance-base-edcc7--preview-es1ecisz.web.app （30日失効）。ソース類（rules/package.json）は404、本番URLは未公開(404)のまま。チャネルドメインはAuthの承認済みドメインに自動登録されていた（`scripts/auth-domains.mjs`で確認）
+- `verify.yml`に`preview`ジョブ（テスト成功後・同一リポジトリのみ・固定チャネル）
+- `firebase-production.yml`: 手動実行＋`DEPLOY`入力＋`main`限定＋GitHub環境`production`（必須レビュアー taka-invest、`main`ブランチのみ）
+- 手順・ロールバック: `docs/DEPLOYMENT.md`
+- デプロイ用サービスアカウント作成はClaude Codeの安全設定でブロック → 本人が`firebase init hosting:github`で作成する
+- 同期UX修正: クラウド取込承認後の表示、バックアップファイル名を`portfolio-manager-backup-YYYYMMDDHHmm.json`に
+
 ## ユーザー対応待ち（ブロッカー）
 
 1. ~~CLI再認証~~ ✅ ／ ~~Webアプリ構成値~~ ✅
-2. ~~Firestore作成~~ ✅ ／ **AuthenticationでGoogleプロバイダー有効化**（Consoleで本人操作）
+2. ~~Firestore作成~~ ✅ ／ ~~Google認証~~ ✅
+2b. **`firebase init hosting:github`の実行**（デプロイ用SAとGitHub Secret。`docs/DEPLOYMENT.md`）
 3. ~~本人UIDの登録~~ ✅（画面表示のUIDは l/I の判別が難しいため、`firebase auth:export`で正確な値を確認してから登録した）
 4. **SEC_USER_AGENT**: 実際の運用連絡先（例:「FinanceBase 氏名 連絡先メール」）の指定。
 5. **Blazeプランへの変更**（Cloud Functionsのデプロイに必須）と予算アラート額の承認。

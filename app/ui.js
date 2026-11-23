@@ -79,7 +79,8 @@
   }
 
   function backup() {
-    download('portfolio-manager-v2.3.json', JSON.stringify(D.validate(state), null, 2), 'application/json;charset=utf-8');
+    const stamp = new Date().toLocaleString('sv-SE', { timeZone: 'Asia/Tokyo' }).replace(/[-: ]/g, '').slice(0, 12);
+    download('portfolio-manager-backup-' + stamp + '.json', JSON.stringify(D.validate(state), null, 2), 'application/json;charset=utf-8');
   }
 
   const sectionNames = { positions: '保有ロット', plans: '購入計画', trades: '取引履歴', watchlist: '監視銘柄',
@@ -121,7 +122,7 @@
     if (storageError && !recovering) return showNotice(storageError, true);
     try {
       const { next, samples } = D.prepare(payload, state);
-      pending = { next, before: state };
+      pending = { next, before: state, source };
       $('import-error').hidden = true;
       $('data-diff').textContent = diff(state, next, samples, source);
       $('data-review').showModal();
@@ -144,10 +145,12 @@
       return showNotice('確認中にデータが変わりました。差分を開き直してください。', true);
     }
     if (!commit(pending.next, true, true)) return;
+    const source = pending.source;
     pending = null;
     $('data-review').close();
     fillSettings();
     showNotice('保存しました。保有ロットと現金を確認してください。');
+    root.dispatchEvent(new CustomEvent('pm:import-accepted', { detail: { source } }));
     refreshPrices();
   }
 

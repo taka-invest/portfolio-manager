@@ -1,0 +1,63 @@
+name: Deploy to Firebase production (manual, approval required)
+
+# Production is NEVER deployed by push or pull request. A human must:
+#   1. run this workflow by hand on `main` and type DEPLOY, and
+#   2. approve the `production` environment (required reviewer) in GitHub.
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: '本番公開する場合は DEPLOY と入力'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: firebase-production
+  cancel-in-progress: false
+
+jobs:
+  test:
+    if: github.ref == 'refs/heads/main' && inputs.confirm == 'DEPLOY'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - run: npm run test:rules
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:browser
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: production
+      url: https://finance-base-edcc7.web.app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm run build:firebase
+      - name: Deploy Hosting to the live channel
+        uses: FirebaseExtended/action-hosting-deploy@v0.11.0
+        with:
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_FINANCE_BASE_EDCC7 }}
+          projectId: finance-base-edcc7
+          channelId: live
+          firebaseToolsVersion: 15.37.0
