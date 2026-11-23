@@ -12,7 +12,7 @@
 | Phase | 内容 | 状態 |
 |---|---|---|
 | 0 | 監査 | ✅ 完了（2026-11-23）`docs/MIGRATION_AUDIT.md` |
-| 1 | Firebase初期構築・認証・Firestore・同期 | 🟡 コード側は進行中／Firebase側は未確認（CLI認証切れ） |
+| 1 | Firebase初期構築・認証・Firestore・同期 | 🟡 Web構成値反映済。Firestore未作成（承認待ち） |
 | 2 | Functions移行（analyze/screener/chart） | ⬜ 最新版への差し替えと財務ロジック修正が必要 |
 | 3 | 画面統合 | ⬜ |
 | 4 | 既存機能保護（リバランス・ピラミッディング） | 🟡 既存テストで保護中。弾(A/B/C)の同期が未対応 |
@@ -41,10 +41,20 @@
 
 注: Windowsローカルでは並列実行時に`python3 -m http.server`が接続拒否を起こすことがある（CI=Linuxでは発生しない）。EmulatorはWindowsで`JAVA_TOOL_OPTIONS=-Djdk.net.unixdomain.tmpdir=C:/Users/<user>/.uds`が必要な場合がある。
 
+## Firebase実環境の状態（2026-11-23 確認、CLIは個人アカウント maruyasu.jomu@gmail.com）
+
+- Firebase CLI: このディレクトリは`firebase login:use maruyasu.jomu@gmail.com`で個人アカウントに固定（会社アカウントは別プロジェクト用）
+- Webアプリ: 「Finance Base Web」`1:472264087274:web:af5ac46e3e19c34f466993` 登録済み → `app/firebase-config.js`に実値を反映
+- Hosting: サイト`finance-base-edcc7`（https://finance-base-edcc7.web.app）存在。未デプロイ
+- Firestore: **未作成**（Cloud Firestore API未有効）
+- Authentication: Googleプロバイダーの有効化は未確認
+- gcloud: 個人アカウント未ログイン（予算アラート設定時に必要）
+- ローカル確認: SDKが実プロジェクトに接続し「未ログイン」表示、コンソールエラーなし
+
 ## ユーザー対応待ち（ブロッカー）
 
-1. **Firebase CLI / gcloud の再認証**（`firebase login --reauth`、`gcloud auth login`）。Webアプリ登録状況、Firestoreのリージョン、Authプロバイダーを確認するのに必要。
-2. **Webアプリ構成値**: 再認証後に`firebase apps:sdkconfig`で実値を取得する（架空値は使わない）。
+1. ~~CLI再認証~~ ✅ ／ ~~Webアプリ構成値~~ ✅
+2. **Firestore作成の承認**（`asia-northeast1`、作成後はリージョン変更不可）とAuthenticationでGoogleプロバイダー有効化。
 3. **本人UIDの登録**: Googleログイン後、設定画面に表示されるUIDを、Firebase Console → Firestore → `allowlist`コレクション → ドキュメントID=UID、フィールド`enabled`（boolean）=`true`で作成。
 4. **SEC_USER_AGENT**: 実際の運用連絡先（例:「FinanceBase 氏名 連絡先メール」）の指定。
 5. **Blazeプランへの変更**（Cloud Functionsのデプロイに必須）と予算アラート額の承認。

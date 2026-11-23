@@ -24,7 +24,7 @@ test('Firebase Hosting serves root app and only public static assets', () => {
   assert.deepEqual(config.hosting.rewrites, [{ source: '/', destination: '/portfolio_manager.html' }]);
   assert.equal(config.firestore.rules, 'firestore.rules');
 });
-test('Firebase integration is opt-in and cloud data can only enter via reviewed importer', () => {
+test('Firebase integration targets finance-base-edcc7, holds no secrets, and is opt-in and cloud data can only enter via reviewed importer', () => {
   const html = fs.readFileSync(path.join(root, 'portfolio_manager.html'), 'utf8');
   const client = fs.readFileSync(path.join(root, 'app/firebase-cloud.mjs'), 'utf8');
   const cfg = fs.readFileSync(path.join(root, 'app/firebase-config.js'), 'utf8');
@@ -32,7 +32,9 @@ test('Firebase integration is opt-in and cloud data can only enter via reviewed 
   assert.ok(html.includes('id="pm-cloud-login"'));
   assert.ok(html.includes('id="pm-cloud-download"'));
   assert.ok(html.includes('src="app/firebase-cloud.mjs"'));
-  assert.match(cfg, /PMFirebaseWebConfig = null/);
+  assert.match(cfg, /projectId: 'finance-base-edcc7'/);
+  assert.match(cfg, /authDomain: 'finance-base-edcc7\.firebaseapp\.com'/);
+  assert.doesNotMatch(cfg, /private_key|client_secret|BEGIN PRIVATE|service_account/i);
   assert.match(client, /PMData\.validate\(remoteData\.payload\)/);
   assert.match(client, /PMApp\.previewImport\(payload/);
   assert.match(client, /getDocFromServer\(ref\(\)\)/);
