@@ -48,7 +48,7 @@
 - Hosting: サイト`finance-base-edcc7`（https://finance-base-edcc7.web.app）存在。未デプロイ
 - Firestore: ✅ 2026-11-23 ユーザー承認のうえ作成。`(default)`／Native／Standard／**asia-northeast1**。`firestore.rules`をデプロイ済み
   - 実機確認: 未認証の読み取り（users/allowlist/任意パス）と未認証のallowlist書き込みはすべてHTTP 403
-  - 削除保護: **無効**（有効化を提案中）
+  - 削除保護: ✅ 有効（2026-11-23 ユーザー承認）
 - Authentication: Googleプロバイダーの有効化は未確認
 - gcloud: 個人アカウント未ログイン（予算アラート設定時に必要）
 - ローカル確認: SDKが実プロジェクトに接続し「未ログイン」表示、コンソールエラーなし
