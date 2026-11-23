@@ -1,3 +1,10 @@
 node_modules/
 playwright-report/
 test-results/
+dist/
+.firebase/
+.firebaserc
+.env
+.env.*
+!.env.example
+serviceAccount*.json
