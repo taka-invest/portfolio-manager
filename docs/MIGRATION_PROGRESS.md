@@ -19,7 +19,7 @@
 | 5 | セキュリティ・費用 | 🟡 maxInstances=1等は設定済。Blaze・予算アラートは承認待ち |
 | 6 | CI/CD | 🟡 プレビュー/本番ワークフローと承認ゲート作成済。デプロイ用SA（本人操作）待ち |
 | 7 | 総合検証 | ⬜ |
-| 8 | 本番切替 | ⬜ |
+| 8 | 本番切替 | 🟡 Portfolio Managerのみ本番公開（2026-11-23）。Stock Analyzer未移行・旧サイトは維持 |
 
 ## 2026-11-23 セッション1 の実施内容
 
@@ -78,11 +78,21 @@
 - デプロイ用サービスアカウント作成はClaude Codeの安全設定でブロック → 本人が`firebase init hosting:github`で作成する
 - 同期UX修正: クラウド取込承認後の表示、バックアップファイル名を`portfolio-manager-backup-YYYYMMDDHHmm.json`に
 
+## 本番公開（Portfolio Managerのみ）2026-11-23 12:00頃 JST
+
+- ユーザーの明示的承認（「本番公開してよい」）を受けてCLIから`firebase deploy --only hosting`
+- デプロイ元: `feature/firebase-foundation-phase1` @ `9cb5954`（PR #16は未マージ。マージ後は本番ワークフロー経由に移行）
+- 事前テスト: 単体62／ルール12／Playwright 26成功・12スキップ
+- 本番 https://finance-base-edcc7.web.app : アプリ・app/*・research/library.html は200、firestore.rules / firebase.json / package.json / functions / tests / .github / docs / .firebaserc は404。X-Frame-Options DENY・nosniff・HTMLはno-store
+- 画面: SDKが接続し「未ログイン」表示。コンソールエラーは既存の第三者CORSプロキシ（allorigins等、Fear&Greed取得）由来のみ → Phase 2で自前Functionsに置換
+- ロールバック: Console → Hosting → リリース履歴、または`docs/DEPLOYMENT.md`
+- GitHub Pages / Netlify は維持（停止は最終工程で別途承認）
+
 ## ユーザー対応待ち（ブロッカー）
 
 1. ~~CLI再認証~~ ✅ ／ ~~Webアプリ構成値~~ ✅
 2. ~~Firestore作成~~ ✅ ／ ~~Google認証~~ ✅
-2b. **`firebase init hosting:github`の実行**（デプロイ用SAとGitHub Secret。`docs/DEPLOYMENT.md`）
+2b. `firebase init hosting:github`（デプロイ用SA＋GitHub Secret）は**保留**。GitHub認可で会社アカウント(maruyasushonan)が選ばれやすいため、承認URLは最初からtaka-investでログインしたシークレットウィンドウで開くこと。1回目は反映遅れで失敗し、未使用SA `github-action-1261182527@` が残存（鍵なし、後で削除）
 3. ~~本人UIDの登録~~ ✅（画面表示のUIDは l/I の判別が難しいため、`firebase auth:export`で正確な値を確認してから登録した）
 4. **SEC_USER_AGENT**: 実際の運用連絡先（例:「FinanceBase 氏名 連絡先メール」）の指定。
 5. **Blazeプランへの変更**（Cloud Functionsのデプロイに必須）と予算アラート額の承認。
