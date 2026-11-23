@@ -458,6 +458,23 @@
           <button type="button" id="pm-staged-funding-refresh" class="btn btn-primary">最新の株価・為替で再計算</button>
         </div>
       </div>
+      <div class="pm-card" id="pm-fx-fallback" style="margin:12px 0">
+        <h4>USD/JPY取得エラー時の代替手段</h4>
+        <p class="pm-muted pm-small" style="margin:6px 0">
+          自動取得が日次ECBに切り替わった場合のみ使用してください。証券会社で現在のUSD/JPYを確認し、
+          その数値を入力します。手入力レートは10分間のみ有効で、ブラウザーを再読み込みすると失われます。
+        </p>
+        <div class="pm-actions">
+          <label class="pm-small">証券会社で確認したUSD/JPY
+            <input type="number" id="pm-broker-usdjpy" min="50" max="300" step="0.0001" inputmode="decimal"
+              placeholder="例：158.9000" aria-label="証券会社で確認したUSD/JPY"/>
+          </label>
+          <button type="button" id="pm-broker-usdjpy-use" class="btn btn-ghost">確認したレートで再計算</button>
+        </div>
+        <p id="pm-broker-usdjpy-status" class="pm-muted pm-small" role="status">
+          手入力前。発注時は実際の適用為替と買付余力を証券会社画面で必ず確認してください。
+        </p>
+      </div>
       <p id="pm-staged-funding-status" class="pm-muted pm-small"></p>
       <div id="pm-staged-funding-result" aria-live="polite"><p class="pm-muted">計算条件を確認中です。</p></div>
     </div>
