@@ -98,8 +98,25 @@
     return time.minutes >= close - 15 ? 'ready' : 'stale';
   }
 
+  // A user-confirmed broker USD/JPY quote is allowed as a short-lived fallback.
+  // It is *not* represented as an automatically obtained market quote.
+  function manualFx(value, now = Date.now()) {
+    const rate = Number(value);
+    if (typeof value !== 'string' && typeof value !== 'number' ||
+        String(value).trim() === '' || !Number.isFinite(rate) ||
+        rate < 50 || rate > 300 || !Number.isFinite(now) || now <= 0)
+      return { error: 'invalid' };
+    return { rate, at: now, date: utcDate(now), kind: 'manual',
+      source: '証券会社で確認した手入力USD/JPY（参考）' };
+  }
+
   function fxStatus(fx, now = Date.now()) {
     if (fx?.error) return fx.error;
+    if (fx?.kind === 'manual') {
+      if (!(fx.rate >= 50 && fx.rate <= 300) || !Number.isFinite(fx.at) ||
+          fx.at <= 0 || fx.at > now + 60000) return 'missing';
+      return now - fx.at <= 10 * 60000 ? 'ready' : 'stale';
+    }
     if (fx?.kind === 'spot' || fx?.kind === 'hourly') {
       if (!(fx.rate > 0) || !Number.isFinite(fx.at) ||
           fx.at > now + 60000 || fx.at <= 0) return 'missing';
@@ -206,7 +223,7 @@
     return { quotes, spaceX, limited, retryMs };
   }
 
-  const api = { quoteStatus, fxStatus, fetchFx, fetchQuotes, finnhub, usClosed, ecbClosed };
+  const api = { quoteStatus, fxStatus, manualFx, fetchFx, fetchQuotes, finnhub, usClosed, ecbClosed };
   if (typeof module === 'object' && module.exports) module.exports = api;
   else root.PMMarket = api;
 })(globalThis);
