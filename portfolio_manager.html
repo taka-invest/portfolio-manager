@@ -344,6 +344,18 @@
     </form>
     <details class="pm-card" id="data-settings">
       <summary>データ管理・取得設定</summary>
+      <div class="pm-card" id="pm-cloud-settings">
+        <h3>Firebaseクラウド保存（段階移行）</h3>
+        <p class="pm-muted pm-small">Googleログインで別PC間のデータ移行ができます。自動アップロード・自動上書きは行いません。JSONバックアップも引き続き使用できます。</p>
+        <div class="pm-actions pm-spaced">
+          <button type="button" class="btn btn-primary" id="pm-cloud-login">Googleでログイン</button>
+          <button type="button" class="btn btn-ghost" id="pm-cloud-logout" hidden>ログアウト</button>
+          <button type="button" class="btn btn-ghost" id="pm-cloud-upload" disabled>このPC → クラウドに保存</button>
+          <button type="button" class="btn btn-ghost" id="pm-cloud-download" disabled>クラウド → このPC（差分確認）</button>
+        </div>
+        <p class="pm-muted pm-small" id="pm-cloud-user"></p>
+        <p id="pm-cloud-status" class="pm-callout" role="status">接続設定を確認中です。</p>
+      </div>
       <div class="pm-settings-grid">
         <div>
           <h3>ブラウザー保存・JSON</h3>
@@ -984,6 +996,7 @@
 <script src="app/ui.js"></script>
 <script src="app/staged-funding.js"></script>
 <script src="app/navigation.js"></script>
+<script src="app/firebase-config.js"></script>
 <script src="app/research-import.js"></script>
 <script>
 
@@ -2268,5 +2281,6 @@ fetchSentiment();
 setInterval(fetchSentiment, 30 * 60 * 1000);
 updatePerformance();
 </script>
+<script type="module" src="app/firebase-cloud.mjs"></script>
 </body>
 </html>
