@@ -1,6 +1,7 @@
 // Firebase 2nd generation HTTP functions; no Netlify dependency.
 // Never deploy this until official EDGAR data, costs, and API responses are verified.
-import { onRequest, setGlobalOptions } from 'firebase-functions/v2/https';
+import { onRequest } from 'firebase-functions/v2/https';
+import { setGlobalOptions } from 'firebase-functions/v2';
 import { initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { handler as analyzeLegacy } from './legacy/analyze.js';
