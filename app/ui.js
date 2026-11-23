@@ -683,5 +683,5 @@
     }, 60 * 1000);
   }
 
-  root.PMApp = { init, state: () => state, market: () => market, commit, render, renderCompany, result, freshPrice, fxRate, refreshPrices, escape, id, showNotice };
+  root.PMApp = { init, state: () => state, market: () => market, commit, render, renderCompany, result, freshPrice, fxRate, refreshPrices, escape, id, showNotice, previewImport: preview };
 })(globalThis);
