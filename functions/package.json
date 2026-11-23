@@ -1,0 +1,11 @@
+{
+  "name": "portfolio-finance-api",
+  "private": true,
+  "type": "module",
+  "engines": {"node": "22"},
+  "main": "src/index.js",
+  "dependencies": {
+    "firebase-admin": "^14.3.0",
+    "firebase-functions": "^7.4.0"
+  }
+}

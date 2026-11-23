@@ -20,6 +20,12 @@ jobs:
       - run: npm ci
       - name: Unit tests
         run: npm test
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Firestore security rules (emulator, demo project only)
+        run: npm run test:rules
       - name: Install browser
         run: npx playwright install --with-deps chromium
       - name: Browser tests (desktop and mobile)
@@ -33,3 +39,44 @@ jobs:
             playwright-report/
             test-results/
           retention-days: 5
+
+  # Firebase Hosting preview: only after every test above has passed, only for
+  # branches of this repository (never forks), and only to the fixed `preview`
+  # channel. This can never touch the live (production) channel.
+  preview:
+    needs: verify
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: write
+      checks: write
+    concurrency:
+      group: firebase-preview
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - name: Build allowlisted Hosting bundle
+        run: npm run build:firebase
+      - name: Skip when deploy credentials are not configured yet
+        id: creds
+        env:
+          SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_FINANCE_BASE_EDCC7 }}
+        run: |
+          if [ -z "$SA" ]; then echo "configured=false" >> "$GITHUB_OUTPUT"; echo "::warning::FIREBASE_SERVICE_ACCOUNT_FINANCE_BASE_EDCC7 is not set; preview deploy skipped."; else echo "configured=true" >> "$GITHUB_OUTPUT"; fi
+      - name: Deploy to Firebase Hosting preview channel
+        if: steps.creds.outputs.configured == 'true'
+        uses: FirebaseExtended/action-hosting-deploy@v0.11.0
+        with:
+          repoToken: ${{ secrets.GITHUB_TOKEN }}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_FINANCE_BASE_EDCC7 }}
+          projectId: finance-base-edcc7
+          channelId: preview
+          expires: 30d
+          firebaseToolsVersion: 15.37.0

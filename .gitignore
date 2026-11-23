@@ -1,3 +1,12 @@
 node_modules/
 playwright-report/
 test-results/
+dist/
+.firebase/
+.env
+.env.*
+!.env.example
+serviceAccount*.json
+firestore-debug.log
+firebase-debug.log
+ui-debug.log

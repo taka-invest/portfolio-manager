@@ -344,6 +344,22 @@
     </form>
     <details class="pm-card" id="data-settings">
       <summary>データ管理・取得設定</summary>
+      <div class="pm-card" id="pm-cloud-settings">
+        <h3>Firebaseクラウド保存（段階移行）</h3>
+        <p class="pm-muted pm-small">Googleログインで別PC間のデータ移行ができます。自動アップロード・自動上書きは行いません。JSONバックアップも引き続き使用できます。</p>
+        <div class="pm-actions pm-spaced">
+          <button type="button" class="btn btn-primary" id="pm-cloud-login">Googleでログイン</button>
+          <button type="button" class="btn btn-ghost" id="pm-cloud-logout" hidden>ログアウト</button>
+          <button type="button" class="btn btn-ghost" id="pm-cloud-upload" disabled>このPC → クラウドに保存</button>
+          <button type="button" class="btn btn-ghost" id="pm-cloud-download" disabled>クラウド → このPC（差分確認）</button>
+        </div>
+        <p class="pm-muted pm-small" id="pm-cloud-user"></p>
+        <p id="pm-cloud-status" class="pm-callout" role="status">接続設定を確認中です。</p>
+        <div id="pm-cloud-diff" class="pm-callout" hidden>
+          <p class="pm-small"><strong>差分（クラウド → このPC）</strong></p>
+          <pre id="pm-cloud-diff-text" class="pm-small"></pre>
+        </div>
+      </div>
       <div class="pm-settings-grid">
         <div>
           <h3>ブラウザー保存・JSON</h3>
@@ -441,6 +457,23 @@
           <button type="button" id="pm-staged-reset" class="btn btn-ghost" hidden>初期保有の記録をリセット</button>
           <button type="button" id="pm-staged-funding-refresh" class="btn btn-primary">最新の株価・為替で再計算</button>
         </div>
+      </div>
+      <div class="pm-card" id="pm-fx-fallback" style="margin:12px 0">
+        <h4>USD/JPY取得エラー時の代替手段</h4>
+        <p class="pm-muted pm-small" style="margin:6px 0">
+          自動取得が日次ECBに切り替わった場合のみ使用してください。証券会社で現在のUSD/JPYを確認し、
+          その数値を入力します。手入力レートは10分間のみ有効で、ブラウザーを再読み込みすると失われます。
+        </p>
+        <div class="pm-actions">
+          <label class="pm-small">証券会社で確認したUSD/JPY
+            <input type="number" id="pm-broker-usdjpy" min="50" max="300" step="0.0001" inputmode="decimal"
+              placeholder="例：158.9000" aria-label="証券会社で確認したUSD/JPY"/>
+          </label>
+          <button type="button" id="pm-broker-usdjpy-use" class="btn btn-ghost">確認したレートで再計算</button>
+        </div>
+        <p id="pm-broker-usdjpy-status" class="pm-muted pm-small" role="status">
+          手入力前。発注時は実際の適用為替と買付余力を証券会社画面で必ず確認してください。
+        </p>
       </div>
       <p id="pm-staged-funding-status" class="pm-muted pm-small"></p>
       <div id="pm-staged-funding-result" aria-live="polite"><p class="pm-muted">計算条件を確認中です。</p></div>
@@ -984,6 +1017,7 @@
 <script src="app/ui.js"></script>
 <script src="app/staged-funding.js"></script>
 <script src="app/navigation.js"></script>
+<script src="app/firebase-config.js"></script>
 <script src="app/research-import.js"></script>
 <script>
 
@@ -2268,5 +2302,6 @@ fetchSentiment();
 setInterval(fetchSentiment, 30 * 60 * 1000);
 updatePerformance();
 </script>
+<script type="module" src="app/firebase-cloud.mjs"></script>
 </body>
 </html>
