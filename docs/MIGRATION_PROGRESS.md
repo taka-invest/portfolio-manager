@@ -12,7 +12,7 @@
 | Phase | 内容 | 状態 |
 |---|---|---|
 | 0 | 監査 | ✅ 完了（2026-11-23）`docs/MIGRATION_AUDIT.md` |
-| 1 | Firebase初期構築・認証・Firestore・同期 | 🟡 Firestore作成・ルール反映済。Google認証有効化とUID登録待ち |
+| 1 | Firebase初期構築・認証・Firestore・同期 | 🟡 基盤完了。実データでの保存・復元検証待ち |
 | 2 | Functions移行（analyze/screener/chart） | ⬜ 最新版への差し替えと財務ロジック修正が必要 |
 | 3 | 画面統合 | ⬜ |
 | 4 | 既存機能保護（リバランス・ピラミッディング） | 🟡 既存テストで保護中。弾(A/B/C)の同期が未対応 |
@@ -49,7 +49,8 @@
 - Firestore: ✅ 2026-11-23 ユーザー承認のうえ作成。`(default)`／Native／Standard／**asia-northeast1**。`firestore.rules`をデプロイ済み
   - 実機確認: 未認証の読み取り（users/allowlist/任意パス）と未認証のallowlist書き込みはすべてHTTP 403
   - 削除保護: ✅ 有効（2026-11-23 ユーザー承認）
-- Authentication: Googleプロバイダーの有効化は未確認
+- Authentication: ✅ Googleプロバイダー有効（ユーザーがConsoleで設定）
+- 許可UID: ✅ 本人（Googleログイン、2026-11-23）を`allowlist`に登録。登録・無効化は`node scripts/allowlist-uid.mjs <uid> [--disable]`（CLIログイン必須、Auth上のGoogleユーザーであることを検証してから書込）
 - gcloud: 個人アカウント未ログイン（予算アラート設定時に必要）
 - ローカル確認: SDKが実プロジェクトに接続し「未ログイン」表示、コンソールエラーなし
 
@@ -57,7 +58,7 @@
 
 1. ~~CLI再認証~~ ✅ ／ ~~Webアプリ構成値~~ ✅
 2. ~~Firestore作成~~ ✅ ／ **AuthenticationでGoogleプロバイダー有効化**（Consoleで本人操作）
-3. **本人UIDの登録**: Googleログイン後、設定画面に表示されるUIDを、Firebase Console → Firestore → `allowlist`コレクション → ドキュメントID=UID、フィールド`enabled`（boolean）=`true`で作成。
+3. ~~本人UIDの登録~~ ✅（画面表示のUIDは l/I の判別が難しいため、`firebase auth:export`で正確な値を確認してから登録した）
 4. **SEC_USER_AGENT**: 実際の運用連絡先（例:「FinanceBase 氏名 連絡先メール」）の指定。
 5. **Blazeプランへの変更**（Cloud Functionsのデプロイに必須）と予算アラート額の承認。
 

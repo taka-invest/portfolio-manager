@@ -56,3 +56,11 @@ test('Security rules restrict portfolio to authenticated owner and disable delet
   assert.match(rules, /docId == 'portfolio'/);
   assert.doesNotMatch(rules, /allow (read|write): if true/);
 });
+
+test('allowlist registration script is valid and refuses non-Google or malformed UIDs', () => {
+  const src = fs.readFileSync(path.join(root, 'scripts/allowlist-uid.mjs'), 'utf8');
+  execFileSync(process.execPath, ['--check', path.join(root, 'scripts/allowlist-uid.mjs')]);
+  assert.match(src, /providerId === 'google\.com'/);
+  assert.match(src, /\^\[A-Za-z0-9\]\{20,128\}\$/);
+  assert.doesNotMatch(src, /@gmail\.com|@maruyasu/);
+});
