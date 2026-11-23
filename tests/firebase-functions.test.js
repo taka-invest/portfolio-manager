@@ -56,3 +56,15 @@ test('Firebase analysis functions are not exposed as a public Hosting rewrite ye
   assert.match(src,/cors: false/);
   assert.ok(!src.includes('Access-Control-Allow-Origin'));
 });
+
+test('Migrated legacy engine modules and Firebase adapter have valid Node ESM syntax', () => {
+  const { execFileSync } = require('node:child_process');
+  for (const file of [
+    'functions/src/index.js', 'functions/src/sec-gateway.js', 'functions/src/input.js',
+    'functions/src/legacy/analyze.js', 'functions/src/legacy/screener.js',
+    'functions/src/legacy/chart.js'
+  ]) {
+    assert.doesNotThrow(() => execFileSync(process.execPath, ['--check', join(base, file)]),
+      {message:'Invalid JavaScript syntax: ' + file});
+  }
+});
