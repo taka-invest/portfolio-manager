@@ -247,7 +247,13 @@
     root.renderWatchlist();
     try {
       const [fx, batch] = await Promise.all([M.fetchFx(), M.fetchQuotes(marketTickerList(), key, undefined, spaceX)]);
-      market.fx = fx.error ? { ...market.fx, error: fx.error } : fx;
+      // Keep an explicitly verified, unexpired broker quote if the automatic
+      // providers can supply only an untimestamped reference/failed result.
+      // A genuinely fresh spot quote can supersede it.
+      const verifiedBroker = market.fx?.kind === 'manual' && M.fxStatus(market.fx) === 'ready';
+      const automaticFresh = fx.kind === 'spot' && M.fxStatus(fx) === 'ready';
+      if (!verifiedBroker || automaticFresh)
+        market.fx = fx.error ? { ...market.fx, error: fx.error } : fx;
       for (const [ticker, quote] of Object.entries(batch.quotes)) {
         market.quotes[ticker] = quote.error ? { ...market.quotes[ticker], error: quote.error } : quote;
       }
@@ -306,6 +312,10 @@
     $('confirm-holdings').disabled = Boolean(storageError) || dirty.has('cash-form') || state.confirmed ||
       state.positions.some(p => !D.readyLot(p)) ||
       (active.length === 0 && !(R.cashValue(state.cash, 1) > 0));
+    if (market.fx?.kind === 'manual' && M.fxStatus(market.fx) !== 'ready') {
+      $('pm-broker-usdjpy-status').textContent =
+        '手入力レートが10分を超えました。証券会社の最新USD/JPYを再確認して入力してください。';
+    }
     $('market-status').textContent = updating ? '株価・為替を更新中…' :
       `株価 Finnhub ｜ 為替 ${market.fx?.source || '未取得'} ${names[M.fxStatus(market.fx)]} ｜ 更新試行 ${stamp(lastAttempt)} JST` +
       (limitedUntil > Date.now() ? ' ｜ API制限により再試行は ' + stamp(limitedUntil) + ' JST 以降' : '');
@@ -536,6 +546,21 @@
       }
     });
     $('price-update').onclick = () => refreshPrices();
+    $('pm-broker-usdjpy-use').onclick = () => {
+      const input = $('pm-broker-usdjpy');
+      const entered = input.value;
+      const broker = M.manualFx(entered);
+      if (broker.error) {
+        $('pm-broker-usdjpy-status').textContent = 'USD/JPYを50～300の範囲の有効な数値で入力してください。';
+        return;
+      }
+      if (!confirm('証券会社で現在確認したUSD/JPY=' + broker.rate.toFixed(4) +
+          ' を10分間だけ参考レートとして利用します。実際の約定為替や買付余力と異なる場合があります。続行しますか？')) return;
+      market.fx = broker;
+      $('pm-broker-usdjpy-status').textContent =
+        '証券会社で確認した手入力レートを使用中（10分間有効・発注前に要再確認）。';
+      render();
+    };
     $('confirm-holdings').onclick = () => {
       if (confirm('証券口座と照合して、保有株数・口座区分・円とドルの現金を確認しましたか？')) {
         commit({ ...state, confirmed: true });
