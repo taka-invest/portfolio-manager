@@ -12,7 +12,7 @@
 - Firebase Hosting: Portfolio Managerと投資リサーチの静的ファイル配信
 - Firebase Authentication: Googleログイン
 - Cloud Firestore: \`users/{uid}/workspaces/portfolio\` にPortfolio Managerのバージョン3 JSONを保存
-- Cloud Functions v2 (Phase 2): Stock AnalyzerのSEC財務分析・スクリーナー・チャートAPIの移行
+- Cloud Functions v2 (Phase 2): Stock AnalyzerのSEC財務分析・スクリーナー・チャートAPIの移行（**ソース移植と認証ゲートは本PRで用意済み、未デプロイ**）
 - Cloud Logging (Phase 2): APIエラー・実行時間などの運用ログ（**金融資産やAPIキーはログに書かない**）
 
 このPhase 1のFirestore同期は**オプトインの手動バックアップ／手動復元**。初回起動、ブラウザー間の移動、別タブの復元でデータが自動上書きされることはありません。
@@ -69,7 +69,14 @@ Phase 1は**自動リアルタイム同期ではない**。2台で同時編集�
 
 この制限は**各ユーザーを自分のデータに閉じ込めるルール**であり、アプリ全体を一人しか使えないようにするルールとは異なる。本人専用のプロジェクトにするなら、ログインUIDの固定ホワイトリストやApp Checkの追加も検討する。
 
-## Phase 2: Netlify Functionsの移行
+## Phase 2: Netlify Functionsの移行（ソース移植済み、実機検証・公開待ち）
+
+- 受領したNetlify関数を `functions/src/legacy/` にコピーし、SEC取得処理は `functions/src/sec-gateway.js` に共通化した。
+- `functions/src/index.js` にCloud Functions v2の `analyzeApi`, `screenerApi`, `chartApi` を実装。Bearer Firebase ID tokenを検証し、Google認証以外は拒否する。各関数は最大1インスタンス、同時1リクエストとしてSECへの過剰アクセスを抑える。
+- SEC User-Agentは `SEC_USER_AGENT` 環境変数が未設定なら503とする。**本番担当者の実際の連絡先が設定されるまではAPIは稼働させない**。
+- Hostingの `/api/*` リライトは**まだ追加していない**。財務数値の検証、SEC利用規約・デプロイ権限・Firebaseプロジェクト準備後に実施する。
+- functionsパッケージはNode22と `firebase-functions` / `firebase-admin` に依存する。初回デプロイ前に `npm install --prefix functions` を実行し、生成した `functions/package-lock.json` をコードレビューしてコミットする。
+
 
 受領済みソース：\`analyze.js\`、\`screener.js\`、\`chart.js\`。
 
