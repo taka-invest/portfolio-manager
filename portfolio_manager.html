@@ -305,7 +305,9 @@
     <a href="#rebalance" data-pm-view="rebalance" title="リバランス"><span class="pm-nav-symbol" aria-hidden="true">⇄</span><span class="pm-nav-label">リバランス</span></a>
     <p class="pm-nav-caption">ANALYTICS</p>
     <a href="#analysis" data-pm-view="analysis" title="個別企業分析"><span class="pm-nav-symbol" aria-hidden="true">◎</span><span class="pm-nav-label">個別企業分析</span></a>
+    <a href="#screener" data-pm-view="screener" title="銘柄スクリーナー"><span class="pm-nav-symbol" aria-hidden="true">☰</span><span class="pm-nav-label">銘柄スクリーナー</span></a>
     <a href="#market" data-pm-view="market" title="市場分析"><span class="pm-nav-symbol" aria-hidden="true">◉</span><span class="pm-nav-label">市場分析</span></a>
+    <a href="#chart" data-pm-view="chart" title="株価チャート"><span class="pm-nav-symbol" aria-hidden="true">↗</span><span class="pm-nav-label">株価チャート</span></a>
     <a href="#companies" data-pm-view="companies" title="企業評価"><span class="pm-nav-symbol" aria-hidden="true">◈</span><span class="pm-nav-label">企業評価</span></a>
     <a href="#research" data-pm-view="research" title="投資リサーチ"><span class="pm-nav-symbol" aria-hidden="true">⌕</span><span class="pm-nav-label">投資リサーチ</span></a>
     <a href="#history" data-pm-view="history" title="取引・購入計画"><span class="pm-nav-symbol" aria-hidden="true">◷</span><span class="pm-nav-label">取引・購入計画</span></a>
@@ -538,6 +540,34 @@
     </form>
     <p id="pm-analysis-status" class="pm-callout" role="status" hidden></p>
     <div id="pm-analysis-result" aria-live="polite"></div>
+  </section>
+  <section id="screener" aria-labelledby="screener-title" hidden>
+    <div class="pm-heading"><h2 id="screener-title">銘柄スクリーナー</h2></div>
+    <p class="pm-muted">最大10銘柄をまとめて、参入シグナル・フェーズ・マシャ点・撤退シグナルで比較します（SEC提出データ）。保有や計画には反映しません。</p>
+    <form class="pm-card" id="pm-screener-form" autocomplete="off">
+      <label for="pm-screener-tickers">銘柄コード（カンマ・スペース区切り、10件まで）</label>
+      <textarea id="pm-screener-tickers" rows="2" maxlength="200" placeholder="PLTR, NVDA, APP" style="display:block;width:100%;margin:8px 0;text-transform:uppercase"></textarea>
+      <div class="pm-actions">
+        <button type="button" class="btn btn-ghost" id="pm-screener-fill">保有・目標・ウォッチリストの銘柄を入れる</button>
+        <button type="submit" class="btn btn-primary" id="pm-screener-run">スクリーニング</button>
+      </div>
+    </form>
+    <p id="pm-screener-status" class="pm-callout" role="status" hidden></p>
+    <div id="pm-screener-result" aria-live="polite"></div>
+  </section>
+  <section id="chart" aria-labelledby="chart-title" hidden>
+    <div class="pm-heading"><h2 id="chart-title">株価チャート</h2></div>
+    <p class="pm-muted">終値の推移を表示します（分割・配当調整後）。表示専用で、保有評価額や売買計算には使いません。</p>
+    <form class="pm-card pm-actions" id="pm-chart-form" autocomplete="off">
+      <label for="pm-chart-ticker">銘柄コード</label>
+      <input id="pm-chart-ticker" list="pm-chart-tickers" maxlength="10" required placeholder="NVDA" style="text-transform:uppercase;max-width:140px">
+      <datalist id="pm-chart-tickers"></datalist>
+      <label for="pm-chart-range">期間</label>
+      <select id="pm-chart-range"><option value="1y">1年（日足）</option><option value="5y" selected>5年（週足）</option><option value="10y">10年（月足）</option></select>
+      <button type="submit" class="btn btn-primary" id="pm-chart-run">表示</button>
+    </form>
+    <p id="pm-chart-status" class="pm-callout" role="status" hidden></p>
+    <div id="pm-chart-result" aria-live="polite"></div>
   </section>
   <section id="market" aria-labelledby="market-title">
     <div class="pm-heading"><h2 id="market-title">市場センチメント・監視指標</h2></div>
@@ -1031,7 +1061,10 @@
 <script src="app/ui.js"></script>
 <script src="app/staged-funding.js"></script>
 <script src="app/navigation.js"></script>
+<script src="app/api.js"></script>
 <script src="app/analysis.js"></script>
+<script src="app/screener.js"></script>
+<script src="app/price-chart.js"></script>
 <script src="app/firebase-config.js"></script>
 <script src="app/research-import.js"></script>
 <script>

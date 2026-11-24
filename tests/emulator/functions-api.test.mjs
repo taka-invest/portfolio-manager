@@ -76,3 +76,17 @@ test('allowlisted Google user: bad input -> 400; valid ticker -> 200 with source
     assert.equal(res.status, 503);
   }
 });
+
+test('screener and chart: input limits are enforced for allowed users (no upstream call needed)', async () => {
+  const u = await googleUser('owner2-' + Date.now());
+  await allow(u.uid);
+  const post = body => fetch(`${FN}/screenerApi`, { method: 'POST',
+    headers: { Authorization: 'Bearer ' + u.token, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  assert.equal((await post({ tickers: Array.from({ length: 11 }, (_, i) => 'T' + i) })).status, 400);
+  assert.equal((await post({ tickers: ['PLTR', 'pltr'] })).status, 400);
+  assert.equal((await call('screenerApi', u.token)).status, 400);              // GET is not allowed
+  assert.equal((await call('chartApi?ticker=NVDA&range=99y', u.token)).status, 400);
+  const pool = await post({ mode: 'getpool' });
+  assert.ok([200, 503].includes(pool.status));
+  if (pool.status === 200) assert.ok((await pool.json()).pool.includes('PLTR'));
+});

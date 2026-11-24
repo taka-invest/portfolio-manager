@@ -16,15 +16,7 @@
   const when = iso => iso ? new Date(iso).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' }) + ' JST' : '—';
   const TICKER = /^[A-Z0-9][A-Z0-9.-]{0,9}$/;
 
-  /** Tickers known anywhere in the app: holdings, targets, watchlist, company notes. */
-  function knownTickers(state) {
-    const s = state || {};
-    const set = new Set();
-    for (const list of [s.positions, s.targets, s.watchlist, s.company]) {
-      for (const row of list || []) if (row && TICKER.test(row.ticker || '')) set.add(row.ticker);
-    }
-    return [...set].sort();
-  }
+  const knownTickers = state => root.PMApi.knownTickers(state);
 
   function status(message, kind = 'info') {
     const el = $('pm-analysis-status');
@@ -33,41 +25,12 @@
     el.hidden = !message;
   }
 
-  async function token() {
-    const cloud = root.PMCloud;
-    if (!cloud || typeof cloud.idToken !== 'function') return null;
-    try { return await cloud.idToken(); } catch { return null; }
-  }
-
-  /** Classify an API response into a user-facing state. Exported for tests. */
-  function explain(res, body) {
-    const type = res.headers?.get?.('content-type') || '';
-    if (res.status === 404 && !type.includes('json')) return '分析APIはまだ公開されていません（Cloud Functions未デプロイ）。';
-    if (res.status === 404) return 'SECの企業一覧にこの銘柄が見つかりません（米国上場・SEC提出企業のみ対応）。';
-    if (res.status === 401) return 'Googleログインが必要です。「設定・データ管理」からログインしてください。';
-    if (res.status === 403) return 'このアカウントには分析APIの利用許可がありません。';
-    if (res.status === 400) return '銘柄コードの形式を確認してください。';
-    if (res.status === 503) return 'SECへの連絡先設定が未完了のため取得できません（運用設定）。';
-    if (res.status >= 500) return 'SECまたは株価データの取得に失敗しました。時間をおいて再試行してください。';
-    return (body && body.error) || '分析データを取得できませんでした（HTTP ' + res.status + '）。';
-  }
-
-  async function load(ticker, fetcher = root.fetch.bind(root)) {
+  async function load(ticker, fetcher) {
     const hit = cache.get(ticker);
     if (hit && Date.now() - hit.at < CACHE_MS) return { data: hit.data, cached: true };
-    const t = await token();
-    if (!t) return { error: 'Googleログインが必要です。「設定・データ管理」からログインしてください。' };
-    let res;
-    try {
-      res = await fetcher(API + '?ticker=' + encodeURIComponent(ticker), { headers: { Authorization: 'Bearer ' + t } });
-    } catch {
-      return { error: 'ネットワークに接続できません。' };
-    }
-    const type = res.headers.get('content-type') || '';
-    const body = type.includes('json') ? await res.json().catch(() => null) : null;
-    if (!res.ok || !body) return { error: explain(res, body) };
-    cache.set(ticker, { at: Date.now(), data: body });
-    return { data: body, cached: false };
+    const out = await root.PMApi.call(API + '?ticker=' + encodeURIComponent(ticker), { kind: '分析' }, fetcher);
+    if (out.data) cache.set(ticker, { at: Date.now(), data: out.data });
+    return out;
   }
 
   const ASSUMPTION_LABELS = {
@@ -165,6 +128,13 @@
     }
   }
 
+  /** Open the analysis view for a ticker (used by the screener). */
+  function analyzeTicker(ticker) {
+    $('pm-analysis-ticker').value = ticker;
+    if (root.location.hash !== '#analysis') root.location.hash = '#analysis';
+    analyze();
+  }
+
   function refreshTickers() {
     const list = $('pm-analysis-tickers');
     if (!list) return;
@@ -181,7 +151,7 @@
     root.addEventListener('hashchange', () => { if (root.location.hash === '#analysis') refreshTickers(); });
   }
 
-  root.PMAnalysis = { init, knownTickers, explain, load, render, clearCacheForTest: () => cache.clear() };
+  root.PMAnalysis = { init, knownTickers, load, render, analyzeTicker, clearCacheForTest: () => cache.clear() };
   if (typeof module === 'object' && module.exports) module.exports = root.PMAnalysis;
   else if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
   else init();

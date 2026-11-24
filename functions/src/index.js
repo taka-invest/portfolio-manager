@@ -8,10 +8,11 @@ import { getFirestore } from 'firebase-admin/firestore';
 import { logger } from 'firebase-functions';
 import { authorize, AccessError } from './auth.js';
 import { handler as analyzeLegacy } from './legacy/analyze.js';
-import { handler as screenerLegacy } from './legacy/screener.js';
-import { handler as chartLegacy } from './legacy/chart.js';
+import { DYNAMIC_POOL } from './legacy/screener.js';
 import { ticker, tickers } from './input.js';
 import { companyFinancials } from './sec/company.js';
+import { screenTickers } from './sec/screen.js';
+import { priceHistory, RANGES } from './sec/chart.js';
 
 initializeApp();
 setGlobalOptions({
@@ -95,22 +96,37 @@ export const analyzeApi = secure('analyze', {
   },
   run: analyzeLegacy
 });
+// Normalised price history (Yahoo chart, unofficial; source/time returned).
 export const chartApi = secure('chart', {
   prepare(req) {
     const t = makeTicker(req, 'GET');
-    return { httpMethod: 'GET', queryStringParameters: { ticker: t } };
+    const range = req.query.range === undefined ? '5y' : String(req.query.range);
+    if (!Object.hasOwn(RANGES, range)) throw new Error('invalid range');
+    return { ticker: t, range };
   },
-  run: chartLegacy
+  async run(event) {
+    try {
+      return { statusCode: 200, body: await priceHistory(event.ticker, event.range) };
+    } catch (err) {
+      if (err.status === 404) return { statusCode: 404, body: { error: 'No price data' } };
+      throw err;
+    }
+  }
 }, { needsSec: false });
+
+// Batch screener on corrected SEC data (legacy signal rules). POST {tickers:[...<=10]} or {mode:'getpool'}.
 export const screenerApi = secure('screener', {
   prepare(req) {
     if (req.method !== 'POST') throw new Error('invalid method');
     const raw = req.rawBody;
     if (raw && raw.length > 2048) throw new Error('invalid request size');
-    const list = tickers(req.body?.tickers);
-    return { httpMethod: 'POST', body: JSON.stringify({ tickers: list }) };
+    if (req.body?.mode === 'getpool') return { mode: 'pool' };
+    return { tickers: tickers(req.body?.tickers) };
   },
-  run: screenerLegacy
+  async run(event) {
+    if (event.mode === 'pool') return { statusCode: 200, body: { pool: DYNAMIC_POOL } };
+    return { statusCode: 200, body: await screenTickers(event.tickers) };
+  }
 });
 
 // Corrected SEC financial statements (Q4 synthesis, YTD differencing, date-matched YoY/TTM, FCF).
