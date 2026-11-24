@@ -76,6 +76,8 @@
         ${cell('TTM FCF', musd(l.fcfTtm), 'FCFマージン ' + pct(l.fcfMarginTtmPct))}
         ${cell('希薄化後EPS（TTM）', fin(l.epsDilutedTtm) ? '$' + num(l.epsDilutedTtm, 2) : '—', '')}
         ${cell('株価', quote ? '$' + num(quote.price, 2) : '—', quote ? when(quote.asOf) : '株価未取得')}
+        ${cell('PER（TTM）', fin(ev.multiples?.perTtm) ? num(ev.multiples.perTtm, 1) + '倍' : '—', ev.multiples?.perNote || '株価÷TTM希薄化後EPS')}
+        ${cell('PSR（TTM）', fin(ev.multiples?.psrTtm) ? num(ev.multiples.psrTtm, 1) + '倍' : '—', fin(ev.multiples?.marketCapUsd) ? '時価総額 ' + musd(ev.multiples.marketCapUsd) : '')}
       </div>
       ${missing.length ? `<p class="pm-callout" data-warn="true">データ不足（判定に加点・減点していない項目）：${missing.map(esc).join('／')}</p>` : ''}
       <div class="pm-wrap" tabindex="0" aria-label="四半期推移">
