@@ -56,7 +56,7 @@ firebase deploy --only firestore:rules --project finance-base-edcc7
 npm run dev:emulators
 ```
 
-- http://localhost:5000/portfolio_manager.html#analysis を開く（`firebase.emulator.json`の`/api/*`転送が有効）
+- http://localhost:5100/portfolio_manager.html#analysis を開く（`firebase.emulator.json`の`/api/*`転送が有効）
 - demoプロジェクトのAuth/Firestore/Functionsを使うため、本番データには触れない。SECへのアクセスには`functions/.env`の`SEC_USER_AGENT`が必要
 - 本番の`firebase.json`には、Cloud Functionsをデプロイするまで`/api`の転送を追加しない
 

@@ -1,0 +1,2345 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<!-- Portfolio Manager統合：旧Stock Analyzer（Netlify版 masya_app 2026-09-17）を無改変で移植。
+     下の3行の読込と、Netlify前提のルートリンク（/screener.html 等）の相対化だけを追加：旧APIの呼び出しを、ログイン付きの自前API（修正版SECデータ）へ振り替える。 -->
+<script src="../app/firebase-config.js"></script>
+<script src="../app/legacy-shim.js"></script>
+<script type="module" src="../app/firebase-cloud.mjs"></script>
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>伝説の会計学 自動株価推定システム</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700;900&display=swap');
+  body { font-family: 'Noto Sans JP', sans-serif; }
+  .gradient-bg { background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%); }
+  .card { background: rgba(255,255,255,0.05); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.1); }
+  .accounting-box { background: linear-gradient(135deg, rgba(16,185,129,0.15), rgba(5,150,105,0.15)); border: 1px solid rgba(16,185,129,0.4); }
+  .potential-box  { background: linear-gradient(135deg, rgba(245,158,11,0.15), rgba(217,119,6,0.15));  border: 1px solid rgba(245,158,11,0.4); }
+  .leverage-box   { background: linear-gradient(135deg, rgba(239,68,68,0.15), rgba(185,28,28,0.15));   border: 1px solid rgba(239,68,68,0.4); }
+  .trend-row:hover { background: rgba(255,255,255,0.05); }
+  .spin { animation: spin 1s linear infinite; }
+  @keyframes spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
+  .fade-in { animation: fadeIn 0.5s ease-in; }
+  @keyframes fadeIn { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
+  .bar { transition: width 1s ease-in-out; }
+  .new-badge { animation: newPulse 2s ease-in-out 3; }
+  @keyframes newPulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.7;transform:scale(1.05)} }
+  /* ── タブUI ── */
+  .sector-tab { padding:4px 12px; font-size:12px; border-radius:6px; transition:all 0.15s; cursor:pointer; border:1px solid rgba(255,255,255,0.1); background:rgba(255,255,255,0.04); color:rgba(255,255,255,0.5); }
+  .sector-tab:hover { background:rgba(255,255,255,0.08); color:rgba(255,255,255,0.8); }
+  .sector-tab.active { background:rgba(99,102,241,0.2); border-color:rgba(99,102,241,0.5); color:#a5b4fc; }
+  .sc-row:hover td { background:rgba(255,255,255,0.03); cursor:pointer; }
+  .watch-btn.watching { color:#fbbf24 !important; }
+  .tab-btn { padding: 12px 18px; font-size: 13px; font-weight: 700; color: rgba(255,255,255,0.35); border-bottom: 2px solid transparent; white-space: nowrap; transition: all 0.2s; cursor: pointer; background: none; }
+  .tab-btn:hover { color: rgba(255,255,255,0.7); background: rgba(255,255,255,0.04); }
+  .tab-btn.active { color: #fff; border-bottom-color: #6366f1; background: rgba(99,102,241,0.08); }
+  .tab-content { animation: fadeIn 0.25s ease; }
+  /* ── チャートレイアウト ── */
+  .chart-pane { height: 580px; }
+  /* チャートタブ全幅ブレイクアウト */
+  .chart-breakout {
+    margin-left: calc(50% - 50vw + 12px);
+    margin-right: calc(50% - 50vw + 12px);
+    width: calc(100vw - 24px);
+    box-sizing: border-box;
+    padding: 0 12px;
+  }
+  @media (max-width: 768px) { .chart-side-by-side { flex-direction: column; } .chart-pane { height: 320px; } .chart-breakout { margin-left: 0; margin-right: 0; width: 100%; padding: 0; } }
+</style>
+</head>
+<body class="gradient-bg min-h-screen text-white">
+
+<header class="border-b border-white/10 py-6 px-4">
+  <div class="max-w-5xl mx-auto flex items-center gap-3">
+    <div class="text-3xl">📊</div>
+    <div>
+      <h1 class="text-2xl font-black tracking-tight">伝説の会計学</h1>
+      <p class="text-xs text-white/50">マシャ塾メソッド × 自動株価推定システム</p>
+    </div>
+    <div class="ml-auto flex items-center gap-3">
+      <a href="screener.html" class="text-xs bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/30 hover:text-emerald-200 px-3 py-1.5 rounded-lg transition-all font-bold">🔍 スクリーナー</a>
+      <a href="library.html" class="text-xs bg-indigo-500/20 border border-indigo-500/40 text-indigo-300 hover:bg-indigo-500/30 hover:text-indigo-200 px-3 py-1.5 rounded-lg transition-all font-bold">📚 投資ライブラリ</a>
+      <span class="text-xs text-white/30">Powered by SEC EDGAR</span>
+    </div>
+  </div>
+</header>
+
+<section class="max-w-5xl mx-auto px-4 py-10">
+  <div class="text-center mb-8">
+    <p class="text-white/60 text-sm mb-6">米国株ティッカーを入力 → SEC公式データで自動分析（8四半期トレンド対応）</p>
+    <div class="flex gap-3 max-w-md mx-auto">
+      <input id="tickerInput"
+        type="text"
+        placeholder="例: PLTR  APP  NVDA  AMD"
+        class="flex-1 bg-white/10 border border-white/20 rounded-xl px-5 py-4 text-xl font-bold uppercase tracking-widest placeholder-white/20 focus:outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-400/30"
+        maxlength="10" autocomplete="off" spellcheck="false"
+      />
+      <button id="analyzeBtn" onclick="analyze()"
+        class="bg-indigo-500 hover:bg-indigo-400 active:scale-95 transition-all rounded-xl px-6 py-4 font-bold text-lg"
+      >分析</button>
+    </div>
+    <div class="flex gap-2 justify-center mt-4 flex-wrap" id="quickBtns"></div>
+    <!-- キャッシュ情報バー -->
+    <div id="cacheBar" class="hidden mt-3 flex items-center justify-center gap-3 text-xs text-white/40">
+      <span id="cacheInfo"></span>
+      <button onclick="analyze(true)" class="text-indigo-400 hover:text-indigo-300 underline">🔄 最新データを取得</button>
+    </div>
+  </div>
+
+  <div id="loading" class="hidden text-center py-20">
+    <div class="inline-flex items-center gap-3 text-white/60">
+      <svg class="spin w-6 h-6" fill="none" viewBox="0 0 24 24">
+        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+      </svg>
+      <span id="loadingText">SEC EDGARからデータ取得中...</span>
+    </div>
+  </div>
+
+  <div id="errorBox" class="hidden max-w-md mx-auto bg-red-500/20 border border-red-500/40 rounded-xl p-4 text-center text-red-300"></div>
+  <div id="result" class="hidden fade-in space-y-5"></div>
+</section>
+
+<!-- ════ スクリーナー ════ -->
+<section class="max-w-5xl mx-auto px-4 pb-10">
+  <div class="card rounded-2xl p-5 space-y-4">
+    <div class="flex items-center justify-between flex-wrap gap-3">
+      <div>
+        <h2 class="text-base font-bold">📡 スクリーナー</h2>
+        <p class="text-xs text-white/35 mt-0.5">セクター別に一括スキャン — 売上加速・シグナルスコアで絞り込み</p>
+      </div>
+      <div class="flex items-center gap-3 flex-wrap">
+        <span class="text-xs text-white/40">最低スコア:</span>
+        <select id="screenerMinScore" onchange="_screenerMinScore=+this.value"
+          class="bg-white/10 border border-white/20 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-indigo-400">
+          <option value="0">すべて</option>
+          <option value="40">40以上</option>
+          <option value="60" selected>60以上</option>
+          <option value="70">70以上（高確度）</option>
+        </select>
+        <button id="screenerBtn" onclick="runScreener()"
+          class="bg-indigo-500 hover:bg-indigo-400 active:scale-95 transition-all rounded-lg px-4 py-1.5 text-sm font-bold">
+          スキャン実行
+        </button>
+      </div>
+    </div>
+    <div class="flex gap-2 flex-wrap" id="sectorTabs"></div>
+    <div id="screenerProgress" class="hidden">
+      <div class="w-full bg-white/10 rounded-full h-1.5 mb-2"><div id="screenerProgressBar" class="bg-indigo-400 h-1.5 rounded-full transition-all" style="width:0%"></div></div>
+      <p id="screenerStatus" class="text-xs text-white/40"></p>
+    </div>
+    <div id="screenerTable" class="overflow-x-auto"></div>
+  </div>
+</section>
+
+<script>
+// ── クイックボタン ────────────────────────────────
+const TICKERS = ['PLTR','APP','NVDA','AMD','MU','QCOM','MNDY','TTD','RKLB','NVO'];
+const qb = document.getElementById('quickBtns');
+TICKERS.forEach(t => {
+  const btn = document.createElement('button');
+  btn.id = `qbtn_${t}`;
+  btn.textContent = t;
+  btn.className = 'text-xs bg-white/5 hover:bg-white/15 border border-white/10 rounded-lg px-3 py-1.5 transition-all';
+  btn.onclick = () => { document.getElementById('tickerInput').value = t; analyze(); };
+  qb.appendChild(btn);
+});
+
+document.getElementById('tickerInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') analyze();
+});
+
+// ── localStorage キャッシュ ───────────────────────
+const CACHE_KEY = t => `masya_v2_${t}`;
+const CACHE_TTL = 6 * 60 * 60 * 1000; // 6時間
+
+function saveCache(ticker, data) {
+  try {
+    localStorage.setItem(CACHE_KEY(ticker), JSON.stringify({
+      ts: Date.now(),
+      accession: data.filings?.['10-Q']?.accession ?? '',
+      data,
+    }));
+  } catch(e) {}
+}
+
+function loadCache(ticker) {
+  try {
+    const raw = localStorage.getItem(CACHE_KEY(ticker));
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch(e) { return null; }
+}
+
+function showCacheBar(ticker, cached) {
+  const bar = document.getElementById('cacheBar');
+  const info = document.getElementById('cacheInfo');
+  if (!cached) { bar.classList.add('hidden'); return; }
+  const age = Math.round((Date.now() - cached.ts) / 60000);
+  const ageStr = age < 60 ? `${age}分前` : `${Math.round(age/60)}時間前`;
+  info.textContent = `📦 キャッシュ表示（${ageStr}取得）`;
+  bar.classList.remove('hidden');
+}
+
+// ── メイン分析関数 ────────────────────────────────
+async function analyze(forceRefresh = false) {
+  const ticker = document.getElementById('tickerInput').value.trim().toUpperCase();
+  if (!ticker) return;
+
+  document.getElementById('result').classList.add('hidden');
+  document.getElementById('errorBox').classList.add('hidden');
+  document.getElementById('cacheBar').classList.add('hidden');
+
+  // キャッシュチェック（forceRefresh=falseかつTTL内なら使用）
+  if (!forceRefresh) {
+    const cached = loadCache(ticker);
+    if (cached && (Date.now() - cached.ts) < CACHE_TTL) {
+      renderResult(cached.data, false);
+      showCacheBar(ticker, cached);
+      return;
+    }
+  }
+
+  document.getElementById('loading').classList.remove('hidden');
+  document.getElementById('loadingText').textContent = `${ticker} のデータをSEC EDGARから取得中...`;
+
+  try {
+    const res = await fetch(`/.netlify/functions/analyze?ticker=${ticker}`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error ?? 'エラーが発生しました');
+
+    // 新着決算チェック
+    const cached = loadCache(ticker);
+    const isNew = cached && cached.accession && data.filings?.['10-Q']?.accession !== cached.accession;
+
+    saveCache(ticker, data);
+    renderResult(data, isNew);
+    showCacheBar(ticker, loadCache(ticker));
+  } catch (e) {
+    document.getElementById('errorBox').textContent = `⚠️ ${e.message}`;
+    document.getElementById('errorBox').classList.remove('hidden');
+  } finally {
+    document.getElementById('loading').classList.add('hidden');
+  }
+}
+
+// ── フォーマット関数 ──────────────────────────────
+function fmtM(v) {
+  if (v === null || v === undefined) return '<span class="text-white/30">N/A</span>';
+  return `$${Number(v).toLocaleString('en-US', {maximumFractionDigits: 1})}M`;
+}
+function fmtP(v) {
+  if (v === null || v === undefined) return '<span class="text-white/30">N/A</span>';
+  return `$${Number(v).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+}
+function fmtPct(v, colored = true) {
+  if (v === null || v === undefined) return '<span class="text-white/30">—</span>';
+  const c = colored ? (v >= 0 ? 'text-emerald-400' : 'text-red-400') : 'text-white/70';
+  return `<span class="${c}">${v >= 0 ? '+' : ''}${v.toFixed(1)}%</span>`;
+}
+function fmtCostRatio(v) {
+  if (v === null || v === undefined) return '<span class="text-white/30">—</span>';
+  const pct = (v * 100).toFixed(1) + '%';
+  // マシャ5段階評価
+  const c = v < 0.15 ? 'text-yellow-200 font-bold' : v < 0.20 ? 'text-emerald-200' : v < 0.30 ? 'text-emerald-300' : v < 0.50 ? 'text-emerald-400' : v < 0.70 ? 'text-orange-400' : 'text-red-400';
+  const tag = v < 0.15 ? '🏆' : v < 0.20 ? '✨' : v < 0.30 ? '✅' : '';
+  return `<span class="${c}">${tag}${pct}</span>`;
+}
+function fmtOpMargin(v) {
+  if (v === null || v === undefined) return '<span class="text-white/30">—</span>';
+  const c = v > 20 ? 'text-emerald-300' : v > 10 ? 'text-emerald-400' : v > 0 ? 'text-yellow-400' : 'text-red-400';
+  return `<span class="${c}">${v.toFixed(1)}%</span>`;
+}
+function colorGrade(c) {
+  const map = { green:'text-emerald-400', yellow:'text-yellow-400', orange:'text-orange-400', red:'text-red-400', gray:'text-white/40' };
+  return map[c] ?? 'text-white';
+}
+function verdictBg(c) {
+  const map = { green:'bg-emerald-500/20 border-emerald-500/40', blue:'bg-blue-500/20 border-blue-500/40', yellow:'bg-yellow-500/20 border-yellow-500/40', red:'bg-red-500/20 border-red-500/40' };
+  return map[c] ?? 'bg-white/10 border-white/20';
+}
+function toggleFormula(id) {
+  // 他の計算式パネルを閉じてから対象を開閉
+  ['formula-accounting','formula-potential','formula-leverage'].forEach(fid => {
+    const el = document.getElementById(fid);
+    if (!el) return;
+    if (fid === id) {
+      el.classList.toggle('hidden');
+    } else {
+      el.classList.add('hidden');
+    }
+  });
+}
+
+function badge(text, color) {
+  const map = { emerald:'bg-emerald-500/20 text-emerald-400 border-emerald-500/30', yellow:'bg-yellow-500/20 text-yellow-400 border-yellow-500/30', red:'bg-red-500/20 text-red-400 border-red-500/30' };
+  return `<span class="text-xs border rounded-full px-3 py-1 ${map[color]}">${text}</span>`;
+}
+
+// ── SVGスパークライン ─────────────────────────────
+function sparkline(valuesNewestFirst, opts = {}) {
+  // invert: true = 下降トレンドが「良い」（原価率など）
+  const { w = 120, h = 36, color = null, showZero = false, invert = false } = opts;
+  // 時系列順（左=古い、右=新しい）に並べ直す
+  const values = [...valuesNewestFirst].reverse();
+  const valid = values.filter(v => v !== null && v !== undefined && !isNaN(v));
+  if (valid.length < 2) return '<span class="text-white/20 text-xs">データ不足</span>';
+
+  const min = Math.min(...valid);
+  const max = Math.max(...valid);
+  const range = Math.max(max - min, 0.01);
+  const pad = 3;
+
+  const pts = values.map((v, i) => {
+    if (v === null || v === undefined) return null;
+    const x = pad + (i / (values.length - 1)) * (w - pad * 2);
+    const y = pad + ((max - v) / range) * (h - pad * 2);
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  }).filter(Boolean).join(' ');
+
+  // 最新値と最古値でトレンド色を決定
+  const first = valid[0], last = valid[valid.length - 1];
+  const rawTrending = last >= first;
+  // invert=true（原価率など）は下降が良い → 下降=緑
+  const isGood = invert ? !rawTrending : rawTrending;
+  const lineColor = color ?? (isGood ? '#34d399' : '#f87171');
+
+  // ゼロライン（営業利益率用）
+  let zeroLine = '';
+  if (showZero && min < 0 && max > 0) {
+    const zy = pad + (max / range) * (h - pad * 2);
+    zeroLine = `<line x1="${pad}" y1="${zy.toFixed(1)}" x2="${w - pad}" y2="${zy.toFixed(1)}" stroke="rgba(255,255,255,0.2)" stroke-width="0.5" stroke-dasharray="2,2"/>`;
+  }
+
+  return `<svg viewBox="0 0 ${w} ${h}" style="width:${w}px;height:${h}px;display:block">
+    ${zeroLine}
+    <polyline points="${pts}" fill="none" stroke="${lineColor}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="${pts.split(' ').pop().split(',')[0]}" cy="${pts.split(' ').pop().split(',')[1]}" r="2.5" fill="${lineColor}"/>
+  </svg>`;
+}
+
+// ── フォーマット: OpLeverage ────────────────────
+function fmtOpLev(v) {
+  if (v === null || v === undefined) return '<span class="text-white/20">—</span>';
+  if (v >= 3.0)  return `<span class="text-emerald-300 font-bold">${v.toFixed(1)}x</span>`;
+  if (v >= 2.0)  return `<span class="text-emerald-400">${v.toFixed(1)}x</span>`;
+  if (v >= 1.0)  return `<span class="text-white/60">${v.toFixed(1)}x</span>`;
+  if (v >= 0)    return `<span class="text-white/30">${v.toFixed(1)}x</span>`;
+  return `<span class="text-red-400">${v.toFixed(1)}x</span>`;
+}
+
+// ── フォーマット: RoF40 ──────────────────────────
+function fmtRoF40(v) {
+  if (v === null || v === undefined) return '<span class="text-white/20">—</span>';
+  if (v >= 100) return `<span class="text-yellow-200 font-black">${v.toFixed(0)}</span>`;
+  if (v >= 80)  return `<span class="text-emerald-200 font-bold">${v.toFixed(0)}</span>`;
+  if (v >= 60)  return `<span class="text-emerald-300 font-bold">${v.toFixed(0)}</span>`;
+  if (v >= 40)  return `<span class="text-emerald-400">${v.toFixed(0)}</span>`;
+  if (v >= 20)  return `<span class="text-yellow-400">${v.toFixed(0)}</span>`;
+  return `<span class="text-white/30">${v.toFixed(0)}</span>`;
+}
+
+// ── YoY加速矢印 ─────────────────────────────────
+function yoyArrow(accel) {
+  if (accel === null || accel === undefined) return '';
+  if (accel >= 15)  return '<span class="text-emerald-300 ml-0.5">↑↑</span>';
+  if (accel >= 5)   return '<span class="text-emerald-400 ml-0.5">↑</span>';
+  if (accel <= -15) return '<span class="text-red-400 ml-0.5">↓↓</span>';
+  if (accel <= -5)  return '<span class="text-orange-400 ml-0.5">↓</span>';
+  return '<span class="text-white/20 ml-0.5">→</span>';
+}
+
+// ── シグナル確度スコア表示 ───────────────────────
+function fmtSignalScore(score) {
+  if (!score || score < 25) return '';
+  if (score >= 75) return `<span class="text-xs font-black text-red-300 bg-red-500/20 border border-red-500/40 rounded-full px-2 py-0.5">🚨 ${score}%</span>`;
+  if (score >= 50) return `<span class="text-xs font-bold text-orange-300 bg-orange-500/15 border border-orange-500/30 rounded-full px-2 py-0.5">⚡ ${score}%</span>`;
+  return `<span class="text-xs text-white/30 bg-white/5 border border-white/10 rounded-full px-2 py-0.5">📌 ${score}%</span>`;
+}
+
+// ── 参入シグナルバッジ（確度スコア統合版）────────
+function signalBadge(q) {
+  if (!q.signals) return '';
+  const s     = q.signals;
+  const score = q.signalScore ?? 0;
+
+  // 確度25%未満は表示しない（ノイズ抑制）
+  if (score < 25) return '';
+
+  const badges = [];
+  if (s.redToBlack)     badges.push('<span class="bg-purple-500/30 text-purple-300 border border-purple-500/40 text-xs rounded px-1.5 py-0.5">🔄黒字化</span>');
+  if (s.opMInflection)  badges.push('<span class="bg-orange-500/30 text-orange-300 border border-orange-500/40 text-xs rounded px-1.5 py-0.5">⚡OpM+</span>');
+  if (s.rof40Cross40)   badges.push('<span class="bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 text-xs rounded px-1.5 py-0.5">RoF≥40</span>');
+  if (s.rof40Cross60)   badges.push('<span class="bg-emerald-400/30 text-emerald-200 border border-emerald-400/40 text-xs rounded px-1.5 py-0.5">RoF≥60</span>');
+  if (s.rof40Cross80)   badges.push('<span class="bg-yellow-400/30 text-yellow-200 border border-yellow-400/40 text-xs rounded px-1.5 py-0.5">RoF≥80</span>');
+  if (s.opLevHigh)      badges.push('<span class="bg-indigo-500/30 text-indigo-300 border border-indigo-500/40 text-xs rounded px-1.5 py-0.5">高レバ</span>');
+  if (q.grMarginSignal) badges.push('<span class="bg-teal-500/30 text-teal-300 border border-teal-500/40 text-xs rounded px-1.5 py-0.5">粗利↑</span>');
+
+  const scoreHtml = fmtSignalScore(score);
+  return `<div class="flex gap-1 flex-wrap mt-1 items-center">${scoreHtml}${badges.join('')}</div>`;
+}
+
+// ── 参入シグナルの行背景色（signalScore基準）───────
+function rowBg(q, isLatest) {
+  if (isLatest) return 'bg-indigo-500/5';
+  const score = q.signalScore ?? 0;
+  if (score >= 75) return 'bg-red-500/8';
+  if (score >= 50) return 'bg-orange-500/5';
+  if (score >= 25) return 'bg-white/2';
+  return '';
+}
+
+// ── トレンドセクション描画 ────────────────────────
+function renderTrendSection(trend) {
+  if (!trend || trend.length < 2) {
+    return `<div class="card rounded-2xl p-5 text-center text-white/30 text-sm">四半期データが不足しています</div>`;
+  }
+
+  const dispTrend = trend.slice(0, 12); // 最大12四半期表示
+  const revData  = trend.map(q => q.revM);
+  const costData = trend.map(q => q.costRatio ? q.costRatio * 100 : null);
+  const opMgData = trend.map(q => q.opMargin);
+  const rof40Data = trend.map(q => q.rof40);
+
+  // 転換点の強調表示ラベル
+  const inflectionCount = dispTrend.filter(q => q.inflectionLevel === 'inflection').length;
+
+  const rows = dispTrend.map((q, i) => {
+    const isLatest = i === 0;
+    const score = q.signalScore ?? 0;
+    const qLabel = isLatest ? `🔵 ${q.label}` : score >= 75 ? `🚨 ${q.label}` : score >= 50 ? `⚡ ${q.label}` : q.label;
+
+    return `
+    <tr class="trend-row border-b border-white/5 ${rowBg(q, isLatest)}">
+      <td class="px-2 py-2 text-xs whitespace-nowrap min-w-[110px]">
+        <div class="font-bold ${isLatest ? 'text-indigo-300' : score >= 75 ? 'text-red-300' : score >= 50 ? 'text-orange-300' : 'text-white/70'}">${qLabel}</div>
+        ${signalBadge(q)}
+      </td>
+      <td class="px-2 py-2 text-xs text-right text-white/80 whitespace-nowrap">${q.revM >= 1000 ? '$'+(q.revM/1000).toFixed(1)+'B' : '$'+q.revM.toFixed(0)+'M'}</td>
+      <td class="px-2 py-2 text-xs text-right whitespace-nowrap">${fmtPct(q.revYoY)}${yoyArrow(q.yoyAccel)}</td>
+      <td class="px-2 py-2 text-xs text-right">${fmtPct(q.revQoQ)}</td>
+      <td class="px-2 py-2 text-xs text-right">${fmtCostRatio(q.costRatio)}</td>
+      <td class="px-2 py-2 text-xs text-right whitespace-nowrap">${fmtOpMargin(q.opMargin)}${q.opMDelta != null ? `<span class="text-white/25 text-xs ml-1">(${q.opMDelta > 0 ? '+' : ''}${q.opMDelta?.toFixed(1)})</span>` : ''}</td>
+      <td class="px-2 py-2 text-xs text-right whitespace-nowrap">${(() => { const prev4opM = trend[i + 4]?.opMargin ?? null; const yoy = (q.opMargin != null && prev4opM != null) ? q.opMargin - prev4opM : null; if (yoy == null) return '<span class="text-white/20">—</span>'; const color = yoy > 3 ? 'text-emerald-400' : yoy < -3 ? 'text-red-400' : 'text-white/40'; return `<span class="${color} font-bold">${yoy > 0 ? '+' : ''}${yoy.toFixed(1)}pp</span>`; })()}</td>
+      <td class="px-2 py-2 text-xs text-right">${fmtOpLev(q.opLeverage)}</td>
+      <td class="px-2 py-2 text-xs text-right">${fmtRoF40(q.rof40)}</td>
+      <td class="px-2 py-2 text-xs text-right whitespace-nowrap">
+        ${q.opM != null ? `<span class="${q.opM >= 0 ? 'text-emerald-400' : 'text-red-400'}">${Math.abs(q.opM) >= 1000 ? '$'+(q.opM/1000).toFixed(1)+'B' : '$'+q.opM.toFixed(0)+'M'}</span>` : '<span class="text-white/30">—</span>'}
+        ${(() => { const p = trend[i+4]?.opM ?? null; if (q.opM == null || p == null || p === 0) return ''; if (p < 0 && q.opM > 0) return '<span class="text-yellow-300 text-[10px] ml-1">黒転</span>'; const yoy = (q.opM - p) / Math.abs(p) * 100; const c = yoy > 20 ? 'text-emerald-300' : yoy > 0 ? 'text-emerald-500/70' : 'text-red-400'; return `<span class="${c} text-[10px] ml-1">${yoy > 0 ? '+' : ''}${yoy.toFixed(0)}%</span>`; })()}
+      </td>
+      <td class="px-2 py-2 text-xs text-right whitespace-nowrap">
+        ${q.epsQ != null
+          ? `<span class="${q.epsQ >= 0 ? 'text-emerald-400' : 'text-red-400'} font-mono">${q.epsQ >= 0 ? '+' : ''}${q.epsQ.toFixed(2)}</span>${q.epsYoY != null ? `<span class="text-white/25 ml-1">(${q.epsYoY >= 0 ? '+' : ''}${q.epsYoY.toFixed(2)})</span>` : ''}`
+          : '<span class="text-white/20">—</span>'}
+      </td>
+      <td class="px-2 py-2 text-xs text-right whitespace-nowrap">
+        ${score >= 70
+          ? `<span class="inline-flex items-center justify-center w-9 h-5 rounded text-xs font-bold bg-red-500/20 text-red-300">${score}</span>`
+          : score >= 60
+          ? `<span class="inline-flex items-center justify-center w-9 h-5 rounded text-xs font-bold bg-orange-500/15 text-orange-300">${score}</span>`
+          : score >= 40
+          ? `<span class="inline-flex items-center justify-center w-9 h-5 rounded text-xs font-mono bg-white/5 text-white/40">${score}</span>`
+          : `<span class="text-white/20 text-xs">${score > 0 ? score : '—'}</span>`}
+      </td>
+    </tr>`;
+  }).join('');
+
+  return `
+<div class="card rounded-2xl p-5">
+  <div class="flex items-start justify-between mb-4 flex-wrap gap-3">
+    <div>
+      <h2 class="text-base font-bold flex items-center gap-2">
+        📈 四半期トレンド分析（過去${dispTrend.length}四半期）
+      </h2>
+      <p class="text-xs text-white/30 mt-0.5">🚨 赤行 = 参入シグナル検知四半期（過去データで裏付け）</p>
+    </div>
+    <!-- スパークラインサマリー -->
+    <div class="flex gap-4 items-end flex-wrap">
+      <div class="text-center">
+        <div class="text-white/30 text-xs mb-1">売上推移</div>
+        ${sparkline(revData, { w: 90, h: 30 })}
+      </div>
+      <div class="text-center">
+        <div class="text-white/30 text-xs mb-1">原価率 ↓良</div>
+        ${sparkline(costData, { w: 90, h: 30, invert: true })}
+      </div>
+      <div class="text-center">
+        <div class="text-white/30 text-xs mb-1">営業利益率</div>
+        ${sparkline(opMgData, { w: 90, h: 30, showZero: true })}
+      </div>
+      <div class="text-center">
+        <div class="text-white/30 text-xs mb-1">RoF40</div>
+        ${sparkline(rof40Data, { w: 90, h: 30 })}
+      </div>
+    </div>
+  </div>
+
+  <!-- 凡例 -->
+  <div class="flex gap-3 flex-wrap mb-3 text-xs text-white/40">
+    <span>OpLev = 営業レバレッジ（収益拡大効率）</span>
+    <span>RoF40 = YoY% + 営業利益率% （≥40:✅ ≥60:⭐ ≥80:🌟 ≥100:💎）</span>
+    <span>↑↓ = YoY加速/減速</span>
+    <span>Score: <span class="text-red-300">70+</span>=高確度 / <span class="text-orange-300">60+</span>=有望 / 〜59=参考値</span>
+  </div>
+
+  <div class="overflow-x-auto">
+    <table class="w-full text-sm">
+      <thead>
+        <tr class="border-b border-white/10">
+          <th class="px-2 py-1.5 text-left text-xs text-white/40 font-normal min-w-[120px]">四半期 / シグナル</th>
+          <th class="px-2 py-1.5 text-right text-xs text-white/40 font-normal">売上</th>
+          <th class="px-2 py-1.5 text-right text-xs text-white/40 font-normal">YoY(加速)</th>
+          <th class="px-2 py-1.5 text-right text-xs text-white/40 font-normal">QoQ</th>
+          <th class="px-2 py-1.5 text-right text-xs text-white/40 font-normal">原価率</th>
+          <th class="px-2 py-1.5 text-right text-xs text-white/40 font-normal" title="QoQ: 前四半期比変化(pp)">OpM(Δ QoQ)</th>
+          <th class="px-2 py-1.5 text-right text-xs text-white/40 font-normal" title="YoY: 前年同期比変化(pp)">YoY変化</th>
+          <th class="px-2 py-1.5 text-right text-xs text-white/40 font-normal">OpLev</th>
+          <th class="px-2 py-1.5 text-right text-xs text-white/40 font-normal">RoF40</th>
+          <th class="px-2 py-1.5 text-right text-xs text-white/40 font-normal">営業利益</th>
+          <th class="px-2 py-1.5 text-right text-xs text-white/40 font-normal">EPS(Δ)</th>
+          <th class="px-2 py-1.5 text-right text-xs text-white/40 font-normal" title="シグナルスコア: 売上加速・営業レバレッジ・RoF40などを総合評価。70以上が高確度入場基準">Score</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>
+  </div>
+
+  ${trendInsight(trend)}
+</div>`;
+}
+
+// ── トレンド自動解釈（強化版） ────────────────────
+function trendInsight(trend) {
+  if (trend.length < 3) return '';
+  const latest = trend[0];
+  const msgs = [];
+
+  // 参入シグナル検知済み四半期を抽出
+  const inflectionQs = trend.filter(q => q.inflectionLevel === 'inflection');
+  if (inflectionQs.length > 0) {
+    const q = inflectionQs[inflectionQs.length - 1]; // 最古のシグナル（最初の転換点）
+    const badges = [];
+    if (q.signals?.redToBlack)    badges.push('赤字→黒字転換');
+    if (q.signals?.opMInflection) badges.push(`OpM急拡大(+${q.opMDelta?.toFixed(1)}pp)`);
+    if (q.signals?.rof40Cross40)  badges.push('RoF40初突破');
+    msgs.push({ icon: '🚨', text: `【参入シグナル検知】${q.label} — ${badges.join(' / ')} （この四半期以降が理論上の参入ゾーン）`, c: 'text-orange-300 font-bold' });
+  }
+
+  // 直近YoY加速/減速
+  if (latest.revYoY !== null && trend[1]?.revYoY !== null) {
+    const accel = latest.revYoY - trend[1].revYoY;
+    if (accel > 5)       msgs.push({ icon: '🚀', text: `売上成長が加速中（YoY: ${latest.revYoY.toFixed(1)}%、前期比+${accel.toFixed(1)}pts）`, c: 'text-emerald-400' });
+    else if (accel < -5) msgs.push({ icon: '⚠️', text: `売上成長が減速中（YoY: ${latest.revYoY.toFixed(1)}%、前期比${accel.toFixed(1)}pts）`, c: 'text-yellow-400' });
+  }
+
+  // 原価率改善
+  const costTrend = trend.slice(0, 5).filter(q => q.costRatio != null);
+  if (costTrend.length >= 3) {
+    const oldest = costTrend[costTrend.length - 1].costRatio;
+    const newest = costTrend[0].costRatio;
+    const delta = (newest - oldest) * 100;
+    if (delta < -3)     msgs.push({ icon: '✅', text: `原価率が構造的に改善（${(oldest*100).toFixed(1)}% → ${(newest*100).toFixed(1)}%）`, c: 'text-emerald-400' });
+    else if (delta > 3) msgs.push({ icon: '🔶', text: `原価率が悪化傾向（${(oldest*100).toFixed(1)}% → ${(newest*100).toFixed(1)}%）`, c: 'text-orange-400' });
+  }
+
+  // 最新RoF40水準
+  if (latest.rof40 !== null) {
+    if      (latest.rof40 >= 100) msgs.push({ icon: '💎', text: `RoF40スコア ${latest.rof40.toFixed(0)} — 世界最高水準の成長×収益性`, c: 'text-yellow-200 font-bold' });
+    else if (latest.rof40 >= 80)  msgs.push({ icon: '🌟', text: `RoF40スコア ${latest.rof40.toFixed(0)} — 超高クオリティ成長株`, c: 'text-emerald-200 font-bold' });
+    else if (latest.rof40 >= 60)  msgs.push({ icon: '⭐', text: `RoF40スコア ${latest.rof40.toFixed(0)} — 高クオリティ成長株`, c: 'text-emerald-300' });
+    else if (latest.rof40 >= 40)  msgs.push({ icon: '✅', text: `RoF40スコア ${latest.rof40.toFixed(0)} — Rule of 40クリア`, c: 'text-emerald-400' });
+    else if (latest.rof40 !== null) msgs.push({ icon: '📊', text: `RoF40スコア ${latest.rof40.toFixed(0)} — Rule of 40未達（<40）`, c: 'text-white/40' });
+  }
+
+  // 最新OpLeverage
+  if (latest.opLeverage !== null && latest.opLeverage >= 2.0) {
+    msgs.push({ icon: '⚡', text: `営業レバレッジ ${latest.opLeverage.toFixed(1)}x — 売上成長が営業利益に${latest.opLeverage.toFixed(1)}倍の効果`, c: latest.opLeverage >= 3 ? 'text-emerald-300' : 'text-emerald-400' });
+  }
+
+  // 営業利益率水準
+  if (latest.opMargin !== null) {
+    if      (latest.opMargin > 40) msgs.push({ icon: '🏆', text: `営業利益率 ${latest.opMargin.toFixed(1)}% — 世界トップクラスの収益体質`, c: 'text-emerald-300' });
+    else if (latest.opMargin > 20) msgs.push({ icon: '⭐', text: `営業利益率 ${latest.opMargin.toFixed(1)}% — 超高収益体質`, c: 'text-emerald-400' });
+    else if (latest.opMargin < 0)  msgs.push({ icon: '🚨', text: `営業損失が継続中（${latest.opMargin.toFixed(1)}%）`, c: 'text-red-400' });
+  }
+
+  if (msgs.length === 0) return '';
+  return `<div class="mt-4 pt-3 border-t border-white/10 space-y-2">
+    ${msgs.map(m => `<p class="text-xs ${m.c}">${m.icon} ${m.text}</p>`).join('')}
+  </div>`;
+}
+
+// ── AI総括ナラティブ生成 ──────────────────────────
+function generateNarrative(ticker, d) {
+  const trend = d.trend ?? [];
+  const calc  = d.calc  ?? {};
+  if (trend.length < 3) return '';
+
+  const latest  = trend[0];
+  const prev    = trend[1]  ?? null;
+  const prev4   = trend[4]  ?? null;
+  const recent4 = trend.slice(0, 4);
+
+  // ── トレンド計算 ──────────────────────────────
+  const rof40Now   = latest.rof40;
+  const rof40_4q   = prev4?.rof40 ?? null;
+  const rof40Delta = (rof40Now !== null && rof40_4q !== null) ? rof40Now - rof40_4q : null;
+
+  const opMNow   = latest.opMargin;
+  const opM_4q   = prev4?.opMargin ?? null;
+  const opMTrend = (opMNow !== null && opM_4q !== null) ? opMNow - opM_4q : null;
+
+  const yoyNow  = latest.revYoY;
+  const yoyPrev = prev?.revYoY ?? null;
+  const yoyAccel = (yoyNow !== null && yoyPrev !== null) ? yoyNow - yoyPrev : null;
+
+  // ── シグナル統計 ──────────────────────────────
+  const latestScore     = latest.signalScore ?? 0;
+  const recentHighQ     = recent4.find(q => (q.signalScore ?? 0) >= 75) ?? null;
+  const allHighQs       = trend.filter(q => (q.signalScore ?? 0) >= 75);
+  const bestEverScore   = trend.reduce((m, q) => Math.max(m, q.signalScore ?? 0), 0);
+  const confidenceDisp  = recentHighQ ? (recentHighQ.signalScore) : (latestScore > 0 ? latestScore : null);
+
+  // ── 総合判定ロジック ──────────────────────────
+  const isRofStrong     = rof40Now !== null && rof40Now >= 60;
+  const isRofImproving  = rof40Delta !== null && rof40Delta > 0;
+  const isRofDeclining  = rof40Delta !== null && rof40Delta < -20;
+  const isOpMDeclining  = opMTrend !== null && opMTrend < -5;
+  const isOpMLoss       = opMNow !== null && opMNow < 0;
+  const hasRecentHigh   = recentHighQ !== null;
+  const yoyAccelerating = yoyAccel !== null && yoyAccel > 5;
+
+  let verdict, verdictLabel, verdictColorClass, verdictBorderClass;
+
+  if (isOpMLoss || (isRofDeclining && isOpMDeclining)) {
+    verdict = 'SELL_WATCH';
+    verdictLabel = '⚠️ 要注意 — 売り・利確を検討';
+    verdictColorClass  = 'text-orange-300';
+    verdictBorderClass = 'border-orange-500/30 bg-orange-500/5';
+  } else if (hasRecentHigh && isRofStrong && (isRofImproving || yoyAccelerating)) {
+    verdict = 'BUY';
+    verdictLabel = '🟢 強気 — 買い・買い増し検討';
+    verdictColorClass  = 'text-emerald-300';
+    verdictBorderClass = 'border-emerald-500/30 bg-emerald-500/5';
+  } else if (isRofStrong && !isRofDeclining) {
+    verdict = 'HOLD';
+    verdictLabel = '🔵 ホールド推奨 — 保有継続';
+    verdictColorClass  = 'text-indigo-300';
+    verdictBorderClass = 'border-indigo-500/30 bg-indigo-500/5';
+  } else if (rof40Now !== null && rof40Now >= 40) {
+    verdict = 'HOLD_WATCH';
+    verdictLabel = '🟡 ホールド — 次Q決算で確認';
+    verdictColorClass  = 'text-yellow-300';
+    verdictBorderClass = 'border-yellow-500/30 bg-yellow-500/5';
+  } else {
+    verdict = 'WATCH';
+    verdictLabel = '⚪ ウォッチ継続 — 参入条件未達';
+    verdictColorClass  = 'text-white/50';
+    verdictBorderClass = 'border-white/10 bg-white/3';
+  }
+
+  // ── 根拠テキスト生成 ──────────────────────────
+  const grounds = [];
+
+  if (rof40Now !== null) {
+    const dirStr = rof40Delta !== null
+      ? (rof40Delta > 10 ? `、4Q前比<strong class="text-emerald-300">+${rof40Delta.toFixed(0)}pt上昇</strong>` : rof40Delta < -10 ? `、4Q前比<strong class="text-orange-400">${rof40Delta.toFixed(0)}pt低下</strong>` : '') : '';
+    if (rof40Now >= 100)
+      grounds.push(`Rule of 40スコアは<strong class="text-yellow-200">${rof40Now.toFixed(0)}</strong>${dirStr}。NVDA・PLTRクラスの成長×収益性を同時達成しており、現成長が続く限り株価上昇の余地は構造的に存在する。`);
+    else if (rof40Now >= 60)
+      grounds.push(`Rule of 40スコアは<strong class="text-emerald-300">${rof40Now.toFixed(0)}</strong>${dirStr}。高クオリティ成長株の水準を維持。成長と収益性のバランスが良好。`);
+    else if (rof40Now >= 40)
+      grounds.push(`Rule of 40スコアは<strong class="text-emerald-400">${rof40Now.toFixed(0)}</strong>${dirStr}。SaaS業界標準の40をクリア。RoF60超を目指せるか次Qに注目。`);
+    else
+      grounds.push(`Rule of 40スコアは<strong class="text-yellow-400">${rof40Now.toFixed(0)}</strong>${dirStr}。基準値40を下回っており、成長加速 or 収益改善の確認が参入条件となる。`);
+  }
+
+  if (yoyNow !== null) {
+    if (yoyAccel !== null && yoyAccel > 10)
+      grounds.push(`売上成長率<strong class="text-emerald-300">${yoyNow.toFixed(1)}%</strong>（前Q比<strong>+${yoyAccel.toFixed(1)}pp加速</strong>）。加速局面は株価モメンタムが最も乗りやすいタイミング。決算発表翌日の参入が最も効果的。`);
+    else if (yoyAccel !== null && yoyAccel < -10)
+      grounds.push(`売上成長率<strong class="text-yellow-300">${yoyNow.toFixed(1)}%</strong>（前Q比<strong class="text-orange-400">${yoyAccel.toFixed(1)}pp減速</strong>）。2Q連続で確認されれば成長モメンタムが失われつつある可能性がある。`);
+  }
+
+  if (opMNow !== null) {
+    if (opMTrend !== null && opMTrend > 5)
+      grounds.push(`営業利益率<strong class="text-emerald-300">${opMNow.toFixed(1)}%</strong>（前年同期比+${opMTrend.toFixed(1)}pp改善）。固定費の希薄化が加速しており、スケール効果が本格化している。`);
+    else if (opMNow > 35)
+      grounds.push(`営業利益率<strong class="text-emerald-300">${opMNow.toFixed(1)}%</strong>は業界トップクラス。価格支配力と高い収益体質が確立されている。`);
+    else if (opMNow < 0)
+      grounds.push(`営業利益率<strong class="text-red-400">${opMNow.toFixed(1)}%</strong>は依然赤字。次の転換点（黒字化）が最初の参入シグナルとなる。`);
+  }
+
+  if (latest.opLeverage !== null && latest.opLeverage >= 2.5)
+    grounds.push(`営業レバレッジ<strong class="text-emerald-300">${latest.opLeverage.toFixed(1)}x</strong> — 売上1%増に対し営業利益が${latest.opLeverage.toFixed(1)}%増加。スケールビジネスが確実に軌道に乗っている。`);
+
+  // マシャ基準コメント追加
+  const mg = calc.masyaCostGrade;
+  const cr = latest.costRatio;
+  if (mg && cr !== null) {
+    if (mg.level >= 5)
+      grounds.push(`原価率<strong class="text-yellow-300">${(cr*100).toFixed(1)}%</strong>はマシャ塾の「<strong>最強・化け物級</strong>」水準（＜15%）。在庫を持たないソフトウェア的ビジネスモデルで、利益の大半が本業から生まれている。`);
+    else if (mg.level >= 4)
+      grounds.push(`原価率<strong class="text-emerald-300">${(cr*100).toFixed(1)}%</strong>はマシャ塾「優秀」水準（＜20%）。AIテック・SaaS企業として極めて高い利益体質。`);
+    else if (mg.level >= 3)
+      grounds.push(`原価率<strong class="text-emerald-400">${(cr*100).toFixed(1)}%</strong>はマシャ塾「良」水準（＜30%）。競合優位性と高い価格支配力を示している。`);
+    else if (mg.level >= 2)
+      grounds.push(`原価率<strong class="text-yellow-400">${(cr*100).toFixed(1)}%</strong>はバフェット基準（＜50%）クリア。キャッシュリッチ条件の一つを満たす。`);
+    else if (cr > 0.70)
+      grounds.push(`原価率<strong class="text-orange-400">${(cr*100).toFixed(1)}%</strong>は高水準。マシャ塾基準では「要注意」ゾーン。コスト削減と粗利改善が鍵。`);
+  }
+  if (calc.isCashRich)
+    grounds.push(`<strong class="text-emerald-200">💰 キャッシュリッチ候補</strong> — 原価率＜50%かつ営業利益成長の2条件を同時達成。マシャ塾が最も重視する「本業で稼げるビジネス」の証明。`);
+  else if (calc.cashRichCond1 && !calc.cashRichCond2)
+    grounds.push(`キャッシュリッチ条件1（原価率＜50%）はクリア。条件2の「営業利益成長」達成が次のカタリスト。`);
+
+  if (allHighQs.length > 0) {
+    const firstHigh = allHighQs[allHighQs.length - 1]; // 最古の高スコアQ
+    grounds.push(`高確度シグナル（確度≥75%）の最初の発生は<strong class="text-white/80">${firstHigh.label}</strong>（確度${firstHigh.signalScore}%）。この時点での参入検討が理論上のベストタイミングだった。`);
+  }
+
+  // ── リスク要因 ────────────────────────────────
+  const risks = [];
+  if (isRofDeclining)  risks.push(`RoF40が4Q前比${rof40Delta?.toFixed(0)}ptと低下傾向 — 成長または収益性のどちらかが鈍化している`);
+  if (isOpMDeclining)  risks.push(`営業利益率が前年同期比${opMTrend?.toFixed(1)}pp悪化 — コスト増加が収益を圧迫している可能性`);
+  if (yoyAccel !== null && yoyAccel < -15) risks.push(`売上成長が${yoyAccel.toFixed(1)}ppと急減速 — 2Q連続確認なら撤退を具体的に検討`);
+  if (latest.costRatio !== null && latest.costRatio > 0.70) risks.push(`原価率${(latest.costRatio*100).toFixed(1)}%は高水準 — 価格支配力の弱さに注意`);
+  if (risks.length === 0 && rof40Now !== null && rof40Now < 40) risks.push('RoF40が40未達 — 参入は成長加速 or 収益改善の確認後に');
+  if (risks.length === 0) risks.push('現時点で大きなリスクシグナルは検出されていない（定量データ上）');
+
+  // ── 次Q注目ポイント ───────────────────────────
+  let watchPoint = '';
+  if (verdict === 'BUY') {
+    const holdTarget = rof40Now !== null ? rof40Now.toFixed(0) : '—';
+    watchPoint = `次QでもRoF40が<strong>${holdTarget}以上</strong>を維持し、OpMが横ばい以上なら保有継続のシグナル。RoF40が20pt以上低下した場合は利確ラインを検討。`;
+  } else if (verdict === 'HOLD') {
+    const upTarget = rof40Now !== null ? (rof40Now + 10).toFixed(0) : '—';
+    watchPoint = `次QでRoF40が<strong>${upTarget}超</strong>に改善されれば買い増し検討のトリガー。OpM拡大 + YoY加速の2条件が揃うかに注目。`;
+  } else if (verdict === 'SELL_WATCH') {
+    watchPoint = `次Qで<strong>OpMのプラス転換 or 前年同期比の改善</strong>が見られるか確認。改善がなければ撤退・縮小を具体的に検討すべき。`;
+  } else if (verdict === 'HOLD_WATCH') {
+    watchPoint = `RoF40が次Qで<strong>60超</strong>に伸びるか注目。OpMΔ +5pp以上 + YoY加速が揃えば高確度シグナルとなる可能性がある。`;
+  } else {
+    watchPoint = `<strong>OpMのプラス転換</strong>、または<strong>RoF40の40突破</strong>が確認された決算翌日が参入の第一候補タイミング。`;
+  }
+
+  const scoreBar = confidenceDisp
+    ? `<div class="flex items-center gap-2 mt-1">
+        <div class="flex-1 bg-white/10 rounded-full h-1.5">
+          <div class="h-1.5 rounded-full transition-all" style="width:${confidenceDisp}%;background:${confidenceDisp>=75?'#34d399':confidenceDisp>=50?'#fb923c':'#94a3b8'}"></div>
+        </div>
+        <span class="text-xs font-bold ${confidenceDisp>=75?'text-emerald-400':confidenceDisp>=50?'text-orange-400':'text-white/40'}">${confidenceDisp}%</span>
+      </div>` : '';
+
+  return `
+<div class="card rounded-2xl p-6 border ${verdictBorderClass}">
+  <div class="flex items-center gap-3 mb-5">
+    <h2 class="text-base font-bold">🤖 AI総括アナリシス</h2>
+    <span class="text-xs text-white/25 ml-auto">SEC実データ × 定量分析 | ${ticker}</span>
+  </div>
+
+  <!-- 判定バナー -->
+  <div class="flex items-start justify-between gap-4 p-4 rounded-xl border ${verdictBorderClass} mb-5">
+    <div>
+      <div class="text-xl font-black ${verdictColorClass}">${verdictLabel}</div>
+      <div class="text-xs text-white/30 mt-1">最高確度シグナル: ${bestEverScore > 0 ? bestEverScore+'%' : 'なし'} / 直近4Q内高確度シグナル: ${recentHighQ ? recentHighQ.label+'（'+recentHighQ.signalScore+'%）' : 'なし'}</div>
+      ${scoreBar}
+    </div>
+    <div class="text-right flex-shrink-0">
+      <div class="text-xs text-white/30">確度</div>
+      <div class="text-3xl font-black ${verdictColorClass}">${confidenceDisp ? confidenceDisp+'%' : '—'}</div>
+    </div>
+  </div>
+
+  <!-- 根拠 -->
+  <div class="mb-4">
+    <div class="text-xs text-white/35 font-bold uppercase tracking-wider mb-2">📊 総合根拠</div>
+    <div class="space-y-2">
+      ${grounds.map(g => `<p class="text-sm text-white/70 leading-relaxed">• ${g}</p>`).join('')}
+    </div>
+  </div>
+
+  <!-- リスク -->
+  <div class="bg-red-500/5 border border-red-500/15 rounded-xl p-3 mb-3">
+    <div class="text-xs text-red-300/60 font-bold mb-2">⚠️ リスク要因</div>
+    <div class="space-y-1">
+      ${risks.map(r => `<p class="text-xs text-white/50 leading-relaxed">• ${r}</p>`).join('')}
+    </div>
+  </div>
+
+  <!-- 次Q注目 -->
+  <div class="bg-indigo-500/5 border border-indigo-500/15 rounded-xl p-3">
+    <div class="text-xs text-indigo-300/60 font-bold mb-1">🔭 次Q 注目ポイント</div>
+    <p class="text-xs text-white/60 leading-relaxed">${watchPoint}</p>
+  </div>
+
+  <div class="mt-4 text-xs text-white/15 text-right">※ 本分析は会計データの定量処理に基づく参考情報です。投資判断はご自身の責任で行ってください。</div>
+</div>`;
+}
+
+// ── 金融業警告パネル ──────────────────────────────
+function renderFinancialWarning(ticker) {
+  return `
+<div class="rounded-2xl p-5 border border-orange-500/40 bg-orange-500/8">
+  <div class="flex items-start gap-3">
+    <div class="text-2xl flex-shrink-0">🏦</div>
+    <div>
+      <div class="font-black text-orange-200 text-base mb-1">金融業・フィンテック企業 — フレームワーク適用外</div>
+      <p class="text-sm text-white/60 leading-relaxed mb-3">
+        <strong class="text-white/80">${ticker}</strong> は銀行・フィンテック業種のため、
+        マシャ塾フレームワーク（原価率基準 / 利益成長倍率 / 2021年ピーク評価）は適用できません。<br>
+        金融業の収益は「売上原価」ではなく「純利息収入 / 手数料収入」で構成されており、
+        SEC XBRLの分類体系が製造業・テック企業と根本的に異なります。
+      </p>
+      <div class="grid grid-cols-2 md:grid-cols-3 gap-2 text-xs">
+        <div class="bg-white/5 rounded-lg p-2.5">
+          <div class="text-orange-300/70 mb-1 font-bold">代わりに見るべき指標</div>
+          <div class="text-white/50 space-y-0.5">
+            <div>・純利息収入（NII）成長率</div>
+            <div>・純利息マージン（NIM）</div>
+            <div>・ROE / ROTCE</div>
+          </div>
+        </div>
+        <div class="bg-white/5 rounded-lg p-2.5">
+          <div class="text-orange-300/70 mb-1 font-bold">SOFIの場合</div>
+          <div class="text-white/50 space-y-0.5">
+            <div>・銀行ライセンス取得後の成長</div>
+            <div>・会員数の増加ペース</div>
+            <div>・貸出ポートフォリオの健全性</div>
+          </div>
+        </div>
+        <div class="bg-white/5 rounded-lg p-2.5">
+          <div class="text-orange-300/70 mb-1 font-bold">有効なデータ</div>
+          <div class="text-white/50 space-y-0.5">
+            <div>・売上成長率トレンド（参考）</div>
+            <div>・四半期トレンド方向性</div>
+            <div>・YoY加速/減速</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>`;
+}
+
+// ── Phase 1（赤字成長期）分析パネル ───────────────
+function renderPhase1Panel(d) {
+  const trend = d.trend ?? [];
+  if (trend.length < 4) return '';
+  const latest  = trend[0];
+  const prev4   = trend[4] ?? null;
+  const recent  = trend.slice(0, 6);
+
+  // 粗利率トレンド
+  const gmNow  = latest.grossMargin;
+  const gm4q   = prev4?.grossMargin ?? null;
+  const gmDelta4q = (gmNow !== null && gm4q !== null) ? +(gmNow - gm4q).toFixed(1) : null;
+
+  // 連続粗利率改善チェック
+  let consecutiveGMImprove = 0;
+  for (let i = 0; i < recent.length - 1; i++) {
+    if (recent[i].grossMargin !== null && recent[i+1].grossMargin !== null &&
+        recent[i].grossMargin > recent[i+1].grossMargin) consecutiveGMImprove++;
+    else break;
+  }
+
+  // OpExレバレッジ: 売上成長 vs OpEx成長
+  const revNow4  = latest.revM;
+  const rev4qAgo = prev4?.revM ?? null;
+  const opExNow  = latest.opExRatio;
+  const opEx4q   = prev4?.opExRatio ?? null;
+  const opExLev  = (opExNow !== null && opEx4q !== null) ? +(opEx4q - opExNow).toFixed(1) : null;
+
+  // 損益分岐シミュレーション
+  const recentOpMDeltas = trend.slice(0, 5).map(q => q.opMDelta).filter(d => d !== null);
+  const avgDelta = recentOpMDeltas.length > 0
+    ? recentOpMDeltas.reduce((a,b) => a+b, 0) / recentOpMDeltas.length : null;
+  const opMNow = latest.opMargin ?? null;
+  const qtrsToBreakeven = (avgDelta !== null && avgDelta > 0 && opMNow !== null && opMNow < 0)
+    ? Math.ceil(Math.abs(opMNow) / avgDelta) : null;
+
+  // PSG
+  const psRatio  = d.psRatio;
+  const psgScore = d.psgScore;
+  let psgLabel = '', psgColor = '';
+  if (psgScore !== null) {
+    if      (psgScore < 0.5)  { psgLabel = '💎 極めて割安（PSG<0.5）'; psgColor = 'text-emerald-300'; }
+    else if (psgScore < 1.0)  { psgLabel = '✅ 割安圏（PSG<1.0）';     psgColor = 'text-emerald-400'; }
+    else if (psgScore < 2.0)  { psgLabel = '⚖️ 適正水準（PSG 1〜2）';  psgColor = 'text-yellow-400'; }
+    else                      { psgLabel = '⚠️ 割高気味（PSG>2.0）';   psgColor = 'text-orange-400'; }
+  }
+
+  // 修正RoF40（粗利率版）
+  const rof40g = latest.rof40Gross;
+
+  const noGMData = gmNow === null;
+
+  return `
+<div class="card rounded-2xl p-6 border border-purple-500/25 bg-purple-500/5">
+  <div class="flex items-center gap-3 mb-4">
+    <div class="text-xl">🌱</div>
+    <div>
+      <h2 class="text-base font-black text-purple-200">Phase 1 グロース分析</h2>
+      <p class="text-xs text-white/30">赤字成長期の企業には専用フレームワークを適用。利益ではなく「粗利率と効率改善」で判断。</p>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
+
+    <!-- 粗利率 -->
+    <div class="bg-white/5 rounded-xl p-3 text-center">
+      <div class="text-xs text-white/35 mb-1">粗利率（最新Q）</div>
+      <div class="text-2xl font-black ${gmNow !== null ? (gmNow > 60 ? 'text-emerald-300' : gmNow > 40 ? 'text-emerald-400' : 'text-yellow-400') : 'text-white/30'}">
+        ${gmNow !== null ? gmNow.toFixed(1)+'%' : 'N/A'}
+      </div>
+      <div class="text-xs mt-1 ${gmDelta4q !== null ? (gmDelta4q > 0 ? 'text-emerald-400' : 'text-red-400') : 'text-white/20'}">
+        ${gmDelta4q !== null ? (gmDelta4q > 0 ? '▲' : '▼')+Math.abs(gmDelta4q).toFixed(1)+'pp (4Q比)' : '—'}
+      </div>
+    </div>
+
+    <!-- 粗利率連続改善 -->
+    <div class="bg-white/5 rounded-xl p-3 text-center">
+      <div class="text-xs text-white/35 mb-1">粗利率改善</div>
+      <div class="text-2xl font-black ${consecutiveGMImprove >= 3 ? 'text-emerald-300' : consecutiveGMImprove >= 2 ? 'text-emerald-400' : 'text-white/50'}">
+        ${consecutiveGMImprove}Q連続
+      </div>
+      <div class="text-xs mt-1 ${consecutiveGMImprove >= 3 ? 'text-emerald-400' : 'text-white/30'}">
+        ${consecutiveGMImprove >= 3 ? '✅ 構造的改善' : consecutiveGMImprove >= 2 ? '改善中' : '確認不足'}
+      </div>
+    </div>
+
+    <!-- OpExレバレッジ -->
+    <div class="bg-white/5 rounded-xl p-3 text-center">
+      <div class="text-xs text-white/35 mb-1">OpEx効率改善</div>
+      <div class="text-2xl font-black ${opExLev !== null ? (opExLev > 5 ? 'text-emerald-300' : opExLev > 0 ? 'text-emerald-400' : 'text-red-400') : 'text-white/30'}">
+        ${opExLev !== null ? (opExLev > 0 ? '-' : '+')+Math.abs(opExLev).toFixed(1)+'pp' : 'N/A'}
+      </div>
+      <div class="text-xs mt-1 text-white/30">OpEx/売上 4Q前比</div>
+    </div>
+
+    <!-- 修正RoF40 -->
+    <div class="bg-white/5 rounded-xl p-3 text-center">
+      <div class="text-xs text-white/35 mb-1">修正RoF40（粗利版）</div>
+      <div class="text-2xl font-black ${rof40g !== null ? (rof40g >= 100 ? 'text-yellow-200' : rof40g >= 60 ? 'text-emerald-300' : rof40g >= 40 ? 'text-emerald-400' : 'text-yellow-400') : 'text-white/30'}">
+        ${rof40g !== null ? rof40g.toFixed(0) : '—'}
+      </div>
+      <div class="text-xs mt-1 text-white/30">YoY% + 粗利率%</div>
+    </div>
+  </div>
+
+  <!-- PSG評価 + 損益分岐 -->
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
+
+    <div class="bg-indigo-500/8 border border-indigo-500/20 rounded-xl p-4">
+      <div class="text-xs text-indigo-300/70 font-bold mb-2">💹 バリュエーション（PSG比率）</div>
+      <div class="flex items-center gap-3 mb-2">
+        <div class="text-center">
+          <div class="text-xs text-white/30">P/S倍率</div>
+          <div class="text-xl font-black text-white/80">${psRatio !== null ? psRatio+'x' : '—'}</div>
+        </div>
+        <div class="text-white/20">÷</div>
+        <div class="text-center">
+          <div class="text-xs text-white/30">成長率</div>
+          <div class="text-xl font-black text-white/80">${latest.revYoY !== null ? latest.revYoY.toFixed(0)+'%' : '—'}</div>
+        </div>
+        <div class="text-white/20">=</div>
+        <div class="text-center">
+          <div class="text-xs text-white/30">PSGスコア</div>
+          <div class="text-xl font-black ${psgColor}">${psgScore !== null ? psgScore : '—'}</div>
+        </div>
+      </div>
+      <div class="text-xs ${psgColor}">${psgLabel}</div>
+      <div class="text-xs text-white/20 mt-1">PSG: P/S ÷ 成長率。<1.0=割安、>2.0=割高</div>
+    </div>
+
+    <div class="bg-purple-500/8 border border-purple-500/20 rounded-xl p-4">
+      <div class="text-xs text-purple-300/70 font-bold mb-2">⏱ 黒字化シミュレーション</div>
+      ${qtrsToBreakeven !== null ? `
+        <div class="text-2xl font-black text-purple-200 mb-1">約 ${qtrsToBreakeven}Q後</div>
+        <div class="text-xs text-white/40">現在のOpM改善ペース（平均+${avgDelta?.toFixed(1)}pp/Q）が続いた場合</div>
+        <div class="text-xs text-white/25 mt-1">現在OpM: ${opMNow?.toFixed(1)}% → 0%まで${Math.abs(opMNow ?? 0).toFixed(1)}pp</div>
+      ` : `
+        <div class="text-sm text-white/40">${opMNow !== null && opMNow >= 0 ? '✅ 既に黒字' : 'データ不足 or 改善ペース不明'}</div>
+        <div class="text-xs text-white/20 mt-2">OpMデルタが安定すると算出可能になります</div>
+      `}
+    </div>
+  </div>
+
+  <!-- 粗利率トレンド表 -->
+  <div class="overflow-x-auto">
+    <table class="w-full text-xs">
+      <thead>
+        <tr class="border-b border-white/10 text-white/30">
+          <th class="text-left px-2 py-1.5">四半期</th>
+          <th class="text-right px-2 py-1.5">売上</th>
+          <th class="text-right px-2 py-1.5">粗利</th>
+          <th class="text-right px-2 py-1.5">粗利率(Δ)</th>
+          <th class="text-right px-2 py-1.5">OpEx/売上</th>
+          <th class="text-right px-2 py-1.5">修正RoF40</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${recent.map((q, i) => {
+          const isLatest = i === 0;
+          const gm = q.grossMargin;
+          const gmD = q.grMarginDelta;
+          const rg = q.rof40Gross;
+          return `
+          <tr class="border-b border-white/5 ${isLatest ? 'bg-indigo-500/5' : (q.grMarginSignal ? 'bg-emerald-500/5' : '')}">
+            <td class="px-2 py-2 font-bold ${isLatest ? 'text-indigo-300' : 'text-white/60'}">${isLatest ? '🔵 ' : q.grMarginSignal ? '📈 ' : ''}${q.label}</td>
+            <td class="px-2 py-2 text-right text-white/70">${q.revM >= 1000 ? '$'+(q.revM/1000).toFixed(1)+'B' : '$'+q.revM.toFixed(0)+'M'}</td>
+            <td class="px-2 py-2 text-right ${q.grossProfitM !== null ? (q.grossProfitM > 0 ? 'text-emerald-400' : 'text-red-400') : 'text-white/20'}">
+              ${q.grossProfitM !== null ? (q.grossProfitM >= 1000 ? '$'+(q.grossProfitM/1000).toFixed(1)+'B' : '$'+q.grossProfitM.toFixed(0)+'M') : '—'}
+            </td>
+            <td class="px-2 py-2 text-right">
+              <span class="${gm !== null ? (gm > 60 ? 'text-emerald-300' : gm > 40 ? 'text-emerald-400' : 'text-yellow-400') : 'text-white/20'}">${gm !== null ? gm.toFixed(1)+'%' : '—'}</span>
+              ${gmD !== null ? `<span class="text-white/25 ml-1">(${gmD > 0 ? '+' : ''}${gmD.toFixed(1)})</span>` : ''}
+            </td>
+            <td class="px-2 py-2 text-right ${q.opExRatio !== null ? (q.opExRatio < 100 ? 'text-emerald-400' : q.opExRatio < 150 ? 'text-yellow-400' : 'text-red-400') : 'text-white/20'}">
+              ${q.opExRatio !== null ? q.opExRatio.toFixed(1)+'%' : '—'}
+              ${q.opExImproving === true ? '<span class="text-emerald-400 ml-0.5">↓</span>' : q.opExImproving === false ? '<span class="text-red-400 ml-0.5">↑</span>' : ''}
+            </td>
+            <td class="px-2 py-2 text-right font-bold ${rg !== null ? (rg >= 100 ? 'text-yellow-200' : rg >= 60 ? 'text-emerald-300' : rg >= 40 ? 'text-emerald-400' : 'text-white/40') : 'text-white/20'}">
+              ${rg !== null ? rg.toFixed(0) : '—'}
+            </td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table>
+  </div>
+  <div class="mt-3 text-xs text-white/20">修正RoF40 = YoY売上成長% + 粗利率%（Phase1では営業利益率の代わりに粗利率を使用）</div>
+</div>`;
+}
+
+// ── 撤退シグナルパネル ──────────────────────────────
+function renderExitSignalPanel(ex) {
+  if (!ex) return '';
+
+  const borderColor = ex.exitLevel === 'danger'  ? 'border-red-500/50'
+                    : ex.exitLevel === 'warning' ? 'border-orange-500/50'
+                    : ex.exitLevel === 'caution' ? 'border-yellow-500/50'
+                    : 'border-emerald-500/30';
+
+  const signalRows = ex.signals.map(s => {
+    const c = s.level === 'danger'  ? 'text-red-300'
+            : s.level === 'warning' ? 'text-orange-300'
+            : s.level === 'caution' ? 'text-yellow-300'
+            : 'text-emerald-300';
+    return `<div class="flex items-start gap-2 py-1.5 border-b border-white/5 last:border-0">
+      <span class="text-sm flex-shrink-0">${s.icon}</span>
+      <span class="text-xs ${c} leading-relaxed">${s.text}</span>
+    </div>`;
+  }).join('');
+
+  return `
+  <div class="card rounded-2xl p-5 border ${borderColor} ${ex.exitBg}">
+    <div class="flex items-center justify-between mb-4">
+      <div class="flex items-center gap-2">
+        <span class="text-lg">${ex.exitEmoji}</span>
+        <div>
+          <h3 class="font-bold text-sm ${ex.exitColor}">撤退シグナルエンジン</h3>
+          <p class="text-xs text-white/40 mt-0.5">四半期トレンドの変曲点を定量検知</p>
+        </div>
+      </div>
+      <div class="text-right">
+        <div class="text-2xl font-black ${ex.exitColor}">${ex.exitLabel}</div>
+        <div class="text-xs text-white/40 mt-0.5">警戒スコア ${ex.exitScore}点</div>
+      </div>
+    </div>
+    <div class="space-y-0 mt-3">${signalRows}</div>
+    ${ex.decelCount >= 2 ? `<div class="mt-3 pt-3 border-t border-white/10 text-xs text-white/50">📌 売上成長の変曲点を${ex.decelCount}四半期連続で検知。ポジションサイズの縮小または損切りラインの再設定を検討してください。</div>` : ''}
+  </div>`;
+}
+
+// ── 投資判断パネル ────────────────────────────────
+function renderJudgmentPanel(d) {
+  const j = d.judgment;
+  const a = d.analyst;
+  if (!j) return '';
+
+  const bgClass = j.judgmentBg ?? 'bg-white/5';
+  const txtClass = j.judgmentColor ?? 'text-white';
+
+  // シグナルリスト
+  const bullSignals = j.signals.filter(s => s.type === 'bull');
+  const bearSignals = j.signals.filter(s => s.type === 'bear');
+  const neutralSignals = j.signals.filter(s => s.type === 'neutral');
+
+  const signalHtml = (signals) => signals.map(s => `
+    <div class="flex items-start gap-2 text-xs py-1">
+      <span class="text-base leading-none mt-0.5">${s.icon}</span>
+      <span class="text-white/70">${s.text}</span>
+    </div>`).join('');
+
+  // EPS ビート履歴
+  const epsHistHtml = (a.epsHistory ?? []).map(h => {
+    const beat = h.beatPct !== null;
+    const color = h.beatPct >= 5 ? 'text-emerald-400' : h.beatPct >= 0 ? 'text-yellow-400' : 'text-red-400';
+    return `<div class="flex justify-between items-center py-1 border-b border-white/5 last:border-0">
+      <span class="text-white/50 text-xs">${h.quarter ?? '—'}</span>
+      <span class="text-xs font-mono">実績: <span class="text-white">${h.epsActual != null ? '$'+h.epsActual.toFixed(2) : '—'}</span></span>
+      <span class="text-xs font-mono">予想: <span class="text-white/50">${h.epsEstimate != null ? '$'+h.epsEstimate.toFixed(2) : '—'}</span></span>
+      <span class="text-xs font-bold ${color}">${beat ? (h.beatPct >= 0 ? '+' : '') + h.beatPct.toFixed(1)+'%' : '—'}</span>
+    </div>`;
+  }).join('');
+
+  // フォワード予想テーブル
+  const fwdHtml = (a.forwardEstimates ?? []).filter(e => e.period === '0q' || e.period === '+1q' || e.period === '0y' || e.period === '+1y').map(e => `
+    <div class="bg-white/5 rounded-lg p-3">
+      <div class="text-white/40 text-xs mb-1">${e.label}</div>
+      ${e.endDate ? `<div class="text-white/25 text-xs mb-2">${e.endDate}まで</div>` : ''}
+      ${e.revAvgM ? `<div class="text-xs">売上: <span class="font-bold text-white">${e.revAvgM >= 1000 ? '$'+(e.revAvgM/1000).toFixed(1)+'B' : '$'+e.revAvgM+'M'}</span>${e.revGrowthPct != null ? ` <span class="${e.revGrowthPct >= 0 ? 'text-emerald-400' : 'text-red-400'} font-bold">${e.revGrowthPct >= 0 ? '+' : ''}${e.revGrowthPct}%</span>` : ''}</div>` : ''}
+      ${e.epsAvg != null ? `<div class="text-xs mt-1">EPS: <span class="font-bold text-white">${e.epsAvg >= 0 ? '$' : '-$'}${Math.abs(e.epsAvg).toFixed(2)}</span>${e.epsGrowthPct != null ? ` <span class="${e.epsGrowthPct >= 0 ? 'text-emerald-400' : 'text-red-400'} font-bold">${e.epsGrowthPct >= 0 ? '+' : ''}${e.epsGrowthPct}%</span>` : ''}</div>` : ''}
+      ${e.analystCount ? `<div class="text-white/25 text-xs mt-1">アナリスト${e.analystCount}名</div>` : ''}
+    </div>`).join('');
+
+  return `
+<div class="card rounded-2xl p-5 mt-5">
+  <h2 class="text-base font-bold mb-4 flex items-center gap-2">
+    <span class="text-xl">${j.judgmentEmoji}</span>
+    <span>マシャ式 投資判断</span>
+  </h2>
+
+  <!-- 判定メイン -->
+  <div class="${bgClass} border border-white/10 rounded-xl p-4 mb-5 flex items-center justify-between">
+    <div>
+      <div class="text-3xl font-black ${txtClass}">${j.judgmentEmoji} ${j.judgment}</div>
+      <div class="text-xs text-white/40 mt-1">強気スコア ${j.bullScore}pt / 弱気スコア ${j.bearScore}pt</div>
+    </div>
+    <div class="text-right">
+      <div class="text-sm text-white/40 mb-1">強気比率</div>
+      <div class="text-2xl font-bold ${txtClass}">${j.bullRatio}%</div>
+      <div class="w-24 h-2 bg-white/10 rounded-full mt-2 overflow-hidden">
+        <div class="h-full rounded-full bg-gradient-to-r from-emerald-500 to-yellow-400" style="width:${j.bullRatio}%"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- シグナル一覧 -->
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-5">
+    ${bullSignals.length > 0 ? `
+    <div class="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-3">
+      <div class="text-emerald-400 text-xs font-bold mb-2">強気材料</div>
+      ${signalHtml(bullSignals)}
+    </div>` : ''}
+    ${bearSignals.length > 0 ? `
+    <div class="bg-red-500/10 border border-red-500/20 rounded-lg p-3">
+      <div class="text-red-400 text-xs font-bold mb-2">弱気材料</div>
+      ${signalHtml(bearSignals)}
+      ${neutralSignals.length > 0 ? signalHtml(neutralSignals) : ''}
+    </div>` : ''}
+  </div>
+
+  <!-- アナリスト予想 -->
+  ${fwdHtml ? `
+  <div class="mb-5">
+    <div class="text-xs text-white/40 font-bold mb-3">📊 アナリスト予想（フォワード）</div>
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+      ${fwdHtml}
+    </div>
+  </div>` : ''}
+
+  <!-- EPS ビート履歴 + Beat加速度 -->
+  ${epsHistHtml ? `
+  <div>
+    <div class="text-xs text-white/40 font-bold mb-2">🎯 EPS ビート履歴（直近4四半期）${a.avgBeatPct != null ? ` — 平均 <span class="${a.avgBeatPct >= 5 ? 'text-emerald-400' : a.avgBeatPct >= 0 ? 'text-yellow-400' : 'text-red-400'} font-bold">${a.avgBeatPct >= 0 ? '+' : ''}${a.avgBeatPct}%</span>` : ''}${a.beatAccel != null ? ` — 加速度 <span class="${a.beatAccel > 10 ? 'text-yellow-300 font-bold' : a.beatAccel > 0 ? 'text-emerald-400' : a.beatAccel < -10 ? 'text-red-400' : 'text-white/50'}">${a.beatAccel > 0 ? '+' : ''}${a.beatAccel}%${a.beatAccel > 10 ? ' 🔥' : a.beatAccel < -10 ? ' ⚠️' : ''}</span>` : ''}</div>
+    <div class="bg-white/5 rounded-lg p-3 space-y-0.5">
+      ${epsHistHtml}
+    </div>
+    ${a.maxBeatPct != null && a.maxBeatPct >= 20 ? `<div class="mt-1.5 text-xs text-yellow-300/70">⚡ 最大ビート: +${a.maxBeatPct}%（市場の想定を大きく超えた四半期あり）</div>` : ''}
+  </div>` : ''}
+
+  <!-- アナリスト目標株価コンセンサス -->
+  ${a.targetMeanPrice != null ? (() => {
+    const low = a.targetLowPrice, mean = a.targetMeanPrice, high = a.targetHighPrice;
+    const cur = d.calc?.price;
+    const upside = (cur && mean) ? +((mean / cur - 1) * 100).toFixed(1) : null;
+    const recMap = { strong_buy:'強力な買い', buy:'買い', hold:'保有', sell:'売り', strong_sell:'強力な売り' };
+    const recColor = { strong_buy:'text-emerald-300', buy:'text-emerald-400', hold:'text-yellow-400', sell:'text-orange-400', strong_sell:'text-red-400' };
+    const recKey = a.recommendationKey ?? '';
+    const breakdown = a.recommendationBreakdown ?? {};
+    const totalRec = (breakdown.strongBuy??0) + (breakdown.buy??0) + (breakdown.hold??0) + (breakdown.sell??0) + (breakdown.strongSell??0);
+    const barW = (n) => totalRec > 0 ? Math.round(n / totalRec * 100) : 0;
+    return `
+  <div class="mt-4 bg-indigo-500/10 border border-indigo-500/20 rounded-xl p-4">
+    <div class="flex items-center justify-between mb-3">
+      <div class="text-xs text-white/40 font-bold">📊 アナリスト目標株価（${a.numberOfAnalysts ?? '?'}名コンセンサス）</div>
+      ${recKey ? `<span class="text-xs font-bold px-2 py-0.5 rounded-full bg-white/10 ${recColor[recKey] ?? 'text-white'}">${recMap[recKey] ?? recKey}</span>` : ''}
+    </div>
+    <div class="flex items-center gap-3 mb-3">
+      <div class="text-center min-w-[60px]"><div class="text-xs text-white/30">最低</div><div class="text-sm font-bold text-red-300">$${low?.toFixed(0)??'—'}</div></div>
+      <div class="flex-1 relative h-3 bg-white/10 rounded-full overflow-hidden">
+        ${cur != null && low != null && high != null && high > low ? (() => {
+          const range = high - low;
+          const curPct = Math.min(100, Math.max(0, (cur - low) / range * 100));
+          const meanPct = Math.min(100, Math.max(0, (mean - low) / range * 100));
+          return `<div class="absolute inset-y-0 left-0 bg-gradient-to-r from-red-500/40 to-emerald-500/40 rounded-full" style="width:100%"></div>
+                  <div class="absolute top-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-indigo-400 border border-white/50" style="left:${meanPct}%" title="平均目標 $${mean.toFixed(0)}"></div>
+                  <div class="absolute top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full bg-white border-2 border-yellow-400" style="left:${curPct}%" title="現在値 $${cur.toFixed(0)}"></div>`;
+        })() : ''}
+      </div>
+      <div class="text-center min-w-[60px]"><div class="text-xs text-white/30">最高</div><div class="text-sm font-bold text-emerald-300">$${high?.toFixed(0)??'—'}</div></div>
+    </div>
+    <div class="flex items-center justify-between">
+      <div><span class="text-xs text-white/40">平均目標 </span><span class="font-bold text-white">$${mean.toFixed(0)}</span>${upside != null ? ` <span class="text-xs ml-1 font-bold ${upside >= 0 ? 'text-emerald-400' : 'text-red-400'}">${upside >= 0 ? '+' : ''}${upside}%</span>` : ''}</div>
+      ${totalRec > 0 ? `<div class="flex items-center gap-1 text-xs">
+        ${breakdown.strongBuy > 0 ? `<span class="bg-emerald-500/30 text-emerald-300 px-1.5 py-0.5 rounded">強買${breakdown.strongBuy}</span>` : ''}
+        ${breakdown.buy > 0 ? `<span class="bg-emerald-500/20 text-emerald-400 px-1.5 py-0.5 rounded">買${breakdown.buy}</span>` : ''}
+        ${breakdown.hold > 0 ? `<span class="bg-white/10 text-white/50 px-1.5 py-0.5 rounded">保有${breakdown.hold}</span>` : ''}
+        ${breakdown.sell > 0 ? `<span class="bg-red-500/20 text-red-400 px-1.5 py-0.5 rounded">売${breakdown.sell}</span>` : ''}
+      </div>` : ''}
+    </div>
+  </div>`;
+  })() : ''}
+
+  <div class="mt-3 text-xs text-white/20">※ 投資判断はマシャ会計スコア・期待リターン・EPS実績・アナリスト予想を総合した定量スコア。最終判断は自己責任で。</div>
+</div>`;
+}
+
+// ── マシャ会計スコアパネル ──────────────────────────
+// ── 先行シグナルセクション読み込み（Phase 1） ─────────────
+async function loadAdvanceSignals(ticker) {
+  if (!ticker) return;
+
+  const placeholder = document.getElementById('advanceSignalPlaceholder');
+  if (!placeholder) return;
+
+  try {
+    // EPS Revisionデータ取得（キャッシュ利用）
+    let epsData = null;
+    try {
+      const epsRes = await fetch(`/.netlify/functions/eps-revisions?ticker=${ticker}`);
+      if (epsRes.ok) epsData = await epsRes.json();
+    } catch (e) {
+      console.warn('EPS revisions fetch failed:', e.message);
+    }
+
+    // 8-K Guidance データ取得（要CIK）
+    let guidanceData = null;
+    try {
+      // CIK取得（SEC company_tickers から）
+      const cikRes = await fetch("https://www.sec.gov/files/company_tickers.json");
+      if (cikRes.ok) {
+        const cikMap = await cikRes.json();
+        const cikEntry = Object.values(cikMap).find(v => v.ticker?.toUpperCase() === ticker);
+        if (cikEntry) {
+          const cik = String(cikEntry.cik_str).padStart(10, "0");
+          const guideRes = await fetch(`/.netlify/functions/sec-8k-guidance?ticker=${ticker}&cik=${cik}`);
+          if (guideRes.ok) guidanceData = await guideRes.json();
+        }
+      }
+    } catch (e) {
+      console.warn('8-K guidance fetch failed:', e.message);
+    }
+
+    // 両方なければセクション非表示
+    if (!epsData?.signalScore_bonus && !guidanceData?.signalScore_bonus) {
+      placeholder.innerHTML = '';
+      return;
+    }
+
+    const epsHtml = epsData && epsData.signalScore_bonus > 0 ? `
+    <div class="mb-4 p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/30">
+      <div class="flex items-center gap-2 mb-2">
+        <span class="text-lg">📈</span>
+        <span class="text-sm font-bold text-yellow-300">EPS予想修正フラッグ</span>
+        ${epsData.revision_percent ? `<span class="text-xs text-yellow-400 ml-auto">+${epsData.revision_percent.toFixed(1)}%</span>` : ''}
+      </div>
+      <div class="text-xs text-white/70">${epsData.description || 'EPS修正データ取得中...'}</div>
+      ${epsData.revisions_up_30d || epsData.revisions_down_30d ? `
+      <div class="text-xs text-white/50 mt-1">
+        上方修正: ${epsData.revisions_up_30d}件 / 下方修正: ${epsData.revisions_down_30d}件
+      </div>` : ''}
+      ${epsData.signalScore_bonus > 0 ? `<div class="text-xs text-yellow-300 font-bold mt-2">Composite Score ボーナス: +${epsData.signalScore_bonus}pt</div>` : ''}
+    </div>` : '';
+
+    const guidanceHtml = guidanceData && guidanceData.signalScore_bonus > 0 ? `
+    <div class="mb-4 p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30">
+      <div class="flex items-center gap-2 mb-2">
+        <span class="text-lg">🎯</span>
+        <span class="text-sm font-bold text-emerald-300">ガイダンス${guidanceData.guidance_direction === 'up' ? '上方' : guidanceData.guidance_direction === 'down' ? '下方' : ''}修正</span>
+        ${guidanceData.days_since_8k !== null ? `<span class="text-xs text-emerald-400 ml-auto">${guidanceData.days_since_8k}日前</span>` : ''}
+      </div>
+      <div class="text-xs text-white/70">${guidanceData.description || '8-K ガイダンス情報'}</div>
+      ${guidanceData.revenue_guidance ? `<div class="text-xs text-white/50 mt-1">売上ガイダンス: $${guidanceData.revenue_guidance.value.toFixed(1)}${guidanceData.revenue_guidance.currency}</div>` : ''}
+      ${guidanceData.margin_guidance ? `<div class="text-xs text-white/50">粗利率ガイダンス: ${guidanceData.margin_guidance.value.toFixed(1)}%</div>` : ''}
+      ${guidanceData.signalScore_bonus > 0 ? `<div class="text-xs text-emerald-300 font-bold mt-2">Composite Score ボーナス: +${guidanceData.signalScore_bonus}pt</div>` : ''}
+    </div>` : '';
+
+    if (!epsHtml && !guidanceHtml) {
+      placeholder.innerHTML = '';
+      return;
+    }
+
+    placeholder.innerHTML = `
+    <div id="advanceSignalSection" class="card rounded-2xl p-5 mb-5">
+      <h3 class="text-lg font-black mb-3">⚡ 先行シグナル（決算前検出）</h3>
+      ${epsHtml}
+      ${guidanceHtml}
+      <div class="text-xs text-white/40 mt-4">
+        <span class="block">ℹ️ 決算前 3-4 週間で検出可能な先行シグナル。SEC XBRL（決算後40-60日）より</span>
+        <span class="text-yellow-300 font-bold">3-4週間先行</span>で市場機会をキャッチできます。
+      </div>
+    </div>`;
+  } catch (e) {
+    console.error('loadAdvanceSignals error:', e);
+    placeholder.innerHTML = '';
+  }
+}
+
+function renderMasyaScorePanel(d) {
+  const c = d.calc;
+  if (!c) return '';
+
+  const mg = c.masyaCostGrade ?? {};
+  const gc = c.growthCategory ?? {};
+  const omc = c.opMarginCategory ?? {};
+
+  // 原価率グレードの色マップ
+  const gradeColorMap = {
+    gold:    'text-yellow-300 bg-yellow-500/20 border-yellow-500/40',
+    emerald: 'text-emerald-200 bg-emerald-500/20 border-emerald-500/40',
+    green:   'text-emerald-400 bg-emerald-500/15 border-emerald-500/30',
+    yellow:  'text-yellow-400 bg-yellow-500/15 border-yellow-500/30',
+    orange:  'text-orange-400 bg-orange-500/15 border-orange-500/30',
+    red:     'text-red-400 bg-red-500/15 border-red-500/30',
+    gray:    'text-white/30 bg-white/5 border-white/10',
+  };
+  const growthColorMap = {
+    gold:    'text-yellow-300',
+    emerald: 'text-emerald-300',
+    green:   'text-emerald-400',
+    yellow:  'text-yellow-400',
+    red:     'text-red-400',
+    gray:    'text-white/30',
+  };
+
+  const gradeClass = gradeColorMap[mg.color] ?? gradeColorMap.gray;
+  const gcClass    = growthColorMap[gc.color]  ?? 'text-white/50';
+  const omcClass   = growthColorMap[omc.color] ?? 'text-white/50';
+
+  // キャッシュリッチ条件チェック表示
+  const cond1Html = c.cashRichCond1
+    ? '<span class="text-emerald-400">✅ 原価率50%未満</span>'
+    : '<span class="text-red-400">❌ 原価率50%超</span>';
+  const cond2Html = c.cashRichCond2
+    ? `<span class="text-emerald-400">✅ 営業利益 前年比+${c.opGrowthSimple > 0 ? c.opGrowthSimple.toFixed(1) : ''}%</span>`
+    : c.opGrowthSimple !== null
+      ? `<span class="text-red-400">❌ 営業利益 前年比${c.opGrowthSimple?.toFixed(1)}%</span>`
+      : '<span class="text-white/30">❓ データ不足</span>';
+
+  const cashRichBadge = c.isCashRich
+    ? '<span class="bg-emerald-500/25 text-emerald-200 border border-emerald-500/50 rounded-full px-3 py-1 text-sm font-bold">💰 キャッシュリッチ候補</span>'
+    : '<span class="bg-white/5 text-white/30 border border-white/10 rounded-full px-3 py-1 text-sm">条件未達</span>';
+
+  // マシャスコアバー
+  const mScore = c.masyaScore ?? 0;
+  const scoreBarColor = mScore >= 70 ? '#34d399' : mScore >= 45 ? '#fb923c' : '#94a3b8';
+  const scoreLabel = mScore >= 80 ? '🏆 最強クラス' : mScore >= 65 ? '✨ 優秀' : mScore >= 50 ? '✅ 合格水準' : mScore >= 35 ? '⚡ 要成長' : '⚠️ 要注意';
+
+  // 読む順序ガイド
+  const plStatus = (c.revNow && c.opNow != null) ? '✅' : '⚠️';
+  const bsStatus = c.bsOk ? '✅' : '❌';
+  const cfStatus = (c.cashNow != null) ? '✅' : '⚠️';
+
+  return `
+<div class="card rounded-2xl p-6 border border-indigo-500/25" style="background:linear-gradient(135deg,rgba(99,102,241,0.08),rgba(16,185,129,0.05))">
+  <div class="flex items-center gap-3 mb-5">
+    <div class="text-xl">🎓</div>
+    <div>
+      <h2 class="text-base font-black text-indigo-200">マシャ会計スコア</h2>
+      <p class="text-xs text-white/30">マシャ塾メソッド × 原価率グレード × キャッシュリッチ判定</p>
+    </div>
+    <div class="ml-auto text-right">
+      <div class="text-xs text-white/30 mb-1">総合スコア</div>
+      <div class="text-3xl font-black" style="color:${scoreBarColor}">${mScore}</div>
+      <div class="text-xs font-bold" style="color:${scoreBarColor}">${scoreLabel}</div>
+    </div>
+  </div>
+
+  <!-- スコアバー -->
+  <div class="w-full bg-white/10 rounded-full h-2 mb-5">
+    <div class="h-2 rounded-full transition-all bar" style="width:${mScore}%;background:${scoreBarColor}"></div>
+  </div>
+
+  <!-- 3大指標グリッド -->
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-5">
+
+    <!-- 原価率グレード -->
+    <div class="rounded-xl p-4 border ${gradeClass}">
+      <div class="text-xs text-white/40 mb-2 font-bold uppercase tracking-wider">原価率 / コスト構造</div>
+      <div class="text-lg font-black mb-1 ${gradeClass.split(' ')[0]}">${mg.badge ?? '—'}</div>
+      <div class="text-xs text-white/50">${mg.label ?? '—'}</div>
+      ${(c.ttmCostRatio ?? c.costRatio) !== null ? `<div class="text-xs text-white/50 mt-1 font-mono font-bold">${((c.ttmCostRatio ?? c.costRatio)*100).toFixed(1)}% <span class="text-cyan-400 text-[10px]">TTM</span></div>` : ''}
+      ${c.ttmCostRatio != null && c.costRatioAnn != null ? `<div class="text-xs text-white/25 mt-0.5 font-mono">年次: ${(c.costRatioAnn*100).toFixed(1)}%</div>` : ''}
+      <div class="mt-2 text-xs text-white/20 leading-relaxed">&lt;15%最強 &lt;20%優秀 &lt;30%良 &lt;50%合格</div>
+    </div>
+
+    <!-- 売上成長率 -->
+    <div class="rounded-xl p-4 border border-white/10 bg-white/5">
+      <div class="text-xs text-white/40 mb-2 font-bold uppercase tracking-wider">売上成長率 <span class="text-cyan-400 normal-case font-normal">(TTM優先)</span></div>
+      <div class="text-lg font-black mb-1 ${gcClass}">${gc.label ?? '—'}</div>
+      ${(c.ttmRevGrowth ?? c.revGrowth) != null ? `<div class="text-sm font-bold ${(c.ttmRevGrowth ?? c.revGrowth) >= 0 ? 'text-emerald-400' : 'text-red-400'}">${(c.ttmRevGrowth ?? c.revGrowth) >= 0 ? '+' : ''}${(c.ttmRevGrowth ?? c.revGrowth).toFixed(1)}% <span class="text-cyan-400 text-xs font-normal">${c.ttmRevGrowth != null ? 'TTM' : '年次'}</span></div>` : ''}
+      ${c.ttmRevGrowth != null && c.revGrowthAnn != null ? `<div class="text-xs text-white/25 mt-0.5">年次: ${c.revGrowthAnn >= 0 ? '+' : ''}${c.revGrowthAnn.toFixed(1)}%</div>` : ''}
+      <div class="text-xs text-white/20 mt-2 leading-relaxed">+16%注目 +30%高成長 +50%化け物</div>
+    </div>
+
+    <!-- 営業利益率 -->
+    <div class="rounded-xl p-4 border border-white/10 bg-white/5">
+      <div class="text-xs text-white/40 mb-2 font-bold uppercase tracking-wider">営業利益率（本業力）</div>
+      <div class="text-lg font-black mb-1 ${omcClass}">${omc.label ?? '—'}</div>
+      ${c.latestOpMargin != null ? `<div class="text-sm font-bold ${c.latestOpMargin >= 0 ? 'text-emerald-400' : 'text-red-400'}">${c.latestOpMargin.toFixed(1)}% OpM</div>` : ''}
+      <div class="text-xs text-white/20 mt-2 leading-relaxed">+15%キャッシュリッチ水準 +25%優秀 +70%最強</div>
+    </div>
+  </div>
+
+  <!-- キャッシュリッチ判定 -->
+  <div class="rounded-xl p-4 mb-4 ${c.isCashRich ? 'bg-emerald-500/8 border border-emerald-500/25' : 'bg-white/3 border border-white/8'}">
+    <div class="flex items-center justify-between flex-wrap gap-3">
+      <div>
+        <div class="text-xs text-white/40 font-bold uppercase tracking-wider mb-2">💰 キャッシュリッチ判定（マシャ2条件）</div>
+        <div class="flex gap-4 flex-wrap text-xs">${cond1Html} ${cond2Html}</div>
+      </div>
+      ${cashRichBadge}
+    </div>
+    <div class="mt-2 text-xs text-white/20">キャッシュリッチ企業 = 原価率低い（＜50%）AND 営業利益が成長している</div>
+  </div>
+
+  <!-- 財務3表 読む順序ガイド -->
+  <div class="rounded-xl p-3 bg-white/3 border border-white/8">
+    <div class="text-xs text-white/40 font-bold mb-2">📚 財務3表ステータス（読む順序: P/L → B/S → C/F）</div>
+    <div class="flex gap-4 text-xs text-white/60 flex-wrap">
+      <span>${plStatus} P/L 損益計算書 — 売上${ c.revNow ? '$'+(c.revNow >= 1000 ? (c.revNow/1000).toFixed(1)+'B' : c.revNow.toFixed(0)+'M') : 'N/A'} 営業利益${c.opNow != null ? (c.opNow >= 0 ? '黒字' : '赤字') : 'N/A'}</span>
+      <span>${bsStatus} B/S 貸借対照表 — ${c.bsOk ? '資本プラス（健全）' : '資本マイナス（要注意）'}</span>
+      <span>${cfStatus} C/F キャッシュフロー — 現金${c.cashNow != null ? '$'+(c.cashNow >= 1000 ? (c.cashNow/1000).toFixed(1)+'B' : c.cashNow.toFixed(0)+'M') : 'N/A'}</span>
+    </div>
+  </div>
+</div>`;
+}
+
+// ── タブ切り替え ──────────────────────────────────
+let _chartInstance  = null;
+let _chartTicker    = null;  // 初期化済みチャートの銘柄
+let _activeTicker   = null;  // 現在分析中の銘柄（renderResultで設定）
+let _chartTrend     = null;
+let _chartAnalyst   = null;
+
+function switchTab(name) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
+  const btn     = document.getElementById('tab-' + name);
+  const content = document.getElementById('tabcontent-' + name);
+  if (btn) btn.classList.add('active');
+  if (content) content.classList.remove('hidden');
+  if (name === 'chart' && _activeTicker) initLightweightChart(_activeTicker, _chartTrend, _chartAnalyst);
+  document.getElementById('result')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// ── ファンダメンタルズシグナル → Lightweight Chartsマーカー変換 ────────────
+function buildFundamentalMarkers(trend, analyst) {
+  const markers = [];
+
+  (trend ?? []).forEach((q, i) => {
+    if (!q.end) return;
+    const ts  = q.end; // "YYYY-MM-DD" — Lightweight Charts accepts date strings
+    const prev = (trend ?? [])[i + 1];
+
+    // 参入シグナル（高スコア順で重複しないよう最優先のみ）
+    if ((q.signalScore ?? 0) >= 75) {
+      markers.push({ time: ts, position: 'aboveBar', color: '#ef4444', shape: 'arrowUp',
+        text: `🚨 ${q.label}` });
+    } else if ((q.signalScore ?? 0) >= 50) {
+      markers.push({ time: ts, position: 'aboveBar', color: '#f97316', shape: 'arrowUp',
+        text: `⚡ ${q.label}` });
+    }
+
+    // 🌱 黒字転換（営業利益）
+    if (prev && prev.opM !== null && q.opM != null && prev.opM < 0 && q.opM >= 0) {
+      markers.push({ time: ts, position: 'aboveBar', color: '#fbbf24', shape: 'circle',
+        text: '🌱 黒字転換' });
+    }
+
+    // 📈 売上YoY加速（yoyAccel が正方向に転換）
+    if (q.yoyAccel === 'up' && prev && (prev.yoyAccel === 'down' || prev.yoyAccel === null)) {
+      markers.push({ time: ts, position: 'belowBar', color: '#6366f1', shape: 'arrowUp',
+        text: '📈 売上加速' });
+    }
+
+    // ⚠️ 撤退警戒：売上YoY成長率が連続減速（i=0が最新 → チャート上では右端に近い）
+    // trend[i].revYoY < trend[i+1].revYoY が2期連続の起点（i==1の位置）
+    // i==0:最新、i==1:1期前、i==2:2期前 → 「3期連続」はi==1に⚠️, 「2期連続」もi==1に
+    if (i === 1 && prev) {
+      const r0 = (trend ?? [])[0]?.revYoY;
+      const r1 = q.revYoY;
+      const r2 = prev?.revYoY;
+      if (r0 != null && r1 != null && r2 != null && r0 < r1 && r1 < r2) {
+        markers.push({ time: ts, position: 'aboveBar', color: '#f97316', shape: 'arrowDown',
+          text: '⚠️ 成長減速' });
+      }
+    }
+  });
+
+  // EPS Beat / Miss（アナリスト予想との乖離）
+  (analyst?.epsHistory ?? []).forEach(h => {
+    if (!h.quarter || h.beatPct === null) return;
+    const ts = h.quarter; // "YYYY-MM-DD"
+    if (h.beatPct > 10) {
+      markers.push({ time: ts, position: 'belowBar', color: '#10b981', shape: 'arrowUp',
+        text: `Beat +${h.beatPct.toFixed(0)}%` });
+    } else if (h.beatPct < -5) {
+      markers.push({ time: ts, position: 'belowBar', color: '#ef4444', shape: 'arrowDown',
+        text: `Miss ${h.beatPct.toFixed(0)}%` });
+    }
+  });
+
+  // time昇順ソート（必須）
+  return markers.sort((a, b) => (a.time < b.time ? -1 : a.time > b.time ? 1 : 0));
+}
+
+// ── Lightweight Charts 初期化 ───────────────────────────────────────────────
+async function initLightweightChart(ticker, trend, analyst) {
+  const container = document.getElementById('tv-chart-container');
+  if (!container) return;
+  // 同一銘柄は再描画しない
+  if (_chartInstance && _chartTicker === ticker) return;
+
+  // 前のインスタンスを破棄
+  if (_chartInstance) { try { _chartInstance.remove(); } catch(_) {} _chartInstance = null; }
+
+  container.innerHTML = `
+    <div class="flex items-center justify-center h-full text-white/40 text-sm">
+      <div class="text-center">
+        <div class="spin text-3xl mb-3">◌</div>
+        <div>チャートデータを取得中…</div>
+        <div class="text-xs mt-1 text-white/20">${ticker} 週足 5年</div>
+      </div>
+    </div>`;
+
+  try {
+    // Netlify Function経由でYahoo Finance OHLCVを取得（CORS回避）
+    const url = `/.netlify/functions/chart?ticker=${encodeURIComponent(ticker)}`;
+    const res  = await fetch(url);
+    const json = await res.json();
+    const result = json?.chart?.result?.[0];
+    if (!result) throw new Error('No chart data');
+
+    const tss    = result.timestamp ?? [];
+    const quote  = result.indicators?.quote?.[0] ?? {};
+    const adjClose = result.indicators?.adjclose?.[0]?.adjclose ?? [];
+
+    // date文字列変換（"YYYY-MM-DD"）
+    const toDate = ts => {
+      const d = new Date(ts * 1000);
+      return `${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,'0')}-${String(d.getUTCDate()).padStart(2,'0')}`;
+    };
+
+    const candles = tss.map((t, i) => ({
+      time:  toDate(t),
+      open:  +(quote.open[i]  ?? 0).toFixed(4),
+      high:  +(quote.high[i]  ?? 0).toFixed(4),
+      low:   +(quote.low[i]   ?? 0).toFixed(4),
+      close: +(adjClose[i] ?? quote.close[i] ?? 0).toFixed(4),
+    })).filter(c => c.open && c.high && c.low && c.close);
+
+    const volumes = tss.map((t, i) => ({
+      time:  toDate(t),
+      value: quote.volume[i] ?? 0,
+      color: (quote.close[i] ?? 0) >= (quote.open[i] ?? 0)
+             ? 'rgba(16,185,129,0.35)' : 'rgba(239,68,68,0.35)',
+    })).filter(v => v.value > 0);
+
+    // チャート生成
+    container.innerHTML = '';
+    const chart = LightweightCharts.createChart(container, {
+      width:  container.offsetWidth,
+      height: container.offsetHeight - 2,
+      layout: {
+        background: { type: 'solid', color: 'transparent' },
+        textColor:  'rgba(255,255,255,0.45)',
+        fontSize:   11,
+      },
+      grid: {
+        vertLines: { color: 'rgba(255,255,255,0.04)' },
+        horzLines: { color: 'rgba(255,255,255,0.04)' },
+      },
+      crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+      rightPriceScale: { borderColor: 'rgba(255,255,255,0.08)' },
+      timeScale: {
+        borderColor:     'rgba(255,255,255,0.08)',
+        timeVisible:     true,
+        secondsVisible:  false,
+        fixLeftEdge:     true,
+        fixRightEdge:    true,
+      },
+      handleScroll:  true,
+      handleScale:   true,
+    });
+
+    _chartInstance = chart;
+    _chartTicker   = ticker;
+
+    // ── ローソク足 ──
+    const candleSeries = chart.addCandlestickSeries({
+      upColor:        '#10b981',
+      downColor:      '#ef4444',
+      borderUpColor:  '#10b981',
+      borderDownColor:'#ef4444',
+      wickUpColor:    '#34d399',
+      wickDownColor:  '#f87171',
+    });
+    candleSeries.setData(candles);
+
+    // ── 出来高 ──
+    const volSeries = chart.addHistogramSeries({
+      priceFormat:  { type: 'volume' },
+      priceScaleId: 'vol',
+    });
+    chart.priceScale('vol').applyOptions({ scaleMargins: { top: 0.82, bottom: 0 } });
+    volSeries.setData(volumes);
+
+    // ── 9週MA ──
+    const period = 9;
+    const maData = [];
+    for (let i = period - 1; i < candles.length; i++) {
+      const avg = candles.slice(i - period + 1, i + 1).reduce((s, c) => s + c.close, 0) / period;
+      maData.push({ time: candles[i].time, value: +avg.toFixed(4) });
+    }
+    const maSeries = chart.addLineSeries({
+      color:            '#818cf8',
+      lineWidth:        2,
+      priceLineVisible: false,
+      lastValueVisible: false,
+      crosshairMarkerVisible: false,
+    });
+    maSeries.setData(maData);
+
+    // ── ファンダメンタルズマーカー ──
+    const markers = buildFundamentalMarkers(trend, analyst);
+    if (markers.length > 0) candleSeries.setMarkers(markers);
+
+    // ── 凡例オーバーレイ ──
+    const legend = document.createElement('div');
+    legend.style.cssText = `
+      position:absolute; top:8px; left:12px; z-index:10; pointer-events:none;
+      font-size:11px; color:rgba(255,255,255,0.45); line-height:1.6;
+    `;
+    legend.innerHTML = `
+      <span style="color:#818cf8">■</span> MA9週 &nbsp;
+      <span style="color:#ef4444">▲</span> 参入シグナル &nbsp;
+      <span style="color:#f97316">▲</span> 注目 &nbsp;
+      <span style="color:#fbbf24">●</span> 黒字転換 &nbsp;
+      <span style="color:#10b981">▲</span> EPS Beat &nbsp;
+      <span style="color:#6366f1">▲</span> 売上加速
+    `;
+    container.style.position = 'relative';
+    container.appendChild(legend);
+
+    // ── リサイズ対応 ──
+    const ro = new ResizeObserver(entries => {
+      const { width, height } = entries[0].contentRect;
+      chart.applyOptions({ width, height: height - 2 });
+    });
+    ro.observe(container);
+
+  } catch (e) {
+    console.error('LW chart error:', e);
+    container.innerHTML = `
+      <div class="flex items-center justify-center h-full text-white/30">
+        <div class="text-center">
+          <div class="text-2xl mb-2">⚠️</div>
+          <div>チャートデータの取得に失敗しました</div>
+          <div class="text-xs mt-1">${e.message}</div>
+        </div>
+      </div>`;
+  }
+}
+
+// ── メイン描画関数 ────────────────────────────────
+function renderResult(d, isNew = false) {
+  const c = d.calc;
+  const el = document.getElementById('result');
+
+  const gapColor = c.priceGap == null ? '' : c.priceGap > 0 ? 'text-emerald-400' : 'text-red-400';
+  const gapLabel = c.priceGap == null ? '' : c.priceGap > 0
+    ? `📈 割安 — 会計上の株価まで+${(+c.priceGap).toFixed(1)}%`
+    : `📉 割高 — 会計上の株価との乖離${(+c.priceGap).toFixed(1)}%`;
+
+  const _effCost = c.ttmCostRatio ?? c.costRatio;
+  const costBarW = _effCost ? Math.min(_effCost * 100, 100) : 0;
+  const costBarColor = _effCost < 0.15 ? 'bg-emerald-400' : _effCost < 0.50 ? 'bg-green-500'
+    : _effCost < 0.75 ? 'bg-yellow-500' : 'bg-red-500';
+
+  const newBadge = isNew
+    ? `<span class="new-badge ml-2 text-xs bg-yellow-500/30 text-yellow-300 border border-yellow-500/50 rounded-full px-2 py-0.5">🆕 新着決算</span>`
+    : '';
+
+  // 銘柄変更時にチャートインスタンスをリセット
+  if (_chartTicker !== d.ticker) {
+    if (_chartInstance) { try { _chartInstance.remove(); } catch(_) {} _chartInstance = null; }
+    _chartTicker = null;
+  }
+  // 現在の分析銘柄とチャート用データをグローバルに保持
+  _activeTicker  = d.ticker;
+  _chartTrend    = d.trend   ?? null;
+  _chartAnalyst  = d.analyst ?? null;
+
+  el.innerHTML = `
+<!-- ★ 企業ヘッダー（常時表示） -->
+<div class="card rounded-2xl p-5">
+  <div class="flex flex-wrap items-start justify-between gap-4">
+    <div>
+      <div class="flex items-center gap-3 flex-wrap">
+        <span class="text-4xl font-black tracking-tight">${d.ticker}</span>
+        <span class="text-sm bg-indigo-500/30 border border-indigo-500/40 rounded-full px-3 py-1">
+          ${d.filings?.['10-Q']?.date ?? ''} 最新10-Q
+        </span>
+        ${newBadge}
+        ${d.companyPhase === 'phase1' ? '<span class="text-xs bg-purple-500/25 border border-purple-500/40 text-purple-300 rounded-full px-2 py-0.5">🌱 Phase1</span>' : d.companyPhase === 'phase3' ? '<span class="text-xs bg-emerald-500/25 border border-emerald-500/40 text-emerald-300 rounded-full px-2 py-0.5">🏆 Phase3</span>' : ''}
+      </div>
+      <p class="text-white/50 mt-1">${d.companyName}</p>
+      <button class="watch-btn mt-1.5 text-xs text-white/30 hover:text-yellow-300 transition-colors"
+        data-ticker="${d.ticker}" onclick="toggleWatch('${d.ticker}')">☆ ウォッチ</button>
+    </div>
+    <div class="text-right">
+      <div class="text-3xl font-bold">${fmtP(c.price)}</div>
+      <div class="text-xs text-white/40 mt-0.5">現在株価 | 時価総額 ${c.mktcap ? '$'+((c.mktcap/1000).toFixed(1))+'B' : 'N/A'}</div>
+      ${d.judgment ? `<div class="mt-1 text-sm font-bold ${d.judgment.judgmentColor}">${d.judgment.judgmentEmoji} ${d.judgment.judgment}</div>` : ''}
+    </div>
+  </div>
+</div>
+
+<!-- ★ タブナビゲーション -->
+<div class="card rounded-2xl overflow-hidden">
+  <div class="flex overflow-x-auto border-b border-white/8">
+    <button onclick="switchTab('summary')" id="tab-summary" class="tab-btn active">📊 サマリー</button>
+    <button onclick="switchTab('chart')" id="tab-chart" class="tab-btn">📈 チャート</button>
+    <button onclick="switchTab('judgment')" id="tab-judgment" class="tab-btn">💰 投資判断</button>
+    <button onclick="switchTab('financials')" id="tab-financials" class="tab-btn">📋 財務諸表</button>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════ -->
+<!-- TAB 1: サマリー                                  -->
+<!-- ════════════════════════════════════════════════ -->
+<div id="tabcontent-summary" class="tab-content space-y-5">
+
+  <!-- 金融業警告 -->
+  ${d.isFinancial ? renderFinancialWarning(d.ticker) : ''}
+
+  <!-- IPO後通知 -->
+  ${d.isPostIpoNoPeak && !d.isFinancial ? `
+  <div class="rounded-2xl p-4 border border-yellow-500/30 bg-yellow-500/5 text-sm">
+    <span class="text-yellow-300 font-bold">⚠️ IPO後企業（2021年ピークなし）</span>
+    <span class="text-white/50 ml-2">マシャ塾の2021年基準値が存在しないため、株価推定は参考値です。</span>
+  </div>` : ''}
+
+  <!-- 10年後株価推定（マシャ式 EPS×PER 3価格モデル） -->
+  <div class="card rounded-2xl p-6 ${d.isFinancial ? 'opacity-30 pointer-events-none' : ''}">
+    <div class="flex items-center gap-3 mb-1">
+      <h2 class="text-lg font-bold">⚡ 10年後株価推定（マシャ式 EPS×PER）</h2>
+      <span class="text-xs text-white/30 font-normal">各カードをクリックで計算式を表示</span>
+    </div>
+    <p class="text-xs text-white/30 mb-4">10年後EPS × PER = 目標株価　|　業種: ${c.perName ?? '—'}　|　現在TTM EPS: ${c.ttmEps != null ? (c.ttmEps >= 0 ? '+' : '') + c.ttmEps.toFixed(2) + 'ドル' : 'N/A'}</p>
+
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-5">
+      <div class="accounting-box rounded-xl p-4 text-center cursor-pointer hover:opacity-90 transition-opacity" onclick="toggleFormula('formula-accounting')">
+        <div class="text-xs text-white/50 mb-1">🐻 ベア価格（保守的）</div>
+        <div class="text-2xl font-black">${fmtP(c.bearPrice10yr)}</div>
+        <div class="text-xs text-white/40 mt-1">PER ${c.perBear ?? '—'}倍 <span class="text-indigo-400/60">▼ 計算式</span></div>
+      </div>
+      <div class="potential-box rounded-xl p-4 text-center cursor-pointer hover:opacity-90 transition-opacity" onclick="toggleFormula('formula-potential')">
+        <div class="text-xs text-white/50 mb-1">🎯 標準価格（メイン）</div>
+        <div class="text-2xl font-black">${fmtP(c.standardPrice10yr)}</div>
+        <div class="text-xs text-white/40 mt-1">PER ${c.perStandard ?? '—'}倍 <span class="text-indigo-400/60">▼ 計算式</span></div>
+      </div>
+      <div class="leverage-box rounded-xl p-4 text-center cursor-pointer hover:opacity-90 transition-opacity" onclick="toggleFormula('formula-leverage')">
+        <div class="text-xs text-white/50 mb-1">🚀 ブル価格（奥義）</div>
+        <div class="text-2xl font-black">${fmtP(c.bullPrice10yr)}</div>
+        <div class="text-xs text-white/40 mt-1">標準PER × 2倍 <span class="text-indigo-400/60">▼ 計算式</span></div>
+      </div>
+    </div>
+
+    <div id="formula-accounting" class="hidden mb-3 bg-emerald-950/40 border border-emerald-500/20 rounded-xl p-4 text-sm">
+      <div class="text-emerald-400 font-bold mb-3">🐻 ベア価格 — 計算式</div>
+      <div class="space-y-2 font-mono text-xs">
+        <div class="flex justify-between items-center border-b border-white/10 pb-2"><span class="text-white/50">① 直近年次売上（実績）</span><span class="text-white font-bold">${c.revNow ? '$'+(c.revNow>=1000?(c.revNow/1000).toFixed(1)+'B':c.revNow.toFixed(0)+'M') : 'N/A'}</span></div>
+        <div class="flex justify-between items-center border-b border-white/10 pb-2"><span class="text-white/50">② 売上CAGR（調整後）</span><span class="text-indigo-300 font-bold">+${c.projectedCAGR ?? '—'}% / 年（10年間）</span></div>
+        <div class="flex justify-between items-center border-b border-white/10 pb-2"><span class="text-white/50">③ 10年後売上推定</span><span class="text-white font-bold">${c.rev10yr ? '$'+(c.rev10yr>=1000?(c.rev10yr/1000).toFixed(1)+'B':c.rev10yr.toFixed(0)+'M') : 'N/A'}</span></div>
+        <div class="flex justify-between items-center border-b border-white/10 pb-2">
+          <span class="text-white/50">④ 目標営業利益率（成熟時）</span>
+          <span class="text-right">
+            <span class="text-yellow-300 font-bold">${c.projectedOpmPct?.toFixed(1) ?? '—'}%</span>
+            ${c.hasAmortAdj ? `<span class="text-white/30 text-xs ml-1" title="GAAP ${c.projectedOpmGaap?.toFixed(1)}% に無形資産償却費を加算した調整後営業利益率を使用">adj.</span>` : ''}
+          </span>
+        </div>
+        <div class="flex justify-between items-center border-b border-white/10 pb-2"><span class="text-white/50">⑤ 10年後純利益（税調整後）</span><span class="text-white font-bold">${c.ni10yr ? '$'+(c.ni10yr>=1000?(c.ni10yr/1000).toFixed(1)+'B':c.ni10yr.toFixed(0)+'M') : 'N/A'}</span></div>
+        <div class="flex justify-between items-center border-b border-white/10 pb-2"><span class="text-white/50">⑥ 10年後EPS（÷発行株数）</span><span class="text-emerald-300 font-bold">${c.eps10yr != null ? '$'+c.eps10yr.toFixed(2) : 'N/A'} / 株</span></div>
+        <div class="flex justify-between items-center border-b border-white/10 pb-2"><span class="text-white/50">⑦ ベアPER</span><span class="text-white font-bold">× ${c.perBear ?? '—'}倍</span></div>
+        <div class="flex justify-between items-center bg-emerald-500/10 rounded-lg px-3 py-2"><span class="text-emerald-300 font-bold">= ベア価格</span><span class="text-emerald-300 font-black text-base">${fmtP(c.bearPrice10yr)}</span></div>
+      </div>
+    </div>
+    <div id="formula-potential" class="hidden mb-3 bg-yellow-950/40 border border-yellow-500/20 rounded-xl p-4 text-sm">
+      <div class="text-yellow-400 font-bold mb-3">🎯 標準価格 — 計算式</div>
+      <div class="space-y-2 font-mono text-xs">
+        <div class="flex justify-between items-center border-b border-white/10 pb-2"><span class="text-white/50">10年後EPS</span><span class="text-white font-bold">${c.eps10yr != null ? '$'+c.eps10yr.toFixed(2) : 'N/A'}</span></div>
+        <div class="flex justify-between items-center border-b border-white/10 pb-2"><span class="text-white/50">標準PER（${c.perName ?? '業種平均'}）</span><span class="text-yellow-300 font-bold">× ${c.perStandard ?? '—'}倍</span></div>
+        <div class="flex justify-between items-center bg-yellow-500/10 rounded-lg px-3 py-2"><span class="text-yellow-300 font-bold">= 標準価格（メインシナリオ）</span><span class="text-yellow-300 font-black text-base">${fmtP(c.standardPrice10yr)}</span></div>
+      </div>
+    </div>
+    <div id="formula-leverage" class="hidden mb-3 bg-red-950/40 border border-red-500/20 rounded-xl p-4 text-sm">
+      <div class="text-red-400 font-bold mb-3">🚀 ブル価格（奥義）— 計算式</div>
+      <div class="space-y-2 font-mono text-xs">
+        <div class="flex justify-between items-center border-b border-white/10 pb-2"><span class="text-white/50">10年後EPS</span><span class="text-white font-bold">${c.eps10yr != null ? '$'+c.eps10yr.toFixed(2) : 'N/A'}</span></div>
+        <div class="flex justify-between items-center border-b border-white/10 pb-2"><span class="text-white/50">標準PER × ブルプレミアム</span><span class="text-red-300 font-bold">× ${c.perStandard ?? '—'} × 2.0倍</span></div>
+        <div class="flex justify-between items-center bg-red-500/10 rounded-lg px-3 py-2"><span class="text-red-300 font-bold">= ブル価格（奥義）</span><span class="text-red-300 font-black text-base">${fmtP(c.bullPrice10yr)}</span></div>
+      </div>
+    </div>
+
+    ${(() => {
+      const stdRet = (c.standardPrice10yr && c.price && c.price > 0) ? c.standardPrice10yr / c.price : null;
+      const bullRet = (c.bullPrice10yr && c.price && c.price > 0) ? c.bullPrice10yr / c.price : null;
+      const stdCAGR = stdRet ? (Math.pow(stdRet, 0.1) - 1) * 100 : null;
+      const bullCAGR = bullRet ? (Math.pow(bullRet, 0.1) - 1) * 100 : null;
+      const retColor = r => !r ? 'text-white/30' : r >= 5 ? 'text-emerald-300 font-black' : r >= 2 ? 'text-yellow-300' : 'text-white/50';
+      return stdRet ? `
+    <div class="rounded-xl p-4 mb-4 border border-indigo-500/25" style="background:linear-gradient(135deg,rgba(99,102,241,0.08),rgba(16,185,129,0.05))">
+      <div class="text-xs text-white/40 font-bold uppercase tracking-wider mb-3">📈 期待リターン（現在株価 ${fmtP(c.price)} からの上昇余地）</div>
+      <div class="grid grid-cols-3 gap-3 text-center">
+        <div class="bg-white/5 rounded-lg p-3">
+          <div class="text-xs text-white/40 mb-1">🐻 ベア</div>
+          <div class="text-lg font-black ${retColor((c.bearPrice10yr && c.price) ? c.bearPrice10yr/c.price : null)}">${c.bearPrice10yr && c.price ? (c.bearPrice10yr/c.price).toFixed(1)+'倍' : 'N/A'}</div>
+          <div class="text-xs text-white/30 mt-0.5">${c.bearPrice10yr && c.price ? '年率+'+(( Math.pow(c.bearPrice10yr/c.price, 0.1)-1)*100).toFixed(1)+'%' : ''}</div>
+        </div>
+        <div class="bg-indigo-500/10 rounded-lg p-3 border border-indigo-500/20">
+          <div class="text-xs text-white/40 mb-1">🎯 標準</div>
+          <div class="text-lg font-black ${retColor(stdRet)}">${stdRet.toFixed(1)}倍</div>
+          <div class="text-xs text-indigo-300 mt-0.5">年率+${stdCAGR.toFixed(1)}%</div>
+        </div>
+        <div class="bg-red-500/5 rounded-lg p-3">
+          <div class="text-xs text-white/40 mb-1">🚀 ブル</div>
+          <div class="text-lg font-black ${retColor(bullRet)}">${bullRet ? bullRet.toFixed(1)+'倍' : 'N/A'}</div>
+          <div class="text-xs text-red-300/60 mt-0.5">${bullCAGR ? '年率+'+bullCAGR.toFixed(1)+'%' : ''}</div>
+        </div>
+      </div>
+    </div>` : '';
+    })()}
+
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+      <div class="bg-white/5 rounded-lg p-3"><div class="text-white/40 text-xs">TTM EPS（現在）</div><div class="font-bold mt-1 ${c.ttmEps != null ? (c.ttmEps >= 0 ? 'text-emerald-400' : 'text-red-400') : ''}">${c.ttmEps != null ? (c.ttmEps >= 0 ? '+' : '') + c.ttmEps.toFixed(2) + 'ドル' : 'N/A'}</div></div>
+      <div class="bg-white/5 rounded-lg p-3"><div class="text-white/40 text-xs">10年後EPS（推定）</div><div class="font-bold mt-1 text-indigo-300">${c.eps10yr != null ? '$' + c.eps10yr.toFixed(2) : 'N/A'}</div></div>
+      <div class="bg-white/5 rounded-lg p-3"><div class="text-white/40 text-xs">売上CAGR（調整後）</div><div class="font-bold mt-1">+${c.projectedCAGR ?? '—'}% / 年</div></div>
+      <div class="bg-white/5 rounded-lg p-3"><div class="text-white/40 text-xs">目標OpM（成熟時）${c.hasAmortAdj ? '<span class="text-white/25 ml-1">adj.</span>' : ''}</div><div class="font-bold mt-1">${c.projectedOpmPct?.toFixed(1) ?? '—'}%${c.hasAmortAdj && c.projectedOpmGaap != null ? `<span class="text-white/25 text-xs font-normal ml-1">GAAP ${c.projectedOpmGaap.toFixed(1)}%</span>` : ''}</div></div>
+    </div>
+
+    <!-- 定量競争優位指標 -->
+    <div class="grid grid-cols-3 gap-3 mt-3 text-sm">
+      ${(() => {
+        const peg = c.pegRatio;
+        const pegColor = peg == null ? 'text-white/30' : peg < 0.5 ? 'text-yellow-300' : peg < 1.0 ? 'text-emerald-400' : peg < 2.0 ? 'text-white' : peg < 3.0 ? 'text-orange-400' : 'text-red-400';
+        const pegLabel = peg == null ? '—' : peg < 0.5 ? '激安' : peg < 1.0 ? '割安' : peg < 2.0 ? '適正' : peg < 3.0 ? '割高' : '危険域';
+        const rde = c.rdEfficiency;
+        const rdeColor = rde == null ? 'text-white/30' : rde >= 2.0 ? 'text-emerald-400' : rde >= 1.0 ? 'text-yellow-300' : 'text-orange-400';
+        const rdeLabel = rde == null ? '—' : rde >= 2.0 ? '効率高い' : rde >= 1.0 ? '普通' : '効率低い';
+        const roic = c.incrementalROIC;
+        const roicColor = roic == null ? 'text-white/30' : roic >= 30 ? 'text-emerald-400' : roic >= 10 ? 'text-yellow-300' : roic >= 0 ? 'text-orange-400' : 'text-red-400';
+        const roicLabel = roic == null ? '—' : roic >= 30 ? '堀が深い' : roic >= 10 ? '普通' : roic >= 0 ? '低効率' : '資本毀損';
+        return `
+        <div class="bg-white/5 rounded-lg p-3">
+          <div class="text-white/40 text-xs flex items-center gap-1">PEG比率 <span class="text-white/20" title="Forward PEG = (株価/TTM EPS) / 来年度EPS成長率。<1=割安、>2=割高">ⓘ</span></div>
+          <div class="font-bold mt-1 ${pegColor}">${peg != null ? peg.toFixed(2) : '—'} <span class="text-xs font-normal">${pegLabel}</span></div>
+          ${c.forwardEpsGrowthPct != null ? `<div class="text-white/25 text-xs mt-0.5">来年EPS成長 ${c.forwardEpsGrowthPct >= 0 ? '+' : ''}${c.forwardEpsGrowthPct}%</div>` : ''}
+        </div>
+        <div class="bg-white/5 rounded-lg p-3">
+          <div class="text-white/40 text-xs flex items-center gap-1">R&D効率 <span class="text-white/20" title="売上成長率 ÷ R&D費増加率。>2=高効率（少ないR&D投資で高成長）">ⓘ</span></div>
+          <div class="font-bold mt-1 ${rdeColor}">${rde != null ? rde.toFixed(2) + 'x' : '—'} <span class="text-xs font-normal">${rdeLabel}</span></div>
+          ${c.rdGrowthPct != null ? `<div class="text-white/25 text-xs mt-0.5">R&D費増加 ${c.rdGrowthPct >= 0 ? '+' : ''}${c.rdGrowthPct}%</div>` : ''}
+        </div>
+        <div class="bg-white/5 rounded-lg p-3">
+          <div class="text-white/40 text-xs flex items-center gap-1">追加ROIC <span class="text-white/20" title="ΔNOPAT / Δ投下資本。追加投資に対する追加利益率。>30%=堀が深い">ⓘ</span></div>
+          <div class="font-bold mt-1 ${roicColor}">${roic != null ? (roic >= 0 ? '+' : '') + roic + '%' : '—'} <span class="text-xs font-normal">${roicLabel}</span></div>
+        </div>`;
+      })()}
+    </div>
+  </div>
+
+  <!-- マシャ会計スコア -->
+  ${renderMasyaScorePanel(d)}
+
+  <!-- ⚡ 先行シグナル（決算前検出）Phase 1 -->
+  <div id="advanceSignalPlaceholder"></div>
+
+</div><!-- /tabcontent-summary -->
+
+<!-- ════════════════════════════════════════════════ -->
+<!-- TAB 2: チャート × 四半期財務                    -->
+<!-- ════════════════════════════════════════════════ -->
+<div id="tabcontent-chart" class="tab-content hidden">
+  <div class="chart-breakout">
+    <div class="flex gap-5 chart-side-by-side" style="align-items:flex-start">
+
+      <!-- TradingView チャート (左55%) -->
+      <div style="flex:0 0 55%;min-width:0">
+        <div class="card rounded-2xl overflow-hidden chart-pane" id="tv-chart-container">
+          <div class="flex items-center justify-center h-full text-white/30 text-sm">
+            <div class="text-center">
+              <div class="text-3xl mb-3">📈</div>
+              <div>チャートを読み込んでいます...</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 四半期トレンド (右45%) — 縦スクロールのみ、横スクロールなし -->
+      <div style="flex:0 0 45%;min-width:0;overflow-x:hidden;overflow-y:auto;max-height:580px" class="rounded-2xl">
+        ${renderTrendSection(d.trend)}
+      </div>
+
+    </div>
+  </div>
+</div><!-- /tabcontent-chart -->
+
+<!-- ════════════════════════════════════════════════ -->
+<!-- TAB 3: 投資判断                                  -->
+<!-- ════════════════════════════════════════════════ -->
+<div id="tabcontent-judgment" class="tab-content hidden space-y-5">
+  ${renderJudgmentPanel(d)}
+  ${renderExitSignalPanel(d.exitSignal)}
+  ${d.companyPhase === 'phase1' ? renderPhase1Panel(d) : ''}
+  ${generateNarrative(d.ticker, d)}
+</div><!-- /tabcontent-judgment -->
+
+<!-- ════════════════════════════════════════════════ -->
+<!-- TAB 4: 財務諸表                                  -->
+<!-- ════════════════════════════════════════════════ -->
+<div id="tabcontent-financials" class="tab-content hidden space-y-5">
+
+  <!-- PL・BS・CF 3カラム -->
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
+
+    <div class="card rounded-2xl p-5">
+      <h3 class="font-bold text-sm text-white/60 mb-4">📈 PL 損益計算書</h3>
+      <div class="space-y-3">
+        <div class="flex justify-between items-center"><span class="text-xs text-white/40">売上高（直近年）</span><span class="font-bold text-sm">${fmtM(c.revNow)}</span></div>
+        <div class="flex justify-between items-center">
+          <span class="text-xs text-white/40">売上成長率 ${c.ttmRevGrowth != null ? '<span class="text-cyan-400">TTM</span>' : '年次'}</span>
+          <span class="font-bold text-sm">${fmtPct(c.ttmRevGrowth ?? c.revGrowth)}${c.ttmRevGrowth != null && c.revGrowthAnn != null ? `<span class="text-white/30 text-xs font-normal ml-1">/ 年次${fmtPct(c.revGrowthAnn)}</span>` : ''}</span>
+        </div>
+        <div class="border-t border-white/10 pt-3">
+          <div class="flex justify-between items-center mb-2">
+            <span class="text-xs text-white/40">原価率 ${c.ttmCostRatio != null ? '<span class="text-cyan-400">TTM</span>' : '年次'}</span>
+            <span class="font-bold text-sm">${_effCost ? (_effCost*100).toFixed(1)+'%' : 'N/A'}${c.ttmCostRatio != null && c.costRatioAnn != null ? `<span class="text-white/30 text-xs font-normal ml-1">/ 年次${(c.costRatioAnn*100).toFixed(1)}%</span>` : ''}</span>
+          </div>
+          <div class="w-full bg-white/10 rounded-full h-2 mb-2"><div class="bar h-2 rounded-full ${costBarColor}" style="width:${costBarW}%"></div></div>
+          <p class="text-xs ${colorGrade(c.buffettColor)}">${c.buffettGrade}</p>
+          <p class="text-xs text-white/25 mt-1">業種: ${c.sectorLabel ?? ''} / 判定基準 ${c.costThreshold ? (c.costThreshold*100).toFixed(0)+'%以下' : ''}</p>
+        </div>
+        <div class="border-t border-white/10 pt-3 space-y-2">
+          <div class="flex justify-between"><span class="text-xs text-white/40">営業利益（直近年）</span><span class="font-bold text-sm ${c.opNow >= 0 ? 'text-emerald-400' : 'text-red-400'}">${fmtM(c.opNow)}</span></div>
+          <div class="flex justify-between"><span class="text-xs text-white/40">営業利益（前年）</span><span class="text-sm">${fmtM(c.opPrev)}</span></div>
+          <div class="flex justify-between"><span class="text-xs text-white/40">営業利益（2021年）</span><span class="text-sm ${c.op2021 != null ? (c.op2021 >= 0 ? '' : 'text-red-400/70') : ''}">${c.op2021 != null ? fmtM(c.op2021) : fmtM(c.op2020)+'<span class="text-white/30 text-xs">(2020)</span>'}</span></div>
+        </div>
+        <div class="border-t border-white/10 pt-3"><p class="text-xs text-white/70">${c.perComment}</p></div>
+      </div>
+    </div>
+
+    <div class="card rounded-2xl p-5">
+      <h3 class="font-bold text-sm text-white/60 mb-4">🏦 BS 貸借対照表</h3>
+      <div class="space-y-3">
+        <div class="flex justify-between"><span class="text-xs text-white/40">現金残高</span><span class="font-bold text-sm text-emerald-400">${fmtM(c.cashNow)}</span></div>
+        <div class="flex justify-between"><span class="text-xs text-white/40">長期借入金</span><span class="font-bold text-sm ${c.debtNow > 0 ? 'text-yellow-400' : 'text-emerald-400'}">${fmtM(c.debtNow)}</span></div>
+        <div class="flex justify-between"><span class="text-xs text-white/40">資本の部</span><span class="font-bold text-sm ${c.bsOk ? 'text-emerald-400' : 'text-red-400'}">${fmtM(c.equityNow)}</span></div>
+        <div class="border-t border-white/10 pt-3"><p class="text-xs ${c.bsOk ? 'text-emerald-400' : 'text-red-400'}">${c.bsComment}</p></div>
+        <div class="border-t border-white/10 pt-3 space-y-2">
+          <div class="text-xs text-white/40 mb-1">財務健全性</div>
+          ${[['無借金経営', c.debtNow === 0 || c.debtNow === null],['キャッシュリッチ', c.cashNow > 0],['資本の部プラス', c.bsOk],['借入<売上', c.debtNow != null && c.revNow && c.debtNow < c.revNow]].map(([label, ok]) => `<div class="flex items-center gap-2"><span class="${ok ? 'text-emerald-400' : 'text-white/20'}">${ok ? '✓' : '—'}</span><span class="text-xs ${ok ? 'text-white/70' : 'text-white/20'}">${label}</span></div>`).join('')}
+        </div>
+      </div>
+    </div>
+
+    <div class="card rounded-2xl p-5">
+      <h3 class="font-bold text-sm text-white/60 mb-4">💵 CF キャッシュフロー</h3>
+      <div class="space-y-3">
+        <div class="flex justify-between"><span class="text-xs text-white/40">株式発行額（直近年）</span><span class="font-bold text-sm ${c.issuedNow > 100 ? 'text-red-400' : 'text-white/70'}">${fmtM(c.issuedNow)}</span></div>
+        <div class="flex justify-between"><span class="text-xs text-white/40">自社株買い（直近年）</span><span class="font-bold text-sm text-emerald-400">${fmtM(c.buybackNow)}</span></div>
+        <div class="border-t border-white/10 pt-3">
+          <div class="text-xs text-white/40 mb-2">希薄化リスク</div>
+          <div class="w-full bg-white/10 rounded-full h-2 mb-2"><div class="bar h-2 rounded-full ${(c.dilutionRatio ?? 1) < 0.03 ? 'bg-emerald-400' : (c.dilutionRatio ?? 1) < 0.10 ? 'bg-yellow-400' : 'bg-red-500'}" style="width:${Math.min((c.dilutionRatio ?? 0) * 400, 100)}%"></div></div>
+          <p class="text-xs text-white/60">${c.dilutionComment}</p>
+        </div>
+        <div class="border-t border-white/10 pt-3 space-y-2">
+          <div class="text-xs text-white/40 mb-1">キャッシュ健全性</div>
+          ${[['希薄化軽微（<3%）', (c.dilutionRatio ?? 1) < 0.03],['自社株買い実施', c.buybackNow > 0],['資金調達不要', c.cashNow && c.cashNow > 0 && c.opNow >= 0]].map(([label, ok]) => `<div class="flex items-center gap-2"><span class="${ok ? 'text-emerald-400' : 'text-white/20'}">${ok ? '✓' : '—'}</span><span class="text-xs ${ok ? 'text-white/70' : 'text-white/20'}">${label}</span></div>`).join('')}
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ★ マシャ式 株主還元分析 -->
+  ${(c.cumBuyback > 0 || c.apicNow != null) ? `
+  <div class="card rounded-2xl p-5">
+    <div class="flex items-center justify-between flex-wrap gap-2 mb-4">
+      <h3 class="font-bold text-sm text-white/70">💎 株主還元分析（マシャ式）</h3>
+      ${c.overBuyback ? '<span class="text-xs bg-orange-500/20 text-orange-300 border border-orange-500/40 rounded-full px-2 py-0.5">⚠️ 行き過ぎた還元 — 資本の部が減少</span>' : (c.cumBuybackRatio >= 20 ? '<span class="text-xs bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 rounded-full px-2 py-0.5">✨ 積極的な株主還元</span>' : '')}
+    </div>
+
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+      <div class="bg-white/5 rounded-lg p-3">
+        <div class="text-white/40 text-xs">累計自社株買い（${c.cumBuybackN}年）</div>
+        <div class="font-bold mt-1 text-emerald-300">${fmtM(c.cumBuyback)}</div>
+        <div class="text-xs text-white/30 mt-0.5">時価総額比 ${c.cumBuybackRatio ?? '—'}%</div>
+      </div>
+      <div class="bg-white/5 rounded-lg p-3">
+        <div class="text-white/40 text-xs">年間株数変化</div>
+        <div class="font-bold mt-1 ${c.shareChangePct == null ? 'text-white/40' : c.shareChangePct <= 0 ? 'text-emerald-300' : 'text-red-300'}">${c.shareChangePct == null ? '—' : (c.shareChangePct > 0 ? '+' : '') + c.shareChangePct + '%'}</div>
+        <div class="text-xs text-white/30 mt-0.5">${c.shareChangePct == null ? '' : c.shareChangePct < 0 ? '株数減少＝価値向上' : c.shareChangePct > 1 ? '希薄化' : '横ばい'}</div>
+      </div>
+      <div class="bg-white/5 rounded-lg p-3">
+        <div class="text-white/40 text-xs">資本の部の変化${c.equityOldestYr ? '（'+c.equityOldestYr+'比）' : ''}</div>
+        <div class="font-bold mt-1 ${c.equityChangeRate == null ? 'text-white/40' : c.equityChangeRate >= 0 ? 'text-emerald-300' : 'text-orange-300'}">${c.equityChangeRate == null ? '—' : (c.equityChangeRate > 0 ? '+' : '') + c.equityChangeRate + '%'}</div>
+        <div class="text-xs text-white/30 mt-0.5">${c.equityChangeRate == null ? '' : c.equityChangeRate < 0 ? '内部留保を取り崩し' : '内部留保が拡大'}</div>
+      </div>
+      <div class="bg-white/5 rounded-lg p-3">
+        <div class="text-white/40 text-xs">現在の資本の部</div>
+        <div class="font-bold mt-1">${fmtM(c.equityNow)}</div>
+        <div class="text-xs text-white/30 mt-0.5">株主価値の蓄積</div>
+      </div>
+    </div>
+
+    ${(c.apicNow != null && c.reNow != null) ? `
+    <div class="border-t border-white/10 pt-3">
+      <div class="text-xs text-white/40 mb-2">資本の部の内訳（マシャ式分解）</div>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-2 text-xs">
+        <div class="flex justify-between bg-white/5 rounded-lg px-3 py-2"><span class="text-white/50">資本剰余金（増資の蓄積）</span><span class="font-bold">${fmtM(c.apicNow)}</span></div>
+        <div class="flex justify-between bg-white/5 rounded-lg px-3 py-2"><span class="text-white/50">利益剰余金（内部留保）</span><span class="font-bold ${c.reNow >= 0 ? 'text-emerald-300' : 'text-red-300'}">${fmtM(c.reNow)}</span></div>
+        <div class="flex justify-between bg-white/5 rounded-lg px-3 py-2"><span class="text-white/50">その他（自己株式等）</span><span class="font-bold ${c.eqOther < 0 ? 'text-orange-300' : ''}">${fmtM(c.eqOther)}</span></div>
+      </div>
+    </div>` : ''}
+
+    <p class="text-xs text-white/30 mt-3 leading-relaxed">
+      ※ 営業利益 ＝ 法人税 ＋ 配当 ＋ 自社株買い ＋ 利益剰余金。累計自社株買いは会計上の株価を底上げ（×${c.buybackUplift ?? '—'}）する一方、資本の部の減少は会計目標を割引く（×${c.equityPenalty ?? '—'}）。行き過ぎた還元は内部留保を食うためマイナス評定。
+    </p>
+  </div>` : ''}
+
+  <!-- 総合判定 -->
+  <div class="card ${verdictBg(c.verdictColor)} rounded-2xl p-6 border">
+    <div class="flex items-center justify-between flex-wrap gap-4">
+      <div>
+        <div class="text-xs text-white/50 mb-1">マシャ流 総合判定（スコア: ${c.score}/8）</div>
+        <div class="text-2xl font-black">${c.verdict}</div>
+      </div>
+      <div class="flex gap-2 flex-wrap">
+        ${c.costRatio < 0.50 ? badge('原価率優秀','emerald') : ''}
+        ${c.bsOk ? badge('BS健全','emerald') : ''}
+        ${c.cashNow > 0 ? badge('キャッシュリッチ','emerald') : ''}
+        ${c.opNow > 0 ? badge('営業黒字','emerald') : badge('営業赤字','red')}
+        ${(c.dilutionRatio ?? 1) < 0.05 ? badge('希薄化なし','emerald') : badge('希薄化注意','yellow')}
+        ${c.debtNow === 0 ? badge('無借金','emerald') : ''}
+      </div>
+    </div>
+  </div>
+
+  <div class="text-center text-xs text-white/20 pb-4">
+    ※ このツールはマシャ塾の投資理論に基づく学習目的の分析です。投資判断はご自身の責任で行ってください。<br>
+    データ出所: SEC EDGAR (XBRL) / Yahoo Finance
+  </div>
+
+</div><!-- /tabcontent-financials -->`;
+
+  el.classList.remove('hidden');
+  switchTab('summary');
+  setTimeout(() => updateWatchBtn(d.ticker), 0);
+  setTimeout(() => { el.querySelectorAll('.bar').forEach(b => b.style.width = b.style.width); }, 100);
+
+  // Load advance signals asynchronously (Phase 1)
+  loadAdvanceSignals(d.ticker);
+}
+
+// ── ウォッチリスト ────────────────────────────────
+function getWatchlist() { return JSON.parse(localStorage.getItem('masyaWatchlist') || '[]'); }
+function saveWatchlist(l) { localStorage.setItem('masyaWatchlist', JSON.stringify(l)); }
+function toggleWatch(ticker) {
+  const wl = getWatchlist();
+  const idx = wl.indexOf(ticker);
+  if (idx >= 0) wl.splice(idx, 1); else wl.push(ticker);
+  saveWatchlist(wl);
+  updateWatchBtn(ticker);
+  updateSectorTabs();
+}
+function updateWatchBtn(ticker) {
+  const watching = getWatchlist().includes(ticker);
+  document.querySelectorAll(`.watch-btn[data-ticker="${ticker}"]`).forEach(b => {
+    b.textContent = watching ? '★ ウォッチ中' : '☆ ウォッチ';
+    b.classList.toggle('watching', watching);
+  });
+}
+
+// ── スクリーナー ──────────────────────────────────
+const SECTOR_TICKERS = {
+  '🔍 動的スキャン':  null,  // nullは動的モードを示す
+  'AIハイグロース': ['NVDA','META','GOOGL','MSFT','APP','PLTR','CRWD','DDOG','SNOW','MDB','ZS','NET','AI','IONQ','SOUN'],
+  '半導体':         ['AMD','AVGO','QCOM','MU','AMAT','LRCX','KLAC','TXN','MRVL','ARM','ON','NXPI','SMCI','ASML','TSM'],
+  'SaaS':           ['NOW','CRM','ADBE','INTU','TEAM','MNDY','HUBS','TTD','OKTA','BILL','GTLB','CFLT','S','FOUR','SMAR'],
+  'コンシューマー': ['AAPL','TSLA','AMZN','NFLX','SPOT','UBER','ABNB','BKNG','LYFT','DIS'],
+  'FinTech':        ['V','MA','COIN','PYPL','SQ','NU','AFRM','SOFI','HOOD','UPST'],
+  'その他':         ['RKLB','AXON','NVO','LLY','ISRG','TMO','DECK','RCL','AXON','LMT'],
+  'ウォッチリスト': [],
+};
+let _activeSector    = '🔍 動的スキャン';
+let _screenerMinScore = 60;
+let _screenerRunning  = false;
+let _screenerResults  = [];
+
+function updateSectorTabs() {
+  const wl = getWatchlist();
+  SECTOR_TICKERS['ウォッチリスト'] = [...wl];
+  document.querySelectorAll('.sector-tab').forEach(btn => {
+    const s = btn.dataset.sector;
+    if (s === 'ウォッチリスト') {
+      btn.textContent = `★ ウォッチリスト (${wl.length})`;
+    }
+  });
+}
+
+function initSectorTabs() {
+  const container = document.getElementById('sectorTabs');
+  if (!container) return;
+  const sectors = Object.keys(SECTOR_TICKERS);
+  container.innerHTML = '';
+  sectors.forEach(s => {
+    const btn = document.createElement('button');
+    btn.className = 'sector-tab' + (s === _activeSector ? ' active' : '');
+    btn.dataset.sector = s;
+    btn.textContent = s === 'ウォッチリスト'
+      ? `★ ウォッチリスト (${getWatchlist().length})`
+      : s;
+    btn.onclick = () => {
+      _activeSector = s;
+      document.querySelectorAll('.sector-tab').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+    };
+    container.appendChild(btn);
+  });
+}
+
+async function runScreener() {
+  if (_screenerRunning) return;
+
+  const isDynamic = SECTOR_TICKERS[_activeSector] === null;
+  const tickers   = isDynamic ? [] : (SECTOR_TICKERS[_activeSector] ?? []);
+  const minScore  = _screenerMinScore;
+
+  if (!isDynamic && tickers.length === 0) {
+    document.getElementById('screenerTable').innerHTML =
+      '<p class="text-white/30 text-sm text-center py-8">銘柄がありません</p>';
+    return;
+  }
+
+  _screenerRunning = true;
+  const btn = document.getElementById('screenerBtn');
+  if (btn) btn.disabled = true;
+
+  const progress    = document.getElementById('screenerProgress');
+  const progressBar = document.getElementById('screenerProgressBar');
+  const statusEl    = document.getElementById('screenerStatus');
+  const tableEl     = document.getElementById('screenerTable');
+
+  progress.classList.remove('hidden');
+  tableEl.innerHTML = '';
+
+  // ── 動的スキャンモード ──
+  if (isDynamic) {
+    // Step1: 銘柄プールを取得（即座に返る）
+    statusEl.textContent = '🔍 $10B+成長株プールを読み込み中...';
+    progressBar.style.width = '3%';
+    let poolTickers = [];
+    try {
+      const poolResp = await fetch('/.netlify/functions/screener', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode: 'getpool' }),
+      });
+      const poolData = await poolResp.json();
+      poolTickers = Array.isArray(poolData) ? poolData : [];
+    } catch(e) {
+      statusEl.textContent = `❌ エラー: ${e.message}`;
+      _screenerRunning = false;
+      if (btn) btn.disabled = false;
+      progress.classList.add('hidden');
+      return;
+    }
+
+    if (poolTickers.length === 0) {
+      statusEl.textContent = '❌ プール取得失敗';
+      _screenerRunning = false;
+      if (btn) btn.disabled = false;
+      progress.classList.add('hidden');
+      return;
+    }
+
+    statusEl.textContent = `${poolTickers.length}銘柄のSEC分析を開始...`;
+    progressBar.style.width = '5%';
+
+    // Step2: 既存バッチ方式でSEC分析（10銘柄/コール）
+    const BATCH = 10;
+    let results = [];
+    for (let i = 0; i < poolTickers.length; i += BATCH) {
+      const batch = poolTickers.slice(i, i + BATCH);
+      const pct = 5 + Math.round((i / poolTickers.length) * 90);
+      progressBar.style.width = pct + '%';
+      statusEl.textContent = `SEC分析中... ${i + 1}〜${Math.min(i + BATCH, poolTickers.length)} / ${poolTickers.length}銘柄`;
+      try {
+        const resp = await fetch('/.netlify/functions/screener', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tickers: batch }),
+        });
+        const batchResults = await resp.json();
+        if (Array.isArray(batchResults)) results.push(...batchResults);
+      } catch(e) { console.error('dynamic screener batch error:', e); }
+    }
+
+    // Step3: 複合スコア計算（シグナル60% + 売上成長25% + モメンタム15%）
+    results = results
+      .filter(r => !r.error)
+      .map(r => {
+        const yoyNorm = Math.min(100, Math.max(0, (r.revYoY ?? 0) * 1.5));
+        const momNorm = Math.min(100, Math.max(0, 100 + (r.chg52wHigh ?? -50)));
+        const compositeScore = Math.round(
+          (r.signalScore ?? 0) * 0.6 + yoyNorm * 0.25 + momNorm * 0.15
+        );
+        return { ...r, compositeScore };
+      })
+      .sort((a, b) => (b.compositeScore ?? 0) - (a.compositeScore ?? 0));
+
+    progressBar.style.width = '100%';
+    statusEl.textContent = `✅ ${results.length}銘柄のスキャン完了`;
+    _screenerResults = results;
+    _screenerRunning = false;
+    if (btn) btn.disabled = false;
+    progress.classList.add('hidden');
+    renderScreenerTable(_screenerResults, true);
+    return;
+  }
+
+  // ── 通常モード（セクタータブ）──
+  const BATCH = 10;
+  let results = [];
+  for (let i = 0; i < tickers.length; i += BATCH) {
+    const batch = tickers.slice(i, i + BATCH);
+    const pct   = Math.round((i / tickers.length) * 90);
+    progressBar.style.width = pct + '%';
+    statusEl.textContent    = `分析中... ${i + 1}〜${Math.min(i + BATCH, tickers.length)} / ${tickers.length}`;
+    try {
+      const resp = await fetch('/.netlify/functions/screener', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tickers: batch }),
+      });
+      const batchResults = await resp.json();
+      if (Array.isArray(batchResults)) results.push(...batchResults);
+    } catch(e) { console.error('screener batch error:', e); }
+  }
+
+  progressBar.style.width = '100%';
+  statusEl.textContent    = `完了 — ${results.length}銘柄分析`;
+  _screenerResults = results;
+  _screenerRunning = false;
+  if (btn) btn.disabled = false;
+  progress.classList.add('hidden');
+  renderScreenerTable(_screenerResults, false);
+}
+
+function renderScreenerTable(results, isDynamic = false) {
+  const minScore = _screenerMinScore;
+  const tableEl  = document.getElementById('screenerTable');
+  const statusEl = document.getElementById('screenerStatus');
+
+  const filtered = isDynamic
+    ? results.filter(r => !r.error)  // 動的モードはバックエンドでソート済み
+    : results
+        .filter(r => !r.error && (r.signalScore ?? 0) >= minScore)
+        .sort((a, b) => (b.signalScore ?? 0) - (a.signalScore ?? 0));
+
+  if (!isDynamic) {
+    statusEl.textContent = `完了 — ${filtered.length}/${results.length}銘柄がスコア${minScore}以上`;
+  }
+
+  if (filtered.length === 0) {
+    tableEl.innerHTML = isDynamic
+      ? '<p class="text-white/30 text-sm text-center py-8">結果がありません</p>'
+      : `<p class="text-white/30 text-sm text-center py-8">スコア${minScore}以上の銘柄が見つかりませんでした</p>`;
+    return;
+  }
+
+  const scoreColor = s => s >= 70 ? 'text-red-300 bg-red-500/15' : s >= 60 ? 'text-orange-300 bg-orange-500/10' : s >= 40 ? 'text-white/40 bg-white/5' : 'text-white/20';
+  const compColor  = s => s >= 70 ? 'text-cyan-300 bg-cyan-500/15' : s >= 50 ? 'text-cyan-400 bg-cyan-500/10' : s >= 30 ? 'text-white/40 bg-white/5' : 'text-white/20';
+  const fmtPct = v => v == null ? '—' : (v > 0 ? '+' : '') + v.toFixed(1) + '%';
+  const fmtMktCap = v => {
+    if (!v) return '—';
+    if (v >= 1e12) return (v / 1e12).toFixed(1) + '兆ドル';
+    if (v >= 1e8)  return Math.round(v / 1e8) + '億ドル';
+    return (v / 1e6).toFixed(0) + 'M';
+  };
+  const phaseLabel = p => p === 'phase1' ? '<span class="text-purple-400 text-xs">🌱P1</span>' : p === 'phase3' ? '<span class="text-emerald-400 text-xs">🏆P3</span>' : '<span class="text-white/30 text-xs">P2</span>';
+
+  tableEl.innerHTML = `
+<table class="w-full text-sm">
+  <thead>
+    <tr>
+      <th class="px-2 py-1.5 text-left text-xs text-white/35 font-normal border-b border-white/8">銘柄</th>
+      <th class="px-2 py-1.5 text-right text-xs text-white/35 font-normal border-b border-white/8" title="${isDynamic ? '複合スコア (signalScore×0.6 + YoY×0.25 + モメンタム×0.15)' : 'シグナルスコア'}">${isDynamic ? '複合Score' : 'Score'}</th>
+      <th class="px-2 py-1.5 text-right text-xs text-white/35 font-normal border-b border-white/8">時価総額</th>
+      <th class="px-2 py-1.5 text-right text-xs text-white/35 font-normal border-b border-white/8">売上YoY</th>
+      <th class="px-2 py-1.5 text-right text-xs text-white/35 font-normal border-b border-white/8">加速</th>
+      <th class="px-2 py-1.5 text-right text-xs text-white/35 font-normal border-b border-white/8">営業利益率</th>
+      <th class="px-2 py-1.5 text-right text-xs text-white/35 font-normal border-b border-white/8">RoF40</th>
+      <th class="px-2 py-1.5 text-right text-xs text-white/35 font-normal border-b border-white/8">株価</th>
+      <th class="px-2 py-1.5 text-right text-xs text-white/35 font-normal border-b border-white/8">1日</th>
+      <th class="px-2 py-1.5 text-right text-xs text-white/35 font-normal border-b border-white/8">フェーズ</th>
+    </tr>
+  </thead>
+  <tbody>
+    ${filtered.map(r => `
+      <tr class="sc-row border-b border-white/5" onclick="selectScreenerTicker('${r.ticker}')">
+        <td class="px-2 py-2 text-left">
+          <span class="font-bold text-white">${r.ticker}</span>
+          <span class="text-white/30 text-xs ml-1 hidden sm:inline">${(r.name ?? '').substring(0, 20)}</span>
+        </td>
+        <td class="px-2 py-2 text-right">
+          ${isDynamic
+            ? `<span class="inline-flex items-center justify-center w-9 h-5 rounded text-xs font-bold ${compColor(r.compositeScore ?? 0)}">${r.compositeScore ?? '—'}</span>
+               <span class="text-white/20 text-xs ml-1">(${r.signalScore})</span>`
+            : `<span class="inline-flex items-center justify-center w-9 h-5 rounded text-xs font-bold ${scoreColor(r.signalScore)}">${r.signalScore}</span>`
+          }
+        </td>
+        <td class="px-2 py-2 text-right text-white/50 text-xs">${fmtMktCap(r.mktcap)}</td>
+        <td class="px-2 py-2 text-right ${r.revYoY > 0 ? 'text-emerald-400' : 'text-red-400'}">${fmtPct(r.revYoY)}</td>
+        <td class="px-2 py-2 text-right ${r.yoyAccel > 5 ? 'text-emerald-400' : r.yoyAccel < 0 ? 'text-red-400' : 'text-white/50'}">${fmtPct(r.yoyAccel)}</td>
+        <td class="px-2 py-2 text-right ${r.opMargin > 15 ? 'text-emerald-400' : r.opMargin > 0 ? 'text-white/70' : 'text-red-400'}">${r.opMargin != null ? r.opMargin.toFixed(1) + '%' : '—'}</td>
+        <td class="px-2 py-2 text-right ${r.rof40 >= 60 ? 'text-emerald-400' : r.rof40 >= 40 ? 'text-yellow-400' : 'text-white/40'}">${r.rof40 != null ? r.rof40.toFixed(0) : '—'}</td>
+        <td class="px-2 py-2 text-right text-white/70">${r.price != null ? '$' + r.price.toFixed(2) : '—'}</td>
+        <td class="px-2 py-2 text-right ${r.chg1d > 0 ? 'text-emerald-400' : r.chg1d < 0 ? 'text-red-400' : 'text-white/40'}">${r.chg1d != null ? (r.chg1d > 0 ? '+' : '') + r.chg1d.toFixed(2) + '%' : '—'}</td>
+        <td class="px-2 py-2 text-right">${phaseLabel(r.phase)}</td>
+      </tr>
+    `).join('')}
+  </tbody>
+</table>`;
+}
+
+function selectScreenerTicker(ticker) {
+  document.getElementById('tickerInput').value = ticker;
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+  analyze();
+}
+
+// 初期化
+initSectorTabs();
+
+</script>
+</body>
+</html>

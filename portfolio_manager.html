@@ -532,31 +532,16 @@
   </section>
 
   <section id="analysis" aria-labelledby="analysis-title" hidden>
-    <div class="pm-heading"><h2 id="analysis-title">個別企業分析</h2></div>
-    <p class="pm-muted">SEC EDGARの提出データから、四半期推移・Rule of 40・FCF・マシャ式スコアを算出します（旧Stock Analyzerの移植・修正版）。保有株数や現金には反映しません。</p>
-    <form class="pm-card pm-actions" id="pm-analysis-form" autocomplete="off">
-      <label for="pm-analysis-ticker">銘柄コード</label>
-      <input id="pm-analysis-ticker" list="pm-analysis-tickers" maxlength="10" required placeholder="NVDA" style="text-transform:uppercase;max-width:140px">
-      <datalist id="pm-analysis-tickers"></datalist>
-      <button type="submit" class="btn btn-primary" id="pm-analysis-run">分析する</button>
-      <span class="pm-muted pm-small">候補：保有・目標配分・ウォッチリスト・企業評価の銘柄</span>
-    </form>
-    <p id="pm-analysis-status" class="pm-callout" role="status" hidden></p>
-    <div id="pm-analysis-result" aria-live="polite"></div>
+    <div class="pm-heading"><h2 id="analysis-title">個別企業分析</h2>
+      <a class="btn btn-ghost pm-small" href="research/index.html" target="_blank" rel="noopener">新しいタブで開く ↗</a></div>
+    <p class="pm-muted pm-small">旧Stock Analyzerの画面をそのまま移植。数値は修正版のSEC計算（第4四半期の補完・期末日で照合した前年比・通期の重複除去）。保有株数や現金には反映しません。</p>
+    <iframe class="pm-legacy-frame" title="個別企業分析（旧Stock Analyzer）" data-src="research/index.html" loading="lazy"></iframe>
   </section>
   <section id="screener" aria-labelledby="screener-title" hidden>
-    <div class="pm-heading"><h2 id="screener-title">銘柄スクリーナー</h2></div>
-    <p class="pm-muted">最大10銘柄をまとめて、参入シグナル・フェーズ・マシャ点・撤退シグナルで比較します（SEC提出データ）。保有や計画には反映しません。</p>
-    <form class="pm-card" id="pm-screener-form" autocomplete="off">
-      <label for="pm-screener-tickers">銘柄コード（カンマ・スペース区切り、10件まで）</label>
-      <textarea id="pm-screener-tickers" rows="2" maxlength="200" placeholder="PLTR, NVDA, APP" style="display:block;width:100%;margin:8px 0;text-transform:uppercase"></textarea>
-      <div class="pm-actions">
-        <button type="button" class="btn btn-ghost" id="pm-screener-fill">保有・目標・ウォッチリストの銘柄を入れる</button>
-        <button type="submit" class="btn btn-primary" id="pm-screener-run">スクリーニング</button>
-      </div>
-    </form>
-    <p id="pm-screener-status" class="pm-callout" role="status" hidden></p>
-    <div id="pm-screener-result" aria-live="polite"></div>
+    <div class="pm-heading"><h2 id="screener-title">銘柄スクリーナー</h2>
+      <a class="btn btn-ghost pm-small" href="research/screener.html" target="_blank" rel="noopener">新しいタブで開く ↗</a></div>
+    <p class="pm-muted pm-small">旧Stock Analyzerのスクリーナー画面をそのまま移植。判定は修正版のSECデータで計算します。</p>
+    <iframe class="pm-legacy-frame" title="銘柄スクリーナー（旧Stock Analyzer）" data-src="research/screener.html" loading="lazy"></iframe>
   </section>
   <section id="chart" aria-labelledby="chart-title" hidden>
     <div class="pm-heading"><h2 id="chart-title">株価チャート</h2></div>
@@ -1070,9 +1055,8 @@
 <script src="app/legacy-notice.js"></script>
 <script src="app/api.js"></script>
 <script src="app/market-data.js"></script>
-<script src="app/analysis.js"></script>
-<script src="app/screener.js"></script>
 <script src="app/price-chart.js"></script>
+<script src="app/legacy-frames.js"></script>
 <script src="app/firebase-config.js"></script>
 <script src="app/research-import.js"></script>
 <script>

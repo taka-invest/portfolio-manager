@@ -31,7 +31,7 @@ before(async () => {
     projectId: 'demo-finance-base',
     firestore: {
       rules: readFileSync(resolve(import.meta.dirname, '../../firestore.rules'), 'utf8'),
-      host: '127.0.0.1', port: 8080
+      host: '127.0.0.1', port: 8180
     }
   });
 });

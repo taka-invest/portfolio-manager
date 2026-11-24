@@ -169,9 +169,9 @@ async function logout() {
 }
 
 export async function init() {
-  // Local Emulator Suite (npm run dev:emulators serves Hosting on :5000): use the
+  // Local Emulator Suite (npm run dev:emulators serves Hosting on :5100): use the
   // demo project and emulated Auth/Firestore so no production data is touched.
-  const emulator = ['localhost', '127.0.0.1'].includes(location.hostname) && location.port === '5000';
+  const emulator = ['localhost', '127.0.0.1'].includes(location.hostname) && location.port === '5100';
   const cfg = emulator
     ? { apiKey: 'demo-key', authDomain: location.host, projectId: 'demo-finance-base', appId: 'demo-app' }
     : window.PMFirebaseWebConfig;
@@ -200,8 +200,8 @@ export async function init() {
     auth = f.getAuth(a.initializeApp(cfg));
     db = d.getFirestore(a.getApp());
     if (emulator) {
-      f.connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true });
-      d.connectFirestoreEmulator(db, '127.0.0.1', 8080);
+      f.connectAuthEmulator(auth, 'http://127.0.0.1:9199', { disableWarnings: true });
+      d.connectFirestoreEmulator(db, '127.0.0.1', 8180);
       if (!headless) status('ローカルEmulatorに接続しています（本番データには触れません）。');
     }
     // Wait until the persisted sign-in has been restored before deciding "not logged in".

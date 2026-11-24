@@ -96,6 +96,6 @@ test('emulator config mirrors production; /api routes go only to Tokyo functions
   const strip = c => ({ ...c, hosting: { ...c.hosting, rewrites: [] }, emulators: { ...c.emulators, hosting: undefined } });
   assert.deepEqual(JSON.parse(JSON.stringify(strip(emu))), JSON.parse(JSON.stringify(strip(prod))));
   const client = fs.readFileSync(path.join(root, 'app/firebase-cloud.mjs'), 'utf8');
-  assert.match(client, /location\.port === '5000'/);
+  assert.match(client, /location\.port === '5100'/);
   assert.match(client, /projectId: 'demo-finance-base'/);
 });
