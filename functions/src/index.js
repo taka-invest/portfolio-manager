@@ -11,6 +11,7 @@ import { handler as analyzeLegacy } from './legacy/analyze.js';
 import { handler as screenerLegacy } from './legacy/screener.js';
 import { handler as chartLegacy } from './legacy/chart.js';
 import { ticker, tickers } from './input.js';
+import { companyFinancials } from './sec/company.js';
 
 initializeApp();
 setGlobalOptions({
@@ -99,4 +100,20 @@ export const screenerApi = secure('screener', {
     return { httpMethod: 'POST', body: JSON.stringify({ tickers: list }) };
   },
   run: screenerLegacy
+});
+
+// Corrected SEC financial statements (Q4 synthesis, YTD differencing, date-matched YoY/TTM, FCF).
+export const financialsApi = secure('financials', {
+  prepare(req) {
+    const t = makeTicker(req, 'GET');
+    return { ticker: t };
+  },
+  async run(event) {
+    try {
+      return { statusCode: 200, body: await companyFinancials(event.ticker) };
+    } catch (err) {
+      if (err.status === 404) return { statusCode: 404, body: { error: 'Ticker not found in SEC company list' } };
+      throw err;
+    }
+  }
 });
