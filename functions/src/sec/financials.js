@@ -59,7 +59,7 @@ export function durationFacts(companyfacts, metric) {
 }
 
 /** Discrete fiscal quarters: direct ~3-month facts, plus differences of YTD cumulatives. */
-export function quarters(facts, { additive = true } = {}) {
+export function quarters(facts, { additive = true, q4Approx = false } = {}) {
   const out = new Map(); // end -> quarter
   const put = (q, direct) => {
     const old = out.get(q.end);
@@ -87,8 +87,9 @@ export function quarters(facts, { additive = true } = {}) {
       }
     }
   }
-  if (additive) {
+  if (additive || q4Approx) {
     // Fallback when no 9M YTD fact exists: Q4 = FY − (Q1+Q2+Q3) for three contiguous quarters.
+    // For per-share values (q4Approx) this is an approximation (share count changes).
     for (const fy of facts.filter(f => within(f.days, ANNUAL))) {
       if (out.has(fy.end)) continue;
       const inside = [...out.values()].filter(q => q.start >= fy.start && q.end < fy.end)
@@ -98,10 +99,24 @@ export function quarters(facts, { additive = true } = {}) {
       const qDays = dayNum(fy.end) - dayNum(inside[2].end);
       if (!contiguous || !within(qDays, QUARTER)) continue;
       put({ start: isoOf(dayNum(inside[2].end) + 1), end: fy.end, val: fy.val - inside.reduce((s, q) => s + q.val, 0),
-        derived: true, direct: false, src: { annual: fy, quarters: inside.map(q => q.end) } }, false);
+        derived: true, approx: !additive, direct: false, src: { annual: fy, quarters: inside.map(q => q.end) } }, false);
     }
   }
-  return [...out.values()].sort((a, b) => a.end.localeCompare(b.end));
+  // Collapse the same quarter tagged with end dates a few days apart (seen in old
+  // NVDA filings: 2010-07-31 vs 2010-08-01). Prefer direct, then most recently filed.
+  const sorted = [...out.values()].sort((a, b) => a.end.localeCompare(b.end));
+  const merged = [];
+  const filed = q => q.src?.filed ?? q.src?.minuend?.filed ?? q.src?.annual?.filed ?? '';
+  for (const q of sorted) {
+    const last = merged.at(-1);
+    if (last && dayNum(q.end) - dayNum(last.end) <= 7) {
+      const better = (q.direct && !last.direct) || (q.direct === last.direct && filed(q) > filed(last));
+      if (better) merged[merged.length - 1] = q;
+      continue;
+    }
+    merged.push(q);
+  }
+  return merged;
 }
 
 export function annuals(facts) {
@@ -151,7 +166,7 @@ export function analyzeFacts(companyfacts) {
   const series = {};
   for (const metric of Object.keys(CONCEPTS)) {
     const facts = durationFacts(companyfacts, metric);
-    series[metric] = { q: quarters(facts, { additive: ADDITIVE.has(metric) }), a: annuals(facts) };
+    series[metric] = { q: quarters(facts, { additive: ADDITIVE.has(metric), q4Approx: metric === 'epsDiluted' }), a: annuals(facts) };
   }
   const rev = series.revenue.q;
   const at = (metric, end) => series[metric].q.find(q => q.end === end) ?? null;
@@ -167,7 +182,9 @@ export function analyzeFacts(companyfacts) {
     const opTtm = ttm(series.operatingIncome.q, r.end);
     const opPrev = yearAgo(series.operatingIncome.q, r.end);
     const opTtmPrev = opPrev ? ttm(series.operatingIncome.q, opPrev.end) : null;
-    const epsTtm = ttm(series.epsDiluted.q, r.end);
+    // Exact full-year diluted EPS when the TTM window is a fiscal year; otherwise sum of quarters.
+    const fyEps = series.epsDiluted.a.find(a => a.end === r.end);
+    const epsTtm = fyEps ? { val: fyEps.val, derived: false } : ttm(series.epsDiluted.q, r.end);
     const epsPrev = yearAgo(series.epsDiluted.q, r.end);
     const revYoY = growthPct(r.val, prev?.val);
     const revTtmYoY = growthPct(revTtm?.val, revTtmPrev?.val);
@@ -175,7 +192,7 @@ export function analyzeFacts(companyfacts) {
     return {
       start: r.start, end: r.end, revenueDerived: r.derived,
       revenue: r.val, grossProfit: gp?.val ?? null, operatingIncome: op?.val ?? null,
-      netIncome: ni?.val ?? null, epsDiluted: eps?.val ?? null, epsDilutedDerived: eps?.derived ?? null,
+      netIncome: ni?.val ?? null, epsDiluted: eps ? (eps.derived ? round(eps.val, 2) : eps.val) : null, epsDilutedDerived: eps?.derived ?? null,
       operatingCashFlow: ocf?.val ?? null, capex: cap?.val ?? null, fcf,
       grossMarginPct: round(pct(gp?.val, r.val)), operatingMarginPct: round(pct(op?.val, r.val)),
       fcfMarginPct: round(pct(fcf, r.val)),
@@ -206,7 +223,8 @@ export function analyzeFacts(companyfacts) {
       dedupe: '同一期間の値は最新提出（修正報告・後年の比較表示を含む）を採用',
       yoy: '同じ指標の約1年前（期末日±10日）の四半期と比較。前年が0以下・欠損ならnull',
       ttm: '連続する4四半期の合計（期間350〜380日）。欠けがあればnull',
-      eps: '希薄化後EPS（EarningsPerShareDiluted）。TTMは4四半期の合計（近似）',
+      eps: '希薄化後EPS（EarningsPerShareDiluted）。Q4は通期EPS−(Q1+Q2+Q3)の近似（epsDilutedDerived=true）。TTMは期末が会計年度末なら通期EPS（正確）、それ以外は4四半期の合計（近似）',
+      restatement: '最新提出値を採用するため、事業売却等で継続事業ベースに修正再表示された過去値（例: APPの2024年売上 4,709.2→3,224.1百万ドル）は修正後の値になる',
       fcf: '営業CF − 設備投資（PaymentsToAcquirePropertyPlantAndEquipment）。どちらか欠損ならnull',
       ruleOf40: 'TTM売上成長率(%) + TTM FCFマージン(%)',
       ruleOf40Legacy: '旧アプリ互換：単四半期の前年同期比売上成長率 + 同四半期のGAAP営業利益率',
