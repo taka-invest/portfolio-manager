@@ -194,6 +194,22 @@ etlifyunctions` 2026-09-17版）→ `functions/src/legacy/`: analyze / screener
 - GitHub Pagesもmain `a3907b7`で再構築され、旧URLに移行案内（新URLへのリンク）が表示されることを確認
 - Netlifyの移行案内（`Documents\masya_app_cutover`）は未デプロイ。オーナーが新画面に納得した後に、Phase 8の最終工程として承認を得て実施
 
+## 旧Stock Analyzer画面の無改変移植（2026-11-24、オーナー要望）
+- オーナー判断：「画面は旧版、数値は修正版」。Phase 3で作り直した分析・スクリーナー画面（`app/analysis.js`・`app/screener.js`）は廃止
+- `research/index.html`・`research/screener.html`：`Documents\masya_app`の旧ページを**そのまま**移植。差分は、先頭に3行の読込（firebase-config・legacy-shim・firebase-cloud）と、Netlify前提のルートリンク4か所の相対化のみ（diffで10行）
+- `app/legacy-shim.js`：旧ページの`/.netlify/functions/*`呼び出しを、ログイン付きの自前APIへ振り替え（analyze→/api/analyze、chart→/api/market 週足5年OHLCV、screener→/api/screener を旧項目名に変換、eps-revisions・8-Kは「データなし」）。未ログイン時はバナー表示
+- **旧エンジン（`functions/src/legacy/analyze.js`）は出力の形をそのまま**、データ抽出部分だけを`functions/src/sec/legacy-adapter.js`（修正版：第4四半期補完・最新提出優先・期末日照合のYoY/QoQ・通期の重複除去）に置換。シグナル・スコア・評価の旧ロジックは不変。明示的な修正は2点（成長率欠損を0%扱いしない、2021年高値のため株価履歴を10年に）
+- 実データ比較（旧Netlify→移植版）：前年比 PLTR 130.5→95.9%、NVDA 118.4→105.9%、APP 73.6→55.5%、APP通期成長率 16.4→70.0%、PLTRの2021年高値 21.4→45ドル
+- Portfolio Managerの「個別企業分析」「銘柄スクリーナー」は、移植した旧ページを埋め込み（ルートを開いたときに読込、新しいタブでも開ける）
+- Emulatorのポートを TripCraft と重ならない番号に変更（hosting 5100 / functions 5101 / firestore 8180・ws 9250 / auth 9199 / hub 4410 / logging 4510）。**この作業中、ポートが重なっていたためTripCraftのEmulatorにテスト用ユーザー1件と許可リスト1件を誤って書き込んだ**（メモリー上のみ・その後Emulatorは停止済みで残存なし）
+- テスト：単体102・ルール12・API結合5・ブラウザー54成功（旧画面の振り替え・ログイン要求・埋め込みを追加）。Emulator実データでNVDAの旧画面（チャートタブ）を確認
+
+## 本番反映 旧画面の移植（2026-11-24、オーナー承認「反映してよい」）
+- PR #23をmainへマージ（`0d74171`）。mainで単体102／ルール12／API結合5／ブラウザー54成功・12スキップ
+- Functions 5本再デプロイ（`--force`、上限設定は不変を確認：最大1・同時1・512MiB・180秒）→ Hosting公開
+- 本番スモーク 46/46 合格。本番の`research/index.html`に`legacy-shim.js`、`portfolio_manager.html`に`pm-legacy-frame`が配信されていることを確認
+- **オーナーの本番実機確認**：未（個別企業分析・銘柄スクリーナーが旧Netlify画面と同じ見た目か）
+
 ## ユーザー対応待ち（ブロッカー）
 
 1. ~~CLI再認証~~ ✅ ／ ~~Webアプリ構成値~~ ✅

@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<!-- Portfolio Manager統合：旧Stock Analyzer（Netlify版 masya_app 2026-09-17）を無改変で移植。
+     下の3行の読込と、Netlify前提のルートリンク（/screener.html 等）の相対化だけを追加：旧APIの呼び出しを、ログイン付きの自前API（修正版SECデータ）へ振り替える。 -->
+<script src="../app/firebase-config.js"></script>
+<script src="../app/legacy-shim.js"></script>
+<script type="module" src="../app/firebase-cloud.mjs"></script>
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>バッチスクリーナー — 参入シグナル自動ランキング</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700;900&display=swap');
+  body { font-family: 'Noto Sans JP', sans-serif; }
+  .ash-bg { background: linear-gradient(135deg, #e8e6e1 0%, #f0ede8 50%, #e4e1dc 100%); }
+  .card { background: rgba(255,255,255,0.82); border: 1px solid rgba(0,0,0,0.08); box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+  .spin { animation: spin 1s linear infinite; }
+  @keyframes spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
+  .fade-in { animation: fadeIn 0.3s ease; }
+  @keyframes fadeIn { from{opacity:0;transform:translateY(4px)} to{opacity:1;transform:translateY(0)} }
+  .row-enter { animation: rowEnter 0.4s ease; }
+  @keyframes rowEnter { from{opacity:0;background:rgba(99,102,241,0.08)} to{opacity:1;background:transparent} }
+  th.sortable { cursor: pointer; user-select: none; }
+  th.sortable:hover { color: #292524; }
+  th.sort-asc::after  { content: ' ↑'; color: #6366f1; }
+  th.sort-desc::after { content: ' ↓'; color: #6366f1; }
+  tr.result-row:hover { background: rgba(0,0,0,0.04); cursor: pointer; }
+  .progress-fill { transition: width 0.3s ease; }
+  select, input[type="range"] { color-scheme: light; }
+</style>
+</head>
+<body class="ash-bg min-h-screen text-stone-900">
+
+<header class="border-b border-stone-300/70 py-4 px-4 sticky top-0 z-50" style="background:rgba(235,232,227,0.96);backdrop-filter:blur(12px)">
+  <div class="max-w-7xl mx-auto flex items-center gap-4">
+    <a href="index.html" class="text-stone-400 hover:text-stone-700 text-sm transition-colors">← 分析アプリ</a>
+    <div class="h-4 w-px bg-stone-300"></div>
+    <div class="text-xl">🔍</div>
+    <div>
+      <h1 class="text-base font-black text-stone-900">バッチスクリーナー</h1>
+      <p class="text-xs text-stone-400">参入シグナル自動ランキング — SEC実データ × 定量スコア</p>
+    </div>
+    <a href="library.html" class="ml-auto text-xs text-stone-400 hover:text-stone-700 px-3 py-1.5 rounded-lg hover:bg-black/5 transition-all">📚 ライブラリ</a>
+  </div>
+</header>
+
+<div class="max-w-7xl mx-auto px-4 py-6 space-y-5">
+
+  <!-- コントロールパネル -->
+  <div class="card rounded-2xl p-5">
+    <div class="flex flex-wrap gap-4 items-start">
+
+      <!-- インデックス選択 -->
+      <div class="flex-1 min-w-[300px]">
+        <div class="text-xs text-stone-400 mb-2 font-bold">対象インデックス</div>
+        <div class="flex flex-wrap gap-2">
+          <button class="index-btn active px-3 py-1.5 rounded-lg text-sm font-bold transition-all border" data-index="nasdaq100"
+            style="background:rgba(99,102,241,0.12);border-color:rgba(99,102,241,0.4);color:#4f46e5">
+            NASDAQ 100 <span class="text-xs opacity-60 ml-1" id="cnt-nasdaq100">97銘柄</span>
+          </button>
+          <button class="index-btn px-3 py-1.5 rounded-lg text-sm font-bold transition-all border" data-index="sp500_growth"
+            style="background:rgba(0,0,0,0.04);border-color:rgba(0,0,0,0.12);color:rgba(28,25,23,0.45)">
+            S&P500 グロース <span class="text-xs opacity-60 ml-1" id="cnt-sp500_growth">80銘柄</span>
+          </button>
+          <button class="index-btn px-3 py-1.5 rounded-lg text-sm font-bold transition-all border" data-index="russell2000_growth"
+            style="background:rgba(0,0,0,0.04);border-color:rgba(0,0,0,0.12);color:rgba(28,25,23,0.45)">
+            Russell2000 精選 <span class="text-xs opacity-60 ml-1" id="cnt-russell2000_growth">65銘柄</span>
+          </button>
+          <button class="index-btn px-3 py-1.5 rounded-lg text-sm font-bold transition-all border" data-index="all"
+            style="background:rgba(0,0,0,0.04);border-color:rgba(0,0,0,0.12);color:rgba(28,25,23,0.45)">
+            全リスト <span class="text-xs opacity-60 ml-1" id="cnt-all"></span>
+          </button>
+        </div>
+      </div>
+
+      <!-- フィルター -->
+      <div class="flex gap-4 flex-wrap items-end">
+        <div>
+          <div class="text-xs text-stone-400 mb-2 font-bold">最低シグナル確度</div>
+          <div class="flex items-center gap-2">
+            <input type="range" id="minScoreSlider" min="0" max="75" step="25" value="0" class="w-24">
+            <span id="minScoreLabel" class="text-sm font-bold text-indigo-600 w-8">0%</span>
+          </div>
+        </div>
+        <div>
+          <div class="text-xs text-stone-400 mb-2 font-bold">フェーズフィルター</div>
+          <select id="phaseFilter" class="bg-white border border-stone-300 rounded-lg px-3 py-1.5 text-sm text-stone-800">
+            <option value="all">全フェーズ</option>
+            <option value="phase1">Phase1（赤字成長）</option>
+            <option value="phase2">Phase2（転換期）</option>
+            <option value="phase3">Phase3（確立期）</option>
+          </select>
+        </div>
+        <div>
+          <div class="text-xs text-stone-400 mb-2 font-bold">金融業</div>
+          <label class="flex items-center gap-2 text-sm cursor-pointer">
+            <input type="checkbox" id="hideFinancial" checked class="rounded">
+            <span class="text-stone-600">非表示</span>
+          </label>
+        </div>
+      </div>
+
+      <!-- スキャンボタン -->
+      <div class="flex items-end">
+        <button id="scanBtn" onclick="startScan()"
+          class="bg-indigo-500 hover:bg-indigo-400 active:scale-95 transition-all rounded-xl px-6 py-2.5 font-black text-base text-white">
+          🔍 スキャン開始
+        </button>
+      </div>
+    </div>
+
+    <!-- プログレスバー -->
+    <div id="progressArea" class="hidden mt-4">
+      <div class="flex justify-between text-xs text-stone-400 mb-1.5">
+        <span id="progressLabel">分析中...</span>
+        <span id="progressPct">0%</span>
+      </div>
+      <div class="w-full bg-stone-200 rounded-full h-2">
+        <div id="progressBar" class="progress-fill h-2 rounded-full bg-indigo-500" style="width:0%"></div>
+      </div>
+      <div class="flex gap-4 mt-2 text-xs text-stone-400">
+        <span>完了: <span id="statDone" class="text-stone-600">0</span></span>
+        <span>エラー: <span id="statError" class="text-red-500">0</span></span>
+        <span>高シグナル(≥75%): <span id="statHigh" class="text-emerald-600">0</span></span>
+        <span>Phase1: <span id="statPhase1" class="text-purple-600">0</span></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- サマリーカード -->
+  <div id="summaryCards" class="hidden grid grid-cols-2 md:grid-cols-4 gap-3 fade-in">
+    <div class="card rounded-xl p-4 text-center">
+      <div class="text-xs text-stone-400 mb-1">スキャン完了</div>
+      <div class="text-2xl font-black text-stone-900" id="sumTotal">—</div>
+    </div>
+    <div class="card rounded-xl p-4 text-center" style="border-color:rgba(239,68,68,0.25);background:rgba(254,242,242,0.9)">
+      <div class="text-xs text-red-400 mb-1">🚨 高確度シグナル</div>
+      <div class="text-2xl font-black text-red-600" id="sumHigh">—</div>
+    </div>
+    <div class="card rounded-xl p-4 text-center" style="border-color:rgba(16,185,129,0.25);background:rgba(236,253,245,0.9)">
+      <div class="text-xs text-emerald-500 mb-1">⚡ 注目シグナル</div>
+      <div class="text-2xl font-black text-emerald-600" id="sumMid">—</div>
+    </div>
+    <div class="card rounded-xl p-4 text-center" style="border-color:rgba(168,85,247,0.25);background:rgba(250,245,255,0.9)">
+      <div class="text-xs text-purple-400 mb-1">🌱 Phase1（黒字化候補）</div>
+      <div class="text-2xl font-black text-purple-600" id="sumPhase1">—</div>
+    </div>
+  </div>
+
+  <!-- 結果テーブル -->
+  <div id="resultsSection" class="hidden card rounded-2xl overflow-hidden fade-in">
+    <div class="p-4 border-b border-stone-200 flex items-center justify-between flex-wrap gap-3">
+      <div class="text-sm font-bold text-stone-800">スキャン結果 <span id="resultCount" class="text-stone-400 font-normal"></span></div>
+      <div class="flex gap-2 text-xs">
+        <span class="text-stone-400">クリックで詳細分析を開く</span>
+        <button onclick="exportCsv()" class="text-indigo-600 hover:text-indigo-500 border border-indigo-300 px-2 py-0.5 rounded-lg">⬇ CSV</button>
+      </div>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="w-full text-xs" id="resultsTable">
+        <thead>
+          <tr class="border-b border-stone-200 text-stone-400 bg-stone-50">
+            <th class="text-left px-3 py-2.5 sortable" data-col="rank">順位</th>
+            <th class="text-left px-3 py-2.5 sortable" data-col="ticker">Ticker</th>
+            <th class="text-left px-3 py-2.5">フェーズ</th>
+            <th class="text-right px-3 py-2.5 sortable sort-desc" data-col="signalScore">シグナル確度</th>
+            <th class="text-right px-3 py-2.5 sortable" data-col="rof40">RoF40</th>
+            <th class="text-right px-3 py-2.5 sortable" data-col="opMargin">OpM</th>
+            <th class="text-right px-3 py-2.5 sortable" data-col="revYoY">YoY成長</th>
+            <th class="text-right px-3 py-2.5 sortable" data-col="grossMargin">粗利率</th>
+            <th class="text-left px-3 py-2.5">シグナルQ</th>
+            <th class="text-right px-3 py-2.5 sortable" data-col="price">株価</th>
+            <th class="text-right px-3 py-2.5 sortable" data-col="mktcap">時価総額</th>
+          </tr>
+        </thead>
+        <tbody id="resultsBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ── ティッカーリスト ────────────────────────────
+
+const TICKER_LISTS = {
+  nasdaq100: [
+    // Mega cap
+    'AAPL','MSFT','NVDA','AMZN','META','GOOGL','TSLA','AVGO','COST','NFLX',
+    // Semiconductors
+    'AMD','QCOM','MRVL','ON','MU','LRCX','KLAC','AMAT','ARM','INTC','MCHP','MPWR',
+    // Enterprise SW
+    'CRM','NOW','INTU','ADSK','ANSS','CDNS','WDAY','TEAM','ORCL',
+    // Cybersecurity
+    'CRWD','PANW','FTNT','NET','ZS','OKTA',
+    // AI/Data
+    'PLTR','DDOG','SNOW','TTD','APP',
+    // Platform/Consumer
+    'MELI','SHOP','ABNB','DASH','UBER','BKNG','EBAY','PYPL',
+    // Biotech
+    'AMGN','GILD','VRTX','REGN','BIIB','MRNA','ILMN',
+    // Others
+    'CSCO','PCAR','FAST','ODFL','CTAS','AXON','COIN','MNDY','ZM',
+    'SMCI','HOOD','EA','TTWO','LOGI','DLTR','SBUX','PEP',
+    'SIRI','DXCM','IDXX','ISRG','GEHC','EXC','CEG',
+  ],
+  sp500_growth: [
+    // ── IVW (iShares S&P500 Growth ETF) 上位確認銘柄 ──
+    // 出典: stockanalysis.com/etf/ivw/holdings/ (2025-06時点)
+    // 選定基準: S&P500グロース指数 = 3年EPS成長率 × 売上成長率 × 12ヶ月モメンタム
+    // Mega-cap Tech (IVW上位10、index weight ~65%)
+    'NVDA','MSFT','AAPL','GOOGL','AVGO','META','AMZN','MU','AMD','TSLA',
+    // Pharma/Biotech
+    'LLY','VRTX','REGN','AMGN','ABBV','ISRG',
+    // Financials (growth-oriented)
+    'JPM','V','MA','GS','BX','SPGI','MCO','COIN',
+    // Semis & Hardware
+    'LRCX','AMAT','KLAC','QCOM','MRVL','ADI','ANET','MPWR','ON',
+    // Enterprise Software / Cloud
+    'ORCL','NOW','CRM','ADBE','INTU','PANW','CRWD','DDOG','TTD','AXON',
+    // Consumer / Travel
+    'NFLX','BKNG','UBER','COST','APP',
+    // Industrials / Other
+    'CAT','GEV','PLTR','CSCO','TXN',
+  ],
+  russell2000_growth: [
+    // ── IWO実際の上位保有銘柄（stockanalysis.com取得）──
+    'BE','CRDO','STRL','FN','IONQ','RMBS','GH','MOD','SITM',
+    'SMTC','DY','DOCN','AEIS','SPXC','VIAV','BBIO','KTOS','ARWR',
+    'AXSM','ENSG','GTLS','AGX','AAOI',
+
+    // ── 半導体・ハードウェア（小型）──
+    'AMBA','POWI','COHU','NVTS','AIOT','LASR','ONTO','ACLS',
+    'FORM','ICHR','MTSI','DIOD','SMFL','SITM','OSIS','PI',
+
+    // ── SaaS・ソフトウェア小型──
+    'BRZE','KVYO','APPF','JAMF','SMAR','TASK','ARLO',
+    'PCVX','ALKT','VERX','WEAV','CLBT','INTA','SEAT',
+    'FROG','CWAN','DOMO','LPSN','PLTK',
+
+    // ── AI・データ・サイバーセキュリティ小型──
+    'SOUN','BBAI','GRRR','INOD','AI','DTSI','RAMP',
+    'BSIG','VNET','NLOK',
+
+    // ── 量子コンピューター──
+    'QUBT','RGTI','QMCO',
+
+    // ── 宇宙・ドローン・防衛テック──
+    'LUNR','SPIR','RCAT','AVAV','BWXT','LDOS','KRNT',
+    'ACHR','JOBY','LILM','RKLB',
+
+    // ── バイオテック（成長期）──
+    'RXRX','ARWR','AXSM','BBIO','VERV','CRVS','KROS','LEGN',
+    'PRCT','CABA','RCUS','IMVT','NKTR','GKOS','INVA',
+    'ADMA','ARCT','BLUE','FATE','PTGX',
+
+    // ── ヘルスケアIT・医療機器──
+    'HIMS','ACCD','GDRX','DOCS','ONEM','STVN','PRAX',
+    'AXNX','NVCR','SWAV','GRAL',
+
+    // ── 消費者・ブランド成長──
+    'XPOF','RELY','CELH','CAVA','WING','BIRD','BROS',
+    'CAKE','JACK','PLAY','DNUT','PTON','XRAY',
+
+    // ── インフラ・産業テック──
+    'IREN','CORZ','GEV','MKSI','SPXC','STRL','DY',
+    'IESC','POWL','GBCI','GRBK','TMHC',
+
+    // ── フィンテック小型──
+    'RELY','RPAY','PAYA','IIIV','NRDS',
+  ],
+};
+
+// 全リスト（重複除去）
+const allTickers = [...new Set([
+  ...TICKER_LISTS.nasdaq100,
+  ...TICKER_LISTS.sp500_growth,
+  ...TICKER_LISTS.russell2000_growth,
+])];
+TICKER_LISTS.all = allTickers;
+
+// カウント表示
+document.getElementById('cnt-nasdaq100').textContent = TICKER_LISTS.nasdaq100.length + '銘柄';
+document.getElementById('cnt-sp500_growth').textContent = TICKER_LISTS.sp500_growth.length + '銘柄';
+document.getElementById('cnt-russell2000_growth').textContent = TICKER_LISTS.russell2000_growth.length + '銘柄';
+document.getElementById('cnt-all').textContent = allTickers.length + '銘柄';
+
+// ── 状態管理 ─────────────────────────────────────
+let currentIndex = 'nasdaq100';
+let allResults   = [];
+let sortCol      = 'signalScore';
+let sortDir      = 'desc';
+let scanning     = false;
+
+// ── インデックス選択 ──────────────────────────────
+document.querySelectorAll('.index-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.index-btn').forEach(b => {
+      b.style.background = 'rgba(0,0,0,0.04)';
+      b.style.borderColor = 'rgba(0,0,0,0.12)';
+      b.style.color = 'rgba(28,25,23,0.45)';
+    });
+    btn.style.background = 'rgba(99,102,241,0.12)';
+    btn.style.borderColor = 'rgba(99,102,241,0.4)';
+    btn.style.color = '#4f46e5';
+    currentIndex = btn.dataset.index;
+  });
+});
+
+// フィルター変更でリロード
+document.getElementById('minScoreSlider').addEventListener('input', function() {
+  document.getElementById('minScoreLabel').textContent = this.value + '%';
+  renderTable();
+});
+document.getElementById('phaseFilter').addEventListener('change', renderTable);
+document.getElementById('hideFinancial').addEventListener('change', renderTable);
+
+// ── メインスキャン関数 ──────────────────────────
+async function startScan() {
+  if (scanning) return;
+  scanning = true;
+
+  const tickers = TICKER_LISTS[currentIndex] ?? [];
+  allResults = [];
+
+  // UI初期化
+  document.getElementById('progressArea').classList.remove('hidden');
+  document.getElementById('summaryCards').classList.add('hidden');
+  document.getElementById('resultsSection').classList.add('hidden');
+  document.getElementById('resultsBody').innerHTML = '';
+  document.getElementById('scanBtn').disabled = true;
+  document.getElementById('scanBtn').textContent = '⏳ スキャン中...';
+  updateProgress(0, tickers.length);
+
+  const BATCH_SIZE = 10;
+  const batches = [];
+  for (let i = 0; i < tickers.length; i += BATCH_SIZE) {
+    batches.push(tickers.slice(i, i + BATCH_SIZE));
+  }
+
+  let done = 0, errors = 0;
+
+  // バッチを最大6並列で実行（ブラウザ接続数制限を考慮）
+  const MAX_CONCURRENT = 6;
+  const batchQueue = [...batches];
+  const running = [];
+
+  async function runBatch(batch) {
+    try {
+      const res = await fetch('/.netlify/functions/screener', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tickers: batch }),
+      });
+      const data = await res.json();
+      if (Array.isArray(data)) {
+        for (const item of data) {
+          if (item.error) errors++;
+          else { allResults.push(item); }
+          done++;
+        }
+      }
+    } catch(e) {
+      errors += batch.length;
+      done   += batch.length;
+    }
+    updateProgress(done, tickers.length, errors);
+    updateStats();
+    renderTable();
+  }
+
+  // キューを処理
+  const executeBatches = async () => {
+    const inFlight = [];
+    for (const batch of batches) {
+      if (inFlight.length >= MAX_CONCURRENT) {
+        await Promise.race(inFlight);
+      }
+      const p = runBatch(batch).then(() => {
+        inFlight.splice(inFlight.indexOf(p), 1);
+      });
+      inFlight.push(p);
+    }
+    await Promise.all(inFlight);
+  };
+
+  await executeBatches();
+
+  // 完了
+  scanning = false;
+  document.getElementById('scanBtn').disabled = false;
+  document.getElementById('scanBtn').textContent = '🔍 スキャン開始';
+  document.getElementById('progressLabel').textContent = `スキャン完了 — ${done}銘柄分析`;
+  document.getElementById('summaryCards').classList.remove('hidden');
+  document.getElementById('resultsSection').classList.remove('hidden');
+  updateStats();
+  renderTable();
+}
+
+function updateProgress(done, total, errors = 0) {
+  const pct = total > 0 ? Math.round(done / total * 100) : 0;
+  document.getElementById('progressBar').style.width = pct + '%';
+  document.getElementById('progressPct').textContent = pct + '%';
+  document.getElementById('progressLabel').textContent = `分析中... ${done} / ${total}`;
+  document.getElementById('statDone').textContent = done;
+  document.getElementById('statError').textContent = errors;
+}
+
+function updateStats() {
+  const high   = allResults.filter(r => r.signalScore >= 75).length;
+  const mid    = allResults.filter(r => r.signalScore >= 50 && r.signalScore < 75).length;
+  const phase1 = allResults.filter(r => r.phase === 'phase1').length;
+  document.getElementById('statHigh').textContent    = high;
+  document.getElementById('statPhase1').textContent  = phase1;
+  document.getElementById('sumTotal').textContent    = allResults.length + '銘柄';
+  document.getElementById('sumHigh').textContent     = high + '銘柄';
+  document.getElementById('sumMid').textContent      = mid + '銘柄';
+  document.getElementById('sumPhase1').textContent   = phase1 + '銘柄';
+}
+
+// ── テーブル描画 ──────────────────────────────────
+function getFilteredSorted() {
+  const minScore     = parseInt(document.getElementById('minScoreSlider').value) || 0;
+  const phaseFilter  = document.getElementById('phaseFilter').value;
+  const hideFin      = document.getElementById('hideFinancial').checked;
+
+  let rows = [...allResults];
+  if (minScore > 0)              rows = rows.filter(r => r.signalScore >= minScore);
+  if (phaseFilter !== 'all')     rows = rows.filter(r => r.phase === phaseFilter);
+  if (hideFin)                   rows = rows.filter(r => !r.isFinancial);
+
+  rows.sort((a, b) => {
+    const va = a[sortCol] ?? -999;
+    const vb = b[sortCol] ?? -999;
+    if (typeof va === 'string') return sortDir === 'asc' ? va.localeCompare(vb) : vb.localeCompare(va);
+    return sortDir === 'asc' ? va - vb : vb - va;
+  });
+  return rows;
+}
+
+function phaseBadge(phase) {
+  const map = {
+    phase1:    '<span class="bg-purple-100 text-purple-700 border border-purple-300 rounded px-1.5 py-0.5">🌱P1</span>',
+    phase2:    '<span class="bg-amber-100 text-amber-700 border border-amber-300 rounded px-1.5 py-0.5">⚡P2</span>',
+    phase3:    '<span class="bg-emerald-100 text-emerald-700 border border-emerald-300 rounded px-1.5 py-0.5">🏆P3</span>',
+    financial: '<span class="bg-orange-100 text-orange-700 border border-orange-300 rounded px-1.5 py-0.5">🏦金融</span>',
+  };
+  return map[phase] ?? '<span class="text-stone-300">—</span>';
+}
+
+function scoreBadge(score) {
+  if (!score || score < 25) return '<span class="text-stone-300">—</span>';
+  if (score >= 75) return `<span class="font-black text-red-700 bg-red-100 border border-red-300 rounded-full px-2 py-0.5">🚨 ${score}%</span>`;
+  if (score >= 50) return `<span class="font-bold text-orange-700 bg-orange-100 border border-orange-300 rounded-full px-2 py-0.5">⚡ ${score}%</span>`;
+  return `<span class="text-stone-500 bg-stone-100 border border-stone-300 rounded-full px-2 py-0.5">📌 ${score}%</span>`;
+}
+
+function fmtRof(v) {
+  if (v === null || v === undefined) return '<span class="text-stone-300">—</span>';
+  if (v >= 100) return `<span class="text-amber-600 font-black">${v.toFixed(0)}</span>`;
+  if (v >= 60)  return `<span class="text-emerald-600 font-bold">${v.toFixed(0)}</span>`;
+  if (v >= 40)  return `<span class="text-emerald-500">${v.toFixed(0)}</span>`;
+  return `<span class="text-stone-400">${v.toFixed(0)}</span>`;
+}
+
+function fmtPct(v, colored = true) {
+  if (v === null || v === undefined) return '<span class="text-stone-300">—</span>';
+  if (!colored) return `<span class="text-stone-500">${v >= 0 ? '+' : ''}${v.toFixed(1)}%</span>`;
+  const c = v >= 20 ? 'text-emerald-600' : v >= 0 ? 'text-emerald-500' : v >= -10 ? 'text-amber-500' : 'text-red-500';
+  return `<span class="${c}">${v >= 0 ? '+' : ''}${v.toFixed(1)}%</span>`;
+}
+
+function fmtMktcap(v) {
+  if (!v) return '<span class="text-stone-300">—</span>';
+  const b = v / 1e9;
+  if (b >= 1000) return `<span class="text-stone-600">$${(b/1000).toFixed(1)}T</span>`;
+  if (b >= 100)  return `<span class="text-stone-600">$${b.toFixed(0)}B</span>`;
+  return `<span class="text-stone-500">$${b.toFixed(1)}B</span>`;
+}
+
+function signalFlagStr(flags) {
+  if (!flags) return '';
+  const parts = [];
+  if (flags.redToBlack)    parts.push('<span class="text-purple-600">黒字化</span>');
+  if (flags.opMInflection) parts.push('<span class="text-orange-600">OpM+</span>');
+  if (flags.rof40Cross40)  parts.push('<span class="text-emerald-600">RoF40</span>');
+  if (flags.rof40Cross60)  parts.push('<span class="text-emerald-700">RoF60</span>');
+  if (flags.rof40Cross80)  parts.push('<span class="text-amber-600">RoF80</span>');
+  return parts.join('<span class="text-stone-300 mx-0.5">·</span>');
+}
+
+function rowBgClass(r) {
+  if (r.signalScore >= 75) return 'bg-red-50/80 border-b border-red-200/60';
+  if (r.signalScore >= 50) return 'bg-orange-50/60 border-b border-stone-200';
+  return 'border-b border-stone-100';
+}
+
+function renderTable() {
+  const rows = getFilteredSorted();
+  document.getElementById('resultCount').textContent = `(${rows.length}銘柄表示)`;
+
+  const tbody = document.getElementById('resultsBody');
+  tbody.innerHTML = rows.map((r, i) => `
+    <tr class="result-row ${rowBgClass(r)} row-enter" onclick="openAnalysis('${r.ticker}')">
+      <td class="px-3 py-2 text-stone-400">${i + 1}</td>
+      <td class="px-3 py-2">
+        <div class="font-black text-base ${r.signalScore >= 75 ? 'text-red-600' : r.signalScore >= 50 ? 'text-orange-600' : 'text-stone-800'}">${r.ticker}</div>
+        <div class="text-stone-400 text-xs">${(r.name ?? '').substring(0,20)}</div>
+      </td>
+      <td class="px-3 py-2">${phaseBadge(r.phase)}</td>
+      <td class="px-3 py-2 text-right">${scoreBadge(r.signalScore)}</td>
+      <td class="px-3 py-2 text-right">${fmtRof(r.rof40)}</td>
+      <td class="px-3 py-2 text-right">${fmtPct(r.opMargin)}</td>
+      <td class="px-3 py-2 text-right">
+        ${fmtPct(r.revYoY, true)}
+        ${r.yoyAccel !== null ? `<span class="text-xs ml-0.5 ${r.yoyAccel >= 10 ? 'text-emerald-500' : r.yoyAccel <= -10 ? 'text-red-500' : 'text-stone-300'}">${r.yoyAccel >= 10 ? '↑↑' : r.yoyAccel >= 5 ? '↑' : r.yoyAccel <= -10 ? '↓↓' : r.yoyAccel <= -5 ? '↓' : ''}</span>` : ''}
+      </td>
+      <td class="px-3 py-2 text-right">
+        <span class="${r.grossMargin !== null ? (r.grossMargin > 60 ? 'text-emerald-600' : r.grossMargin > 40 ? 'text-emerald-500' : r.grossMargin > 20 ? 'text-amber-500' : 'text-stone-400') : 'text-stone-300'}">
+          ${r.grossMargin !== null ? r.grossMargin.toFixed(1)+'%' : '—'}
+        </span>
+        ${r.gmImproveStreak >= 3 ? '<span class="text-teal-500 ml-0.5">↑</span>' : ''}
+      </td>
+      <td class="px-3 py-2 text-xs text-stone-500">
+        ${r.signalScore >= 25 ? `${r.signalQ ?? '—'}<br>${signalFlagStr(r.signalFlags)}` : '<span class="text-stone-300">—</span>'}
+      </td>
+      <td class="px-3 py-2 text-right font-bold text-stone-800">
+        ${r.price ? '$' + r.price.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '<span class="text-stone-300">—</span>'}
+        ${r.chg1d !== null && r.chg1d !== undefined ? `<span class="text-xs ml-1 ${r.chg1d >= 0 ? 'text-emerald-500' : 'text-red-500'}">${r.chg1d >= 0 ? '+' : ''}${r.chg1d.toFixed(1)}%</span>` : ''}
+      </td>
+      <td class="px-3 py-2 text-right">${fmtMktcap(r.mktcap)}</td>
+    </tr>
+  `).join('');
+
+  // ソートヘッダー更新
+  document.querySelectorAll('th.sortable').forEach(th => {
+    th.classList.remove('sort-asc','sort-desc');
+    if (th.dataset.col === sortCol) th.classList.add(sortDir === 'asc' ? 'sort-asc' : 'sort-desc');
+  });
+}
+
+// ── ソートクリック ────────────────────────────────
+document.querySelectorAll('th.sortable').forEach(th => {
+  th.addEventListener('click', () => {
+    if (sortCol === th.dataset.col) sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+    else { sortCol = th.dataset.col; sortDir = 'desc'; }
+    renderTable();
+  });
+});
+
+// ── 分析アプリを開く ──────────────────────────────
+function openAnalysis(ticker) {
+  window.open(`/?ticker=${ticker}`, '_blank');
+}
+
+// ── CSV エクスポート ──────────────────────────────
+function exportCsv() {
+  const rows = getFilteredSorted();
+  const header = 'Ticker,名称,フェーズ,シグナル確度,RoF40,OpM%,YoY%,粗利率%,シグナルQ,株価,時価総額B\n';
+  const body = rows.map(r => [
+    r.ticker,
+    '"' + (r.name ?? '').replace(/"/g, '""') + '"',
+    r.phase,
+    r.signalScore,
+    r.rof40 ?? '',
+    r.opMargin ?? '',
+    r.revYoY ?? '',
+    r.grossMargin ?? '',
+    r.signalQ ?? '',
+    r.price ?? '',
+    r.mktcap ? (r.mktcap / 1e9).toFixed(1) : '',
+  ].join(',')).join('\n');
+  const blob = new Blob(['﻿' + header + body], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `screener_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click(); URL.revokeObjectURL(url);
+}
+
+// ── URL パラメータでティッカー自動入力 ──────────
+const urlTicker = new URLSearchParams(location.search).get('ticker');
+if (urlTicker) {
+  document.getElementById('tickerInput')?.value === undefined;
+}
+</script>
+</body>
+</html>

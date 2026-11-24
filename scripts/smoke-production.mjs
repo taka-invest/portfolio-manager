@@ -11,7 +11,7 @@ async function status(path, init) {
   return res;
 }
 
-for (const p of ['/', '/portfolio_manager.html', '/app/analysis.js', '/app/screener.js', '/app/price-chart.js',
+for (const p of ['/', '/portfolio_manager.html', '/app/legacy-shim.js', '/research/index.html', '/research/screener.html', '/app/price-chart.js',
   '/app/market-data.js', '/app/api.js', '/app/firebase-config.js', '/research/library.html']) {
   const r = await status(p);
   check('public ' + p, r.status === 200, String(r.status));
@@ -25,7 +25,7 @@ const html = await status('/portfolio_manager.html');
 check('header X-Frame-Options DENY', html.headers.get('x-frame-options') === 'DENY');
 check('header nosniff', html.headers.get('x-content-type-options') === 'nosniff');
 check('header HTML no-store', /no-store/.test(html.headers.get('cache-control') || ''));
-for (const asset of ['/app/styles.css', '/app/analysis.js', '/app/firebase-cloud.mjs']) {
+for (const asset of ['/app/styles.css', '/app/legacy-shim.js', '/app/firebase-cloud.mjs']) {
   const r = await status(asset);
   check('revalidated asset ' + asset, /no-cache|no-store/.test(r.headers.get('cache-control') || ''), r.headers.get('cache-control') || 'none');
 }

@@ -35,41 +35,6 @@ async function setup(page, apis) {
   return calls;
 }
 
-test('screener: input validation, fill from portfolio, sorted results, row opens analysis', async ({ page }) => {
-  const body = await screenerBody();
-  const calls = await setup(page, {
-    '/api/screener': route => route.fulfill({ status: 200, json: body }),
-    '/api/financials': route => route.fulfill({ status: 404, contentType: 'text/html', body: 'nf' })
-  });
-  const errors = [];
-  page.on('pageerror', e => errors.push(e.message));
-  await page.goto('/portfolio_manager.html#screener');
-  await expect(page.getByRole('link', { name: '銘柄スクリーナー' })).toHaveAttribute('aria-current', 'page');
-  await page.locator('#pm-screener-tickers').fill(Array.from({ length: 11 }, (_, i) => 'T' + i).join(','));
-  await page.getByRole('button', { name: 'スクリーニング' }).click();
-  await expect(page.locator('#pm-screener-status')).toContainText('10銘柄まで');
-  expect(calls).toHaveLength(0);
-
-  await page.getByRole('button', { name: '保有・目標・ウォッチリストの銘柄を入れる' }).click();
-  await expect(page.locator('#pm-screener-tickers')).toHaveValue(/NVDA/);
-  await page.locator('#pm-screener-tickers').fill('pltr app, nvda nope');
-  await page.getByRole('button', { name: 'スクリーニング' }).click();
-  await expect(page.locator('#pm-screener-table tbody tr')).toHaveCount(4);
-  expect(calls[0]).toMatchObject({ path: '/api/screener', body: { tickers: ['PLTR', 'APP', 'NVDA', 'NOPE'] } });
-  await expect(page.locator('#pm-screener-table')).toContainText('95.9%');          // PLTR date-matched YoY
-  await expect(page.locator('#pm-screener-table')).toContainText('フェーズ3');
-  await expect(page.locator('#pm-screener-table tbody tr').last()).toContainText('見つかりません');
-  await page.locator('.pm-screener-sort[data-key="masyaScore"]').click();
-  await expect(page.locator('#pm-screener-table tbody tr').first()).toContainText('APP');   // 95 points first
-  await page.locator('.pm-screener-open[data-ticker="NVDA"]').click();
-  await expect(page).toHaveURL(/#analysis$/);
-  await expect(page.locator('#pm-analysis-ticker')).toHaveValue('NVDA');
-  await expect(page.locator('#pm-analysis-status')).toContainText('まだ公開されていません');
-  expect(await page.evaluate(() => document.documentElement.scrollWidth))
-    .toBeLessThanOrEqual(await page.evaluate(() => document.documentElement.clientWidth));
-  expect(errors).toEqual([]);
-});
-
 test('chart: draws an accessible SVG with source and period change; range is sent', async ({ page }, info) => {
   const calls = await setup(page, { '/api/chart': route => route.fulfill({ status: 200, json: chartBody }) });
   await page.goto('/portfolio_manager.html#chart');

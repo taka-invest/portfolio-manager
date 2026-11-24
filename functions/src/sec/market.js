@@ -36,7 +36,11 @@ export async function yahooChart(p, fetchJson = getJson) {
       meta: { symbol: r.meta?.symbol ?? p.symbol, currency: r.meta?.currency ?? null,
         regularMarketPrice: r.meta?.regularMarketPrice ?? null, regularMarketTime: r.meta?.regularMarketTime ?? null },
       timestamp: r.timestamp ?? [],
-      indicators: { quote: [{ close: r.indicators?.quote?.[0]?.close ?? [] }] }
+      indicators: {
+        quote: [Object.fromEntries(['open', 'high', 'low', 'close', 'volume']
+          .filter(k => Array.isArray(r.indicators?.quote?.[0]?.[k])).map(k => [k, r.indicators.quote[0][k]]))],
+        ...(r.indicators?.adjclose ? { adjclose: [{ adjclose: r.indicators.adjclose[0]?.adjclose ?? [] }] } : {})
+      }
     }] },
     source: { provider: 'Yahoo Finance chart API（非公式）', retrievedAt: new Date().toISOString() }
   };
