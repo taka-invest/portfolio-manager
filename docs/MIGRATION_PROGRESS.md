@@ -3,7 +3,7 @@
 次のセッションはまずこのファイルと`docs/MIGRATION_AUDIT.md`を読むこと。
 
 - Firebaseプロジェクト: Finance Base `finance-base-edcc7`（Sparkプラン、2026-11-23時点）
-- 作業ブランチ: `feature/phase2-stock-analyzer`（PR #18）。PR #16（`feature/firebase-foundation-phase1`）は2026-11-23にmainへsquashマージ済み
+- 作業ブランチ: 新しい作業ごとに`main`から作成。PR #16（基盤）・PR #18（Phase 2-3）はmainへsquashマージ済み
 - 旧サイト（移行完了まで維持）: GitHub Pages `portfolio_manager.html`／Netlify `masya-stock-analyzer`
 - Stock Analyzer最新ソース: `C:\Users\defaultuser0\Documents\masya_app\`（git管理外。読み取り専用で参照）
 
@@ -13,13 +13,13 @@
 |---|---|---|
 | 0 | 監査 | ✅ 完了（2026-11-23）`docs/MIGRATION_AUDIT.md` |
 | 1 | Firebase初期構築・認証・Firestore・同期 | 🟢 保存・別ブラウザー復元を実機確認。Hostingプレビュー未実施 |
-| 2 | Functions移行（analyze/screener/chart） | 🟡 修正版の財務計算・スコア・株価推定とEmulator結合テストまで完了。本番デプロイ（Blaze）と画面（Phase 3）が残り |
-| 3 | 画面統合 | ⬜ |
+| 2 | Functions移行（analyze/screener/chart） | 🟢 修正版の財務計算・スコア・株価推定。Functions 5本を東京に本番デプロイ済（2026-11-24） |
+| 3 | 画面統合 | 🟢 10項目ナビ・個別企業分析・スクリーナー・チャート・市場データ自前API・最新ライブラリ（本番公開済） |
 | 4 | 既存機能保護（リバランス・ピラミッディング） | 🟡 既存テストで保護中。弾(A/B/C)の同期が未対応 |
 | 5 | セキュリティ・費用 | 🟡 Blaze化済（2026-11-24 オーナー操作）。予算アラートの設定確認待ち |
 | 6 | CI/CD | 🟡 プレビュー/本番ワークフローと承認ゲート作成済。デプロイ用SA（本人操作）待ち |
 | 7 | 総合検証 | 🟡 自動検証は完了（`docs/VERIFICATION_PHASE7.md`）。オーナーの実機確認4項目が残り |
-| 8 | 本番切替 | 🟡 Portfolio Managerのみ本番公開（2026-11-23）。Stock Analyzer未移行・旧サイトは維持 |
+| 8 | 本番切替 | 🟡 統合版を本番公開（2026-11-24、PER/PSR追加版も反映済）。旧サイトは維持。停止は最終工程で要承認 |
 
 ## 2026-11-23 セッション1 の実施内容
 
@@ -159,6 +159,21 @@ etlifyunctions` 2026-09-17版）→ `functions/src/legacy/`: analyze / screener
 - 本番での拒否確認：トークンなし・不正トークン・署名なし（Emulator形式）トークンはすべて401。CORSヘッダーなし、`Cache-Control: private, no-store`。Cloud Loggingには`api/status/durationMs/errorClass`のみ記録（UID・トークン・保有なし）
 - 本番の`firebase.json`に`/api/*`→各関数（東京）の転送を追加（**Hostingへの反映は未実施**。PR #18のマージと本番公開の承認後）
 
+## 本番公開 Phase 2-3（2026-11-24、オーナー承認「公開してよい」）
+- PR #18をmainへsquashマージ（`410012d`）。mainの内容は検証済みブランチ`1172d5b`と同一
+- mainで全テスト：単体97／ルール12／API結合5／ブラウザー50成功・12スキップ
+- `firebase deploy --only hosting`（main `410012d`）
+- 本番確認：app/*・research/library.html は200、firebase.json・firestore.rules・functions・tests・docs・`functions/.env`は404。`/api/financials|chart|market|analyze|screener`は同一オリジンの転送でFunctionsに届き、未ログインは401。画面：サイドバー10項目・新画面のモジュール読込・Firebase接続OK、コンソールエラー0件
+- **オーナーの本番実機確認（2026-11-24）**：本番URLでGoogleログイン→個別企業分析（NVDA）が表示されることを確認 ✅
+- 残り：予算アラートの設定確認、Phase 7 総合検証、Phase 8 旧サイト停止（要承認）
+- ロールバック：Console → Hosting → リリース履歴（直前版は`9cb5954`相当のPortfolio Managerのみの版）
+
+## 本番反映 Phase 7（2026-11-24、オーナー承認「反映してよい」）
+- PR #20をmainへsquashマージ（`0531f60`）。mainで単体98／ルール12／API結合5／ブラウザー54成功・12スキップ
+- Functions 5本を再デプロイ（`--force`、上限設定は不変を確認：最大1・同時1・512MiB・180秒）→ Hosting公開
+- 本番スモーク 42/42 合格。本番の`app/analysis.js`にPER/PSR表示を確認
+- **オーナーの本番実機確認**：個別企業分析にPER（TTM）・PSR（TTM）が表示されることを確認 ✅
+
 ## Phase 8 着手と画面の見直し（2026-11-24）
 - オーナー確認：本番でログアウトできた ✅
 - 依存調査：公開ファイル・Functionsに`netlify`/`github.io`への参照なし。GitHub Pagesはmainのルートを公開（mainにマージすると旧URLも更新される）。Netlifyは`Documents\masya_app`の`deploy.bat`でデプロイ、CLIログイン済み
@@ -171,6 +186,13 @@ etlifyunctions` 2026-09-17版）→ `functions/src/legacy/`: analyze / screener
   - API追加：四半期の提出日・様式、四半期ごとのシグナル点、フェーズ、株価のOHLC・出来高、通期の自社株買い・株式発行
   - CSSとmjsにも`Cache-Control: no-cache`（古いCSSが残って画面が崩れる問題をEmulatorで発見）。本番スモークに検査を追加
 - テスト：単体100件、API結合5件、ブラウザー60件成功・12スキップ。Emulatorで実データ（NVDA週足262本）を表示確認
+
+## 本番反映 画面の見直し（2026-11-24、オーナー承認「反映してよい」）
+- PR #21をmainへsquashマージ（`a3907b7`）。mainで単体100／ルール12／API結合5／ブラウザー60成功・12スキップ（API結合で1回、実SEC通信のケースがローカルDNS障害で失敗→再実行で成功。テストに1回再試行を追加）
+- Functions 5本再デプロイ（上限設定は不変を確認）→ Hosting公開
+- 本番スモーク 45/45（CSS/JS/MJSのキャッシュ制御を含む）。本番に紺テーマと新しい分析画面が配信されていることを確認
+- GitHub Pagesもmain `a3907b7`で再構築され、旧URLに移行案内（新URLへのリンク）が表示されることを確認
+- Netlifyの移行案内（`Documents\masya_app_cutover`）は未デプロイ。オーナーが新画面に納得した後に、Phase 8の最終工程として承認を得て実施
 
 ## ユーザー対応待ち（ブロッカー）
 
