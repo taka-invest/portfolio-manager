@@ -43,12 +43,18 @@ const secure = (name, handler, { needsSec = true } = {}) => onRequest(opts, asyn
     res.status(status).json({ error: err instanceof AccessError ? err.message : 'Authentication failed' });
     return;
   }
+  // Validate client input first: a malformed request is 400 regardless of server config.
+  let event;
+  try { event = handler.prepare(req); }
+  catch (err) {
+    log(name, started, 400, 'input');
+    res.status(400).json({ error: String(err.message || 'invalid request').slice(0, 80) }); return;
+  }
   if (needsSec && (!process.env.SEC_USER_AGENT || !process.env.SEC_USER_AGENT.includes('@'))) {
     log(name, started, 503, 'config');
     res.status(503).json({ error: 'SEC contact is not configured' }); return;
   }
   try {
-    const event = handler.prepare(req);
     const result = await handler.run(event);
     const status = Number(result.statusCode);
     const payload = typeof result.body === 'string' ? JSON.parse(result.body) : result.body;
