@@ -263,6 +263,29 @@ export function exitSignals(quarters) {
   return { exitScore: score, exitLabel: level, decelCount: decel, signals };
 }
 
+/**
+ * Price multiples with explicit definitions. Never computed from missing or
+ * non-positive inputs (null instead of a misleading number).
+ *  PER = price ÷ TTM diluted EPS (EPS ≤ 0 → null, "赤字のため算出不可")
+ *  PSR = market cap ÷ TTM revenue; market cap = price × shares outstanding (cover page),
+ *        falling back to latest diluted weighted-average shares.
+ */
+export function valuationMultiples(fin, price) {
+  const eps = fin.latest?.epsDilutedTtm;
+  const rev = fin.latest?.revenueTtm;
+  const shares = fin.shares?.val ?? fin.latestDilutedShares ?? null;
+  const sharesBasis = fin.shares?.val ? '表紙の発行済株式数（dei）' : fin.latestDilutedShares ? '直近四半期の希薄化後加重平均株数' : null;
+  const marketCap = finite(price) && finite(shares) ? price * shares : null;
+  return {
+    perTtm: finite(price) && finite(eps) && eps > 0 ? r(price / eps, 1) : null,
+    perNote: !finite(price) ? '株価未取得' : !finite(eps) ? 'TTM EPS不明' : eps <= 0 ? '赤字のため算出不可' : null,
+    psrTtm: finite(marketCap) && finite(rev) && rev > 0 ? r(marketCap / rev, 1) : null,
+    marketCapUsd: finite(marketCap) ? Math.round(marketCap) : null,
+    sharesBasis,
+    definitions: { per: '株価 ÷ TTM希薄化後EPS（旧アプリの「時価総額÷営業利益」とは別物）', psr: '時価総額 ÷ TTM売上' }
+  };
+}
+
 /** One-call evaluation used by the API. */
 export function evaluate(fin, { ticker, price = null, analyst = {} } = {}) {
   const core = coreMetrics(fin);
@@ -273,6 +296,6 @@ export function evaluate(fin, { ticker, price = null, analyst = {} } = {}) {
   const model = tenYearModel(fin, { sector, price, shares });
   return { sector, sectorName: (SECTOR_PER[sector] ?? SECTOR_PER.default).name, core,
     masyaScore: masyaScore(core), judgment: investmentJudgment(core, model, analyst),
-    exit: exitSignals(fin.quarters), tenYear: model,
+    exit: exitSignals(fin.quarters), tenYear: model, multiples: valuationMultiples(fin, price),
     notMigrated: ['2021年高値ベースの会計目標株価（株価履歴の取得元が未決定）', 'アナリスト予想・EPSビート率（Yahoo v10はcrumb必須）'] };
 }
