@@ -252,6 +252,8 @@ export function analyzeFacts(companyfacts) {
     const opTtmYoY = growthPct(opTtm?.val, opTtmPrev?.val);
     return {
       start: r.start, end: r.end, revenueDerived: r.derived,
+      filed: r.src?.filed ?? r.src?.minuend?.filed ?? r.src?.annual?.filed ?? null,
+      form: r.src?.form ?? r.src?.minuend?.form ?? r.src?.annual?.form ?? null,
       revenue: r.val, grossProfit: gp?.val ?? null, operatingIncome: op?.val ?? null,
       netIncome: ni?.val ?? null, epsDiluted: eps ? (eps.derived ? round(eps.val, 2) : eps.val) : null, epsDilutedDerived: eps?.derived ?? null,
       operatingCashFlow: ocf?.val ?? null, capex: cap?.val ?? null, fcf,

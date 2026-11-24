@@ -3,6 +3,7 @@
 import { getJson } from '../sec-gateway.js';
 import { analyzeFacts } from './financials.js';
 import { evaluate } from './scoring.js';
+import { entrySignals, phaseOf } from './screen.js';
 
 export async function resolveCik(ticker, fetchJson = getJson) {
   const map = await fetchJson('https://www.sec.gov/files/company_tickers.json');
@@ -40,6 +41,12 @@ export async function companyFinancials(ticker, { fetchJson = getJson, now = () 
       currency: 'USD', note: 'US-GAAP（USD）提出企業のみ。IFRS/20-F・USD以外は対象外' },
     quote,
     quarters: out.quarters.slice(-16),
+    signals: (() => {
+      const trend = entrySignals(out.quarters.slice(-16));
+      return { phase: phaseOf(ticker, trend),
+        byQuarter: trend.map(q => ({ end: q.end, score: q.signalScore, flags: q.signals, opMDelta: q.opMDelta, yoyAccel: q.yoyAccel })) };
+    })(),
+    annualFlows: { buyback: (out.annualFlows.buyback || []).slice(-6), stockIssued: (out.annualFlows.stockIssued || []).slice(-6) },
     annual: out.annual.slice(-6).map(({ accn, filed, ...a }) => a),
     latest: out.latest,
     balance: out.balance,

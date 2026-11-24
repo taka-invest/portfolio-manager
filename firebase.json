@@ -37,6 +37,15 @@
             "value": "no-cache"
           }
         ]
+      },
+      {
+        "source": "**/*.@(css|mjs)",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache"
+          }
+        ]
       }
     ],
     "rewrites": [

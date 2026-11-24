@@ -159,6 +159,19 @@ etlifyunctions` 2026-09-17版）→ `functions/src/legacy/`: analyze / screener
 - 本番での拒否確認：トークンなし・不正トークン・署名なし（Emulator形式）トークンはすべて401。CORSヘッダーなし、`Cache-Control: private, no-store`。Cloud Loggingには`api/status/durationMs/errorClass`のみ記録（UID・トークン・保有なし）
 - 本番の`firebase.json`に`/api/*`→各関数（東京）の転送を追加（**Hostingへの反映は未実施**。PR #18のマージと本番公開の承認後）
 
+## Phase 8 着手と画面の見直し（2026-11-24）
+- オーナー確認：本番でログアウトできた ✅
+- 依存調査：公開ファイル・Functionsに`netlify`/`github.io`への参照なし。GitHub Pagesはmainのルートを公開（mainにマージすると旧URLも更新される）。Netlifyは`Documents\masya_app`の`deploy.bat`でデプロイ、CLIログイン済み
+- **旧URL（taka-invest.github.io）での移行案内**：`app/legacy-notice.js`。自動転送はしない（旧URLのブラウザー保存データをJSONで書き出す必要があるため）。テスト（Playwrightで旧ホストを再現）あり
+- **Netlify用の移行案内**：`Documents\masya_app_cutover`（`masya_app`のコピー、元フォルダーは不変）に案内バーと「ウォッチリストをコピー」ボタンを追加。**デプロイは保留**（新画面にオーナーが納得してから）
+- **オーナーの要望により画面を見直し**：旧Stock Analyzerの紺のダークテーマと、チャートタブの見やすさを再現
+  - ダークテーマを紺系（#1a1a2e → #16213e → #0f3460 のグラデーション、アクセント #6366f1）に変更
+  - 個別企業分析を「ヘッダーカード（銘柄・最新10-Q・Phase・株価・時価総額・判定）＋ サマリー／チャート／投資判断／財務諸表」の4タブに
+  - チャートタブ：TradingView Lightweight Charts 4.2.0（必要時にunpkgから読込、読めなければ簡易SVG）で週足ローソク足・出来高・MA9週・SECシグナルのマーカー ＋ 12四半期トレンド表（YoY加速↑↓・QoQ・原価率・OpM(ΔQoQ)・YoY変化・OpLev・RoF40旧定義・R40 TTM・営業利益・EPS(Δ)・Score）とスパークライン
+  - API追加：四半期の提出日・様式、四半期ごとのシグナル点、フェーズ、株価のOHLC・出来高、通期の自社株買い・株式発行
+  - CSSとmjsにも`Cache-Control: no-cache`（古いCSSが残って画面が崩れる問題をEmulatorで発見）。本番スモークに検査を追加
+- テスト：単体100件、API結合5件、ブラウザー60件成功・12スキップ。Emulatorで実データ（NVDA週足262本）を表示確認
+
 ## ユーザー対応待ち（ブロッカー）
 
 1. ~~CLI再認証~~ ✅ ／ ~~Webアプリ構成値~~ ✅
