@@ -208,7 +208,14 @@ etlifyunctions` 2026-09-17版）→ `functions/src/legacy/`: analyze / screener
 - PR #23をmainへマージ（`0d74171`）。mainで単体102／ルール12／API結合5／ブラウザー54成功・12スキップ
 - Functions 5本再デプロイ（`--force`、上限設定は不変を確認：最大1・同時1・512MiB・180秒）→ Hosting公開
 - 本番スモーク 46/46 合格。本番の`research/index.html`に`legacy-shim.js`、`portfolio_manager.html`に`pm-legacy-frame`が配信されていることを確認
-- **オーナーの本番実機確認**：未（個別企業分析・銘柄スクリーナーが旧Netlify画面と同じ見た目か）
+- **オーナーの本番実機確認**：**埋め込みが表示されない不具合を発見**（個別企業分析・銘柄スクリーナーが旧Netlify画面と同じ見た目か）
+
+## 本番反映 埋め込み拒否の修正（2026-11-24、オーナー承認「反映してよい」）
+- 症状：本番の個別企業分析で「finance-base-edcc7.web.app で接続が拒否されました」。全HTMLに`X-Frame-Options: DENY`を付けていたため、同じサイト内のiframe埋め込みも拒否されていた。Hosting Emulatorはカスタムヘッダーを適用せず（mainの設定でも同じ）、ブラウザーテストはヘッダーのない簡易サーバーのため、検出できなかった
+- 修正（PR #24、main `43f26fa`）：`research/*.html`は`SAMEORIGIN`＋`frame-ancestors 'self'`、`/`と`portfolio_manager.html`は`DENY`のまま。あわせて`/`が1時間キャッシュされていた問題（どのHTMLルールにも当たらず`max-age=3600`）をno-storeに
+- 再発防止：設定の単体テスト`tests/hosting-headers.test.js`（mainの旧設定で失敗することを確認）、本番スモークに埋め込み可否と`/`のキャッシュを追加
+- 検証：プレビューでスモーク50/50と埋め込み表示を確認 → CI（verify）合格 → Hostingのみ本番公開（Functionsは変更なし）→ 本番スモーク 50/50、本番で両画面の埋め込み読込を確認
+- **オーナーの本番実機確認**：未
 
 ## ユーザー対応待ち（ブロッカー）
 
