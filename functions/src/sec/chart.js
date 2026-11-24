@@ -7,11 +7,23 @@ export function normalizeChart(json) {
   const r = json?.chart?.result?.[0];
   if (!r) return null;
   const ts = r.timestamp ?? [];
-  const close = r.indicators?.adjclose?.[0]?.adjclose ?? r.indicators?.quote?.[0]?.close ?? [];
+  const q = r.indicators?.quote?.[0] ?? {};
+  const adj = r.indicators?.adjclose?.[0]?.adjclose;
+  const close = adj ?? q.close ?? [];
+  const ok = v => typeof v === 'number' && Number.isFinite(v) && v > 0;
+  const r2 = v => Math.round(v * 100) / 100;
   const points = [];
   for (let i = 0; i < ts.length; i++) {
     const v = close[i];
-    if (typeof v === 'number' && Number.isFinite(v) && v > 0) points.push({ t: new Date(ts[i] * 1000).toISOString().slice(0, 10), close: Math.round(v * 100) / 100 });
+    if (!ok(v)) continue;
+    const pt = { t: new Date(ts[i] * 1000).toISOString().slice(0, 10), close: r2(v) };
+    // OHLC scaled by the same split/dividend factor as the adjusted close.
+    const f = adj && ok(q.close?.[i]) ? v / q.close[i] : 1;
+    if (ok(q.open?.[i]) && ok(q.high?.[i]) && ok(q.low?.[i])) {
+      pt.open = r2(q.open[i] * f); pt.high = r2(q.high[i] * f); pt.low = r2(q.low[i] * f);
+    }
+    if (typeof q.volume?.[i] === 'number' && q.volume[i] >= 0) pt.volume = q.volume[i];
+    points.push(pt);
   }
   return {
     points,

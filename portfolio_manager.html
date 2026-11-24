@@ -7,19 +7,21 @@
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   :root {
-    --bg: #1c1e22;
-    --bg2: #25272d;
-    --bg3: #2e3036;
-    --border: #3a3d45;
-    --text: #d4d6dc;
-    --muted: #888c9a;
-    --accent: #5b8dee;
-    --green: #34d058;
-    --red: #f85149;
-    --yellow: #e3b341;
-    --layer1: #5b8dee;
+    /* Navy dark theme (旧Stock Analyzerの配色: #1a1a2e → #16213e → #0f3460) */
+    --bg: #16213e;
+    --bg2: #1c2849;
+    --bg3: #253259;
+    --border: #2f3d68;
+    --text: #e5e7eb;
+    --muted: #94a3b8;
+    --accent: #6366f1;
+    --green: #10b981;
+    --red: #ef4444;
+    --yellow: #fbbf24;
+    --layer1: #818cf8;
     --layer2: #a78bfa;
   }
+  body:not(.light) { background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%) fixed; }
   body.light {
     --bg: #f4f6fb;
     --bg2: #ffffff;
@@ -1065,6 +1067,7 @@
 <script src="app/ui.js"></script>
 <script src="app/staged-funding.js"></script>
 <script src="app/navigation.js"></script>
+<script src="app/legacy-notice.js"></script>
 <script src="app/api.js"></script>
 <script src="app/market-data.js"></script>
 <script src="app/analysis.js"></script>
