@@ -124,6 +124,16 @@ etlifyunctions` 2026-09-17版）→ `functions/src/legacy/`: analyze / screener
 4. Cloud Functionsの本番デプロイ（**Blazeプランへの変更と予算アラートの承認が必要**）
 5. Phase 3：画面統合（個別企業分析・スクリーナー・チャート画面をPortfolio Managerに組み込む）
 
+## Phase 3 着手（2026-11-24）：個別企業分析画面
+- サイドバーに「個別企業分析」（`#analysis`）を追加。`app/analysis.js`は読み取り専用で、保有株数・現金・計画・取引は変更しない
+- 銘柄の候補は、保有・目標配分・ウォッチリスト・企業評価の銘柄を一元化して表示（画面ごとに別管理しない）
+- `/api/financials`をIDトークン付きで呼ぶ。状態を区別して表示：未ログイン／許可なし(403)／API未公開（Hostingの404ページ＝Functions未デプロイ）／SEC連絡先未設定(503)／上流の失敗(5xx)／通信エラー
+- 表示：検証中バナー（売買判断に使わない旨）、スコア・判定・撤退シグナル、TTM指標、四半期8期（算出したQ4に「※算出」）、10年後モデル（前提は日本語ラベル・警告付き）、判定の内訳、指標の定義、出典（SECのURL・取得時刻・株価の取得元）。外部の文字列はすべてエスケープ
+- **本番の`firebase.json`には`/api`の転送を入れない**（Functions未デプロイのままHostingを更新しても壊れないように）。Emulator専用の`firebase.emulator.json`に`/api/*`の転送を記載。`npm run dev:emulators`でHosting:5000＋Auth＋Firestore＋Functions（demoプロジェクト）が起動し、クライアントは:5000のときだけEmulatorに接続
+- Functions：上流の失敗をエラー種別・コード・上流ステータスだけでログ出力（URL・UID・保有は出さない）
+- テスト：Playwright（PC・スマホ）に5ケース（候補の一元化、未ログイン、API未公開、403/503、PLTRの実データ表示・XSSエスケープ・ポートフォリオ不変・横スクロールなし）。単体89件・ブラウザー36件成功
+- **Emulatorでの通し確認**：Hosting `/api/financials` → Functions（認証・許可UID）→ SEC実データ → 画面に表示（NVDA：スコア75・強い買い・継続保有、四半期8期、出典表示）。ブラウザーペインではGoogleログインのポップアップが開かないため、Emulatorで発行したGoogleユーザーのIDトークンで代替した（本番のポップアップログインは確認済み）
+
 ## ユーザー対応待ち（ブロッカー）
 
 1. ~~CLI再認証~~ ✅ ／ ~~Webアプリ構成値~~ ✅

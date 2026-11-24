@@ -304,6 +304,7 @@
     <a href="#holdings" data-pm-view="holdings" title="保有資産"><span class="pm-nav-symbol" aria-hidden="true">▤</span><span class="pm-nav-label">保有資産</span></a>
     <a href="#rebalance" data-pm-view="rebalance" title="リバランス"><span class="pm-nav-symbol" aria-hidden="true">⇄</span><span class="pm-nav-label">リバランス</span></a>
     <p class="pm-nav-caption">ANALYTICS</p>
+    <a href="#analysis" data-pm-view="analysis" title="個別企業分析"><span class="pm-nav-symbol" aria-hidden="true">◎</span><span class="pm-nav-label">個別企業分析</span></a>
     <a href="#market" data-pm-view="market" title="市場分析"><span class="pm-nav-symbol" aria-hidden="true">◉</span><span class="pm-nav-label">市場分析</span></a>
     <a href="#companies" data-pm-view="companies" title="企業評価"><span class="pm-nav-symbol" aria-hidden="true">◈</span><span class="pm-nav-label">企業評価</span></a>
     <a href="#research" data-pm-view="research" title="投資リサーチ"><span class="pm-nav-symbol" aria-hidden="true">⌕</span><span class="pm-nav-label">投資リサーチ</span></a>
@@ -525,6 +526,19 @@
     </details>
   </section>
 
+  <section id="analysis" aria-labelledby="analysis-title" hidden>
+    <div class="pm-heading"><h2 id="analysis-title">個別企業分析</h2></div>
+    <p class="pm-muted">SEC EDGARの提出データから、四半期推移・Rule of 40・FCF・マシャ式スコアを算出します（旧Stock Analyzerの移植・修正版）。保有株数や現金には反映しません。</p>
+    <form class="pm-card pm-actions" id="pm-analysis-form" autocomplete="off">
+      <label for="pm-analysis-ticker">銘柄コード</label>
+      <input id="pm-analysis-ticker" list="pm-analysis-tickers" maxlength="10" required placeholder="NVDA" style="text-transform:uppercase;max-width:140px">
+      <datalist id="pm-analysis-tickers"></datalist>
+      <button type="submit" class="btn btn-primary" id="pm-analysis-run">分析する</button>
+      <span class="pm-muted pm-small">候補：保有・目標配分・ウォッチリスト・企業評価の銘柄</span>
+    </form>
+    <p id="pm-analysis-status" class="pm-callout" role="status" hidden></p>
+    <div id="pm-analysis-result" aria-live="polite"></div>
+  </section>
   <section id="market" aria-labelledby="market-title">
     <div class="pm-heading"><h2 id="market-title">市場センチメント・監視指標</h2></div>
     <div class="pm-settings-grid">
@@ -1017,6 +1031,7 @@
 <script src="app/ui.js"></script>
 <script src="app/staged-funding.js"></script>
 <script src="app/navigation.js"></script>
+<script src="app/analysis.js"></script>
 <script src="app/firebase-config.js"></script>
 <script src="app/research-import.js"></script>
 <script>

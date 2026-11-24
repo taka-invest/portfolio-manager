@@ -1,0 +1,110 @@
+{
+  "hosting": {
+    "public": "dist/firebase",
+    "ignore": [
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "cleanUrls": false,
+    "trailingSlash": false,
+    "headers": [
+      {
+        "source": "**/*.html",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache, no-store, must-revalidate"
+          },
+          {
+            "key": "X-Content-Type-Options",
+            "value": "nosniff"
+          },
+          {
+            "key": "Referrer-Policy",
+            "value": "strict-origin-when-cross-origin"
+          },
+          {
+            "key": "X-Frame-Options",
+            "value": "DENY"
+          }
+        ]
+      },
+      {
+        "source": "**/*.js",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache"
+          }
+        ]
+      }
+    ],
+    "rewrites": [
+      {
+        "source": "/api/financials",
+        "function": {
+          "functionId": "financialsApi",
+          "region": "asia-northeast1"
+        }
+      },
+      {
+        "source": "/api/analyze",
+        "function": {
+          "functionId": "analyzeApi",
+          "region": "asia-northeast1"
+        }
+      },
+      {
+        "source": "/api/screener",
+        "function": {
+          "functionId": "screenerApi",
+          "region": "asia-northeast1"
+        }
+      },
+      {
+        "source": "/api/chart",
+        "function": {
+          "functionId": "chartApi",
+          "region": "asia-northeast1"
+        }
+      },
+      {
+        "source": "/",
+        "destination": "/portfolio_manager.html"
+      }
+    ]
+  },
+  "firestore": {
+    "database": "(default)",
+    "location": "asia-northeast1",
+    "rules": "firestore.rules"
+  },
+  "emulators": {
+    "hosting": {
+      "port": 5000
+    },
+    "firestore": {
+      "port": 8080
+    },
+    "auth": {
+      "port": 9099
+    },
+    "ui": {
+      "enabled": false
+    },
+    "functions": {
+      "port": 5001
+    }
+  },
+  "functions": [
+    {
+      "source": "functions",
+      "codebase": "finance-api",
+      "ignore": [
+        "node_modules",
+        ".git",
+        "firebase-debug.log"
+      ]
+    }
+  ]
+}

@@ -169,7 +169,12 @@ async function logout() {
 }
 
 export async function init() {
-  const cfg = window.PMFirebaseWebConfig;
+  // Local Emulator Suite (npm run dev:emulators serves Hosting on :5000): use the
+  // demo project and emulated Auth/Firestore so no production data is touched.
+  const emulator = ['localhost', '127.0.0.1'].includes(location.hostname) && location.port === '5000';
+  const cfg = emulator
+    ? { apiKey: 'demo-key', authDomain: location.host, projectId: 'demo-finance-base', appId: 'demo-app' }
+    : window.PMFirebaseWebConfig;
   const valid = cfg && ['apiKey', 'authDomain', 'projectId', 'appId']
     .every(key => typeof cfg[key] === 'string' && cfg[key].length > 3);
   const buttons = ['pm-cloud-login', 'pm-cloud-logout', 'pm-cloud-upload', 'pm-cloud-download'];
@@ -189,6 +194,11 @@ export async function init() {
     store = d;
     auth = f.getAuth(a.initializeApp(cfg));
     db = d.getFirestore(a.getApp());
+    if (emulator) {
+      f.connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true });
+      d.connectFirestoreEmulator(db, '127.0.0.1', 8080);
+      status('ローカルEmulatorに接続しています（本番データには触れません）。');
+    }
     window.PMCloud = { idToken: () => auth.currentUser?.getIdToken() ?? Promise.resolve(null) };
     el('pm-cloud-login').addEventListener('click', login);
     el('pm-cloud-logout').addEventListener('click', logout);

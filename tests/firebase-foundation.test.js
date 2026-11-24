@@ -80,3 +80,17 @@ test('deploy workflows: PRs reach only the preview channel; production is manual
   assert.match(prod, /name: production/);
   assert.match(prod, /channelId: live/);
 });
+
+test('emulator config mirrors production except /api rewrites; production exposes no /api route yet', () => {
+  const prod = JSON.parse(fs.readFileSync(path.join(root, 'firebase.json'), 'utf8'));
+  const emu = JSON.parse(fs.readFileSync(path.join(root, 'firebase.emulator.json'), 'utf8'));
+  assert.ok(!prod.hosting.rewrites.some(r => r.source.startsWith('/api/')));
+  const api = emu.hosting.rewrites.filter(r => r.source.startsWith('/api/'));
+  assert.deepEqual(api.map(r => r.function.region), ['asia-northeast1', 'asia-northeast1', 'asia-northeast1', 'asia-northeast1']);
+  assert.deepEqual(emu.hosting.rewrites.at(-1), { source: '/', destination: '/portfolio_manager.html' });
+  const strip = c => ({ ...c, hosting: { ...c.hosting, rewrites: [] }, emulators: { ...c.emulators, hosting: undefined } });
+  assert.deepEqual(JSON.parse(JSON.stringify(strip(emu))), JSON.parse(JSON.stringify(strip(prod))));
+  const client = fs.readFileSync(path.join(root, 'app/firebase-cloud.mjs'), 'utf8');
+  assert.match(client, /location\.port === '5000'/);
+  assert.match(client, /projectId: 'demo-finance-base'/);
+});

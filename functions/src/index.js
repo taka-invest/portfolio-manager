@@ -68,6 +68,11 @@ const secure = (name, handler, { needsSec = true } = {}) => onRequest(opts, asyn
       res.status(400).json({ error: err.message }); return;
     }
     log(name, started, 502, 'exception');
+    // Upstream failure classification only (no URL, token, UID or payload).
+    logger.warn('finance_api_upstream_error', {
+      api: name, errorName: err?.name, errorCode: err?.code ?? err?.cause?.code ?? null,
+      upstreamStatus: Number.isInteger(err?.status) ? err.status : null
+    });
     res.status(502).json({ error: 'Market data unavailable' });
   }
 });
