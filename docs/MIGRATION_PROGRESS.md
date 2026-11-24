@@ -172,6 +172,7 @@ etlifyunctions` 2026-09-17版）→ `functions/src/legacy/`: analyze / screener
 - PR #20をmainへsquashマージ（`0531f60`）。mainで単体98／ルール12／API結合5／ブラウザー54成功・12スキップ
 - Functions 5本を再デプロイ（`--force`、上限設定は不変を確認：最大1・同時1・512MiB・180秒）→ Hosting公開
 - 本番スモーク 42/42 合格。本番の`app/analysis.js`にPER/PSR表示を確認
+- **オーナーの本番実機確認**：個別企業分析にPER（TTM）・PSR（TTM）が表示されることを確認 ✅
 
 ## ユーザー対応待ち（ブロッカー）
 
