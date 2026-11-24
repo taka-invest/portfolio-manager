@@ -132,6 +132,7 @@ etlifyunctions` 2026-09-17版）→ `functions/src/legacy/`: analyze / screener
 - **本番の`firebase.json`には`/api`の転送を入れない**（Functions未デプロイのままHostingを更新しても壊れないように）。Emulator専用の`firebase.emulator.json`に`/api/*`の転送を記載。`npm run dev:emulators`でHosting:5000＋Auth＋Firestore＋Functions（demoプロジェクト）が起動し、クライアントは:5000のときだけEmulatorに接続
 - Functions：上流の失敗をエラー種別・コード・上流ステータスだけでログ出力（URL・UID・保有は出さない）
 - テスト：Playwright（PC・スマホ）に5ケース（候補の一元化、未ログイン、API未公開、403/503、PLTRの実データ表示・XSSエスケープ・ポートフォリオ不変・横スクロールなし）。単体89件・ブラウザー36件成功
+- CI修正：SEC連絡先がないCI環境で、不正な入力にも503を返していた → 入力の検証を連絡先チェックより先に実行（連絡先あり・なしの両方でAPI結合テスト4件成功、PR #18のCI成功）
 - **Emulatorでの通し確認**：Hosting `/api/financials` → Functions（認証・許可UID）→ SEC実データ → 画面に表示（NVDA：スコア75・強い買い・継続保有、四半期8期、出典表示）。ブラウザーペインではGoogleログインのポップアップが開かないため、Emulatorで発行したGoogleユーザーのIDトークンで代替した（本番のポップアップログインは確認済み）
 
 ## ユーザー対応待ち（ブロッカー）
