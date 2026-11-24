@@ -23,6 +23,14 @@ for (const p of ['/firebase.json', '/firestore.rules', '/package.json', '/functi
 }
 const html = await status('/portfolio_manager.html');
 check('header X-Frame-Options DENY', html.headers.get('x-frame-options') === 'DENY');
+for (const p of ['/research/index.html', '/research/screener.html']) {
+  const r = await status(p);
+  check('embeddable same-origin ' + p, r.headers.get('x-frame-options') === 'SAMEORIGIN' && /frame-ancestors 'self'/.test(r.headers.get('content-security-policy') || ''),
+    `${r.headers.get('x-frame-options')} / ${r.headers.get('content-security-policy')}`);
+}
+const root = await status('/');
+check('header X-Frame-Options DENY on /', root.headers.get('x-frame-options') === 'DENY');
+check('header no-store on /', /no-store/.test(root.headers.get('cache-control') || ''), root.headers.get('cache-control') || 'none');
 check('header nosniff', html.headers.get('x-content-type-options') === 'nosniff');
 check('header HTML no-store', /no-store/.test(html.headers.get('cache-control') || ''));
 for (const asset of ['/app/styles.css', '/app/legacy-shim.js', '/app/firebase-cloud.mjs']) {
