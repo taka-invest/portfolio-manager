@@ -43,10 +43,10 @@ test('SEC gateway requires declared operational contact and caches repeated requ
     clearForTest();
   }
 });
-test('Firebase analysis functions are not exposed as a public Hosting rewrite yet', () => {
+test('Firebase analysis functions are reached only via same-origin rewrites to Tokyo functions', () => {
   const config = JSON.parse(readFileSync(join(base,'firebase.json'),'utf8'));
   assert.equal(config.functions[0].source, 'functions');
-  assert.ok(!config.hosting.rewrites.some(r => r.source.startsWith('/api/')));
+  assert.ok(config.hosting.rewrites.filter(r => r.source.startsWith('/api/')).every(r => r.function && r.function.region === 'asia-northeast1'));
   const src=readFileSync(join(base,'functions/src/index.js'),'utf8');
   const gate=readFileSync(join(base,'functions/src/auth.js'),'utf8');
   assert.match(src,/verifyIdToken\(t, revoked\)/);

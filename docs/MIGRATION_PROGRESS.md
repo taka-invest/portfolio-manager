@@ -16,7 +16,7 @@
 | 2 | Functions移行（analyze/screener/chart） | 🟡 修正版の財務計算・スコア・株価推定とEmulator結合テストまで完了。本番デプロイ（Blaze）と画面（Phase 3）が残り |
 | 3 | 画面統合 | ⬜ |
 | 4 | 既存機能保護（リバランス・ピラミッディング） | 🟡 既存テストで保護中。弾(A/B/C)の同期が未対応 |
-| 5 | セキュリティ・費用 | 🟡 maxInstances=1等は設定済。Blaze・予算アラートは承認待ち |
+| 5 | セキュリティ・費用 | 🟡 Blaze化済（2026-11-24 オーナー操作）。予算アラートの設定確認待ち |
 | 6 | CI/CD | 🟡 プレビュー/本番ワークフローと承認ゲート作成済。デプロイ用SA（本人操作）待ち |
 | 7 | 総合検証 | ⬜ |
 | 8 | 本番切替 | 🟡 Portfolio Managerのみ本番公開（2026-11-23）。Stock Analyzer未移行・旧サイトは維持 |
@@ -151,6 +151,14 @@ etlifyunctions` 2026-09-17版）→ `functions/src/legacy/`: analyze / screener
 - テスト：単体97件、ブラウザー50件成功・12件スキップ（市場データ3件・ライブラリ1件を追加）、API結合5件
 - **Emulatorで実データ確認**：市場分析 VIX 26.6／VXN 36.3／Fear & Greed 17（Extreme Fear）を自前API経由で表示、ライブラリの殿堂入り検証 NVDA・PLTR（T1/T3シグナルとその後リターン）。途中でローカルDNSの一時障害（EAI_AGAIN）が出たが、分類ログで原因を特定でき、再実行で成功
 
+## Cloud Functions 本番デプロイ（2026-11-24、オーナー承認済）
+- オーナーがBlazeプランに変更。課金有効を確認（予算アラートはAPIで読めず、画面での確認待ち）
+- `firebase deploy --only functions`（ブランチ`feature/phase2-stock-analyzer`の`ecd05aa`）：analyzeApi / financialsApi / screenerApi / chartApi / marketApi を **asia-northeast1** に作成。Node.js 22、第2世代
+- 本番の設定を読み取りで確認：全関数 最大インスタンス1・同時実行1・512MiB・1vCPU・タイムアウト180秒・最小インスタンス0。環境変数`SEC_USER_AGENT`は設定済み（値はリポジトリに含めない）
+- コンテナイメージの自動削除ポリシー：3日（Artifact Registry `gcf-artifacts`、asia-northeast1）
+- 本番での拒否確認：トークンなし・不正トークン・署名なし（Emulator形式）トークンはすべて401。CORSヘッダーなし、`Cache-Control: private, no-store`。Cloud Loggingには`api/status/durationMs/errorClass`のみ記録（UID・トークン・保有なし）
+- 本番の`firebase.json`に`/api/*`→各関数（東京）の転送を追加（**Hostingへの反映は未実施**。PR #18のマージと本番公開の承認後）
+
 ## ユーザー対応待ち（ブロッカー）
 
 1. ~~CLI再認証~~ ✅ ／ ~~Webアプリ構成値~~ ✅
@@ -158,7 +166,7 @@ etlifyunctions` 2026-09-17版）→ `functions/src/legacy/`: analyze / screener
 2b. `firebase init hosting:github`（デプロイ用SA＋GitHub Secret）は**保留**。GitHub認可で会社用アカウントが選ばれやすいため、承認URLは最初からtaka-investでログインしたシークレットウィンドウで開くこと。1回目は反映遅れで失敗し、未使用SA `github-action-1261182527@` が残存（鍵なし、後で削除）
 3. ~~本人UIDの登録~~ ✅（画面表示のUIDは l/I の判別が難しいため、`firebase auth:export`で正確な値を確認してから登録した）
 4. **SEC_USER_AGENT**: 実際の運用連絡先（例:「FinanceBase 氏名 連絡先メール」）の指定。
-5. **Blazeプランへの変更**（Cloud Functionsのデプロイに必須）と予算アラート額の承認。
+5. ~~Blazeプランへの変更~~ ✅ ／ **予算アラート（推奨 月1,000円・50/90/100%通知）の設定確認**
 
 ## 未解決事項
 
