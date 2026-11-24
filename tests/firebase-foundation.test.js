@@ -86,7 +86,7 @@ test('deploy workflows: PRs reach only the preview channel; production is manual
   assert.match(prod, /channelId: live/);
 });
 
-test('emulator config mirrors production except /api rewrites; production exposes no /api route yet', () => {
+test('emulator config mirrors production; /api routes go only to Tokyo functions', () => {
   const prod = JSON.parse(fs.readFileSync(path.join(root, 'firebase.json'), 'utf8'));
   const emu = JSON.parse(fs.readFileSync(path.join(root, 'firebase.emulator.json'), 'utf8'));
   assert.deepEqual(prod.hosting.rewrites, emu.hosting.rewrites);

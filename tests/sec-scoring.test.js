@@ -79,3 +79,20 @@ test('exit signals use date-matched YoY and count consecutive deceleration', asy
   assert.equal(accel.decelCount, 0);
   assert.equal(accel.exitLabel, '継続保有');
 });
+
+test('PER / PSR: standard definitions on real data; never from missing or negative EPS', async () => {
+  const F = await mod('financials.js'), S = await mod('scoring.js');
+  const fin = F.analyzeFacts(fixture('NVDA'));
+  const m = S.valuationMultiples(fin, 165.05);
+  assert.equal(fin.latest.epsDilutedTtm > 0, true);
+  assert.equal(m.perTtm, Math.round(165.05 / fin.latest.epsDilutedTtm * 10) / 10);
+  assert.ok(m.psrTtm > 0);
+  assert.match(m.definitions.per, /TTM希薄化後EPS/);
+  assert.equal(S.valuationMultiples(fin, null).perTtm, null);
+  assert.equal(S.valuationMultiples(fin, null).perNote, '株価未取得');
+  const loss = { latest: { epsDilutedTtm: -0.5, revenueTtm: 1e9 }, shares: { val: 1e8 } };
+  const lm = S.valuationMultiples(loss, 10);
+  assert.equal(lm.perTtm, null);
+  assert.equal(lm.perNote, '赤字のため算出不可');
+  assert.equal(lm.psrTtm, 1);  // 10 × 1e8 / 1e9
+});
