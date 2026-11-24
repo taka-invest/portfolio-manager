@@ -215,7 +215,7 @@ etlifyunctions` 2026-09-17版）→ `functions/src/legacy/`: analyze / screener
 - 修正（PR #24、main `43f26fa`）：`research/*.html`は`SAMEORIGIN`＋`frame-ancestors 'self'`、`/`と`portfolio_manager.html`は`DENY`のまま。あわせて`/`が1時間キャッシュされていた問題（どのHTMLルールにも当たらず`max-age=3600`）をno-storeに
 - 再発防止：設定の単体テスト`tests/hosting-headers.test.js`（mainの旧設定で失敗することを確認）、本番スモークに埋め込み可否と`/`のキャッシュを追加
 - 検証：プレビューでスモーク50/50と埋め込み表示を確認 → CI（verify）合格 → Hostingのみ本番公開（Functionsは変更なし）→ 本番スモーク 50/50、本番で両画面の埋め込み読込を確認
-- **オーナーの本番実機確認**：未
+- **オーナーの本番実機確認**：旧画面が本番で表示されることを確認 ✅
 
 ## ユーザー対応待ち（ブロッカー）
 
