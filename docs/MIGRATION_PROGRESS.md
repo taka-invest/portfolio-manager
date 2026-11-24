@@ -164,7 +164,8 @@ etlifyunctions` 2026-09-17版）→ `functions/src/legacy/`: analyze / screener
 - mainで全テスト：単体97／ルール12／API結合5／ブラウザー50成功・12スキップ
 - `firebase deploy --only hosting`（main `410012d`）
 - 本番確認：app/*・research/library.html は200、firebase.json・firestore.rules・functions・tests・docs・`functions/.env`は404。`/api/financials|chart|market|analyze|screener`は同一オリジンの転送でFunctionsに届き、未ログインは401。画面：サイドバー10項目・新画面のモジュール読込・Firebase接続OK、コンソールエラー0件
-- 残り：オーナーによる本番でのログイン→個別企業分析・スクリーナー・チャート・市場分析の実機確認、予算アラートの設定確認
+- **オーナーの本番実機確認（2026-11-24）**：本番URLでGoogleログイン→個別企業分析（NVDA）が表示されることを確認 ✅
+- 残り：予算アラートの設定確認、Phase 7 総合検証、Phase 8 旧サイト停止（要承認）
 - ロールバック：Console → Hosting → リリース履歴（直前版は`9cb5954`相当のPortfolio Managerのみの版）
 
 ## ユーザー対応待ち（ブロッカー）
