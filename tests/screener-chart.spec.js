@@ -25,8 +25,8 @@ async function setup(page, apis) {
   await page.route('**/*', async route => {
     const url = new URL(route.request().url());
     if (url.pathname.startsWith('/api/')) {
-      calls.push({ path: url.pathname, search: url.search, body: route.request().postDataJSON?.() ?? null });
-      const handler = apis[url.pathname];
+      if (url.pathname !== '/api/market') calls.push({ path: url.pathname, search: url.search, body: route.request().postDataJSON?.() ?? null });
+      const handler = apis[url.pathname] ?? (url.pathname === '/api/market' ? r => r.fulfill({ status: 503, json: {} }) : null);
       return handler ? handler(route) : route.fulfill({ status: 404, contentType: 'text/html', body: 'nf' });
     }
     if (url.hostname === '127.0.0.1') return route.continue();

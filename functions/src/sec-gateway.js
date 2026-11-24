@@ -22,6 +22,8 @@ let nextSecAt = 0;
 
 export const isSec = url => /^https:\/\/(?:data|www)\.sec\.gov\//.test(url);
 const isYahoo = url => /^https:\/\/query[12]\.finance\.yahoo\.com\//.test(url);
+// CNN's Fear & Greed endpoint rejects non-browser clients; same parity rationale as Yahoo.
+const isCnn = url => /^https:\/\/production\.dataviz\.cnn\.io\//.test(url);
 const sleepReal = ms => new Promise(r => setTimeout(r, ms));
 
 export async function secPace(now = () => Date.now(), sleep = sleepReal) {
@@ -59,7 +61,7 @@ async function request(url, kind, options, fetcher, sleep) {
       headers: {
         Accept: kind === 'json' ? 'application/json' : 'text/html,application/xhtml+xml',
         ...(sec ? { 'User-Agent': process.env.SEC_USER_AGENT } : {}),
-        ...(isYahoo(url) ? { 'User-Agent': YAHOO_UA } : {}),
+        ...(isYahoo(url) || isCnn(url) ? { 'User-Agent': YAHOO_UA } : {}),
         ...options.headers
       },
       signal: AbortSignal.timeout(TIMEOUT_MS)

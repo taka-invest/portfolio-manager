@@ -3,6 +3,9 @@
 // token, classifies failures into user-facing Japanese messages, and never throws.
 ((root) => {
   async function token() {
+    if (!root.PMCloud && root.PMCloudReady) {
+      await Promise.race([root.PMCloudReady, new Promise(r => setTimeout(r, 5000))]);
+    }
     const cloud = root.PMCloud;
     if (!cloud || typeof cloud.idToken !== 'function') return null;
     try { return await cloud.idToken(); } catch { return null; }
@@ -24,7 +27,7 @@
   /** @returns {Promise<{data?: any, error?: string}>} */
   async function call(path, { method = 'GET', body, kind } = {}, fetcher = root.fetch.bind(root)) {
     const t = await token();
-    if (!t) return { error: 'Googleログインが必要です。「設定・データ管理」からログインしてください。' };
+    if (!t) return { error: 'Googleログインが必要です。「設定・データ管理」からログインしてください。', code: 'login' };
     let res;
     try {
       res = await fetcher(path, {
@@ -33,11 +36,14 @@
         ...(body ? { body: JSON.stringify(body) } : {})
       });
     } catch {
-      return { error: 'ネットワークに接続できません。' };
+      return { error: 'ネットワークに接続できません。', code: 'network' };
     }
     const type = res.headers.get('content-type') || '';
     const data = type.includes('json') ? await res.json().catch(() => null) : null;
-    if (!res.ok || !data) return { error: explain(res, data, kind) };
+    if (!res.ok || !data) {
+      const code = res.status === 404 && !type.includes('json') ? 'not-deployed' : 'http-' + res.status;
+      return { error: explain(res, data, kind), code };
+    }
     return { data };
   }
 

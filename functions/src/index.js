@@ -13,6 +13,7 @@ import { ticker, tickers } from './input.js';
 import { companyFinancials } from './sec/company.js';
 import { screenTickers } from './sec/screen.js';
 import { priceHistory, RANGES } from './sec/chart.js';
+import { marketParams, yahooChart, fearGreed } from './sec/market.js';
 
 initializeApp();
 setGlobalOptions({
@@ -144,3 +145,19 @@ export const financialsApi = secure('financials', {
     }
   }
 });
+
+// Market indicators for 市場分析 (VIX/VXN/^GSPC/technicals/Fear & Greed) fetched server-side.
+export const marketApi = secure('market', {
+  prepare(req) {
+    if (req.method !== 'GET') throw new Error('invalid method');
+    return marketParams(req.query);
+  },
+  async run(p) {
+    try {
+      return { statusCode: 200, body: p.kind === 'feargreed' ? await fearGreed() : await yahooChart(p) };
+    } catch (err) {
+      if (err.status === 404) return { statusCode: 404, body: { error: 'No market data' } };
+      throw err;
+    }
+  }
+}, { needsSec: false });

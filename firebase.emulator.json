@@ -69,6 +69,13 @@
         }
       },
       {
+        "source": "/api/market",
+        "function": {
+          "functionId": "marketApi",
+          "region": "asia-northeast1"
+        }
+      },
+      {
         "source": "/",
         "destination": "/portfolio_manager.html"
       }

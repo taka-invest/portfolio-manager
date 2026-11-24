@@ -14,15 +14,15 @@
   };
   const titles = {
     overview: 'ダッシュボード',
-    holdings: '保有資産',
-    rebalance: 'リバランス',
+    holdings: 'ポートフォリオ',
+    rebalance: '売買・リバランス',
     analysis: '個別企業分析',
     screener: '銘柄スクリーナー',
     chart: '株価チャート',
     market: '市場分析',
-    companies: '企業評価',
-    research: '投資リサーチ',
-    history: '取引・購入計画'
+    companies: '投資仮説・企業評価',
+    research: '投資指標ライブラリ',
+    history: '取引履歴・投資ジャーナル'
   };
   const hashToPage = Object.fromEntries(
     Object.entries(groups).flatMap(([page, ids]) => ids.map(id => [id, page]))

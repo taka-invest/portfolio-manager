@@ -301,16 +301,17 @@
   <nav class="pm-side-links" aria-label="主要機能">
     <p class="pm-nav-caption">PORTFOLIO</p>
     <a href="#overview" data-pm-view="overview" title="ダッシュボード"><span class="pm-nav-symbol" aria-hidden="true">▦</span><span class="pm-nav-label">ダッシュボード</span></a>
-    <a href="#holdings" data-pm-view="holdings" title="保有資産"><span class="pm-nav-symbol" aria-hidden="true">▤</span><span class="pm-nav-label">保有資産</span></a>
-    <a href="#rebalance" data-pm-view="rebalance" title="リバランス"><span class="pm-nav-symbol" aria-hidden="true">⇄</span><span class="pm-nav-label">リバランス</span></a>
-    <p class="pm-nav-caption">ANALYTICS</p>
+    <a href="#holdings" data-pm-view="holdings" title="ポートフォリオ"><span class="pm-nav-symbol" aria-hidden="true">▤</span><span class="pm-nav-label">ポートフォリオ</span></a>
+    <a href="#rebalance" data-pm-view="rebalance" title="売買・リバランス"><span class="pm-nav-symbol" aria-hidden="true">⇄</span><span class="pm-nav-label">売買・リバランス</span></a>
+    <p class="pm-nav-caption">RESEARCH</p>
     <a href="#analysis" data-pm-view="analysis" title="個別企業分析"><span class="pm-nav-symbol" aria-hidden="true">◎</span><span class="pm-nav-label">個別企業分析</span></a>
+    <a href="#companies" data-pm-view="companies" title="投資仮説・企業評価"><span class="pm-nav-symbol" aria-hidden="true">◈</span><span class="pm-nav-label">投資仮説・企業評価</span></a>
     <a href="#screener" data-pm-view="screener" title="銘柄スクリーナー"><span class="pm-nav-symbol" aria-hidden="true">☰</span><span class="pm-nav-label">銘柄スクリーナー</span></a>
     <a href="#market" data-pm-view="market" title="市場分析"><span class="pm-nav-symbol" aria-hidden="true">◉</span><span class="pm-nav-label">市場分析</span></a>
     <a href="#chart" data-pm-view="chart" title="株価チャート"><span class="pm-nav-symbol" aria-hidden="true">↗</span><span class="pm-nav-label">株価チャート</span></a>
-    <a href="#companies" data-pm-view="companies" title="企業評価"><span class="pm-nav-symbol" aria-hidden="true">◈</span><span class="pm-nav-label">企業評価</span></a>
-    <a href="#research" data-pm-view="research" title="投資リサーチ"><span class="pm-nav-symbol" aria-hidden="true">⌕</span><span class="pm-nav-label">投資リサーチ</span></a>
-    <a href="#history" data-pm-view="history" title="取引・購入計画"><span class="pm-nav-symbol" aria-hidden="true">◷</span><span class="pm-nav-label">取引・購入計画</span></a>
+    <a href="#research" data-pm-view="research" title="投資指標ライブラリ"><span class="pm-nav-symbol" aria-hidden="true">⌕</span><span class="pm-nav-label">投資指標ライブラリ</span></a>
+    <p class="pm-nav-caption">RECORDS</p>
+    <a href="#history" data-pm-view="history" title="取引履歴・投資ジャーナル"><span class="pm-nav-symbol" aria-hidden="true">◷</span><span class="pm-nav-label">取引履歴・投資ジャーナル</span></a>
   </nav>
   <div class="pm-side-footer">
     <a href="#data-settings" data-pm-view="overview" title="設定・データ管理"><span class="pm-nav-symbol" aria-hidden="true">⚙</span><span class="pm-nav-label">設定・データ管理</span></a>
@@ -571,6 +572,7 @@
   </section>
   <section id="market" aria-labelledby="market-title">
     <div class="pm-heading"><h2 id="market-title">市場センチメント・監視指標</h2></div>
+    <p id="pm-market-source" class="pm-callout pm-small" role="status" hidden></p>
     <div class="pm-settings-grid">
     <div data-ac-id="ac1" class="sentiment-panel settings-panel ac-section">
       <button class="ac-header" onclick="toggleAc(this)">
@@ -741,7 +743,7 @@
   </section>
 
   <section id="research" aria-labelledby="research-title" hidden>
-    <div class="pm-heading"><h2 id="research-title">投資リサーチ</h2></div>
+    <div class="pm-heading"><h2 id="research-title">投資指標ライブラリ</h2></div>
     <p class="pm-muted">伝説の会計学・Stock Analyzer統合。既存ポートフォリオとリバランスの計算には影響しません。</p>
     <div class="pm-card">
       <h3>投資指標ライブラリ</h3>
@@ -751,15 +753,17 @@
       <a class="btn btn-primary" href="research/library.html">投資指標ライブラリを開く</a>
     </div>
     <div class="pm-card">
-      <h3>個別企業分析・バッチスクリーナー</h3>
+      <h3>個別企業分析・銘柄スクリーナー・株価チャート</h3>
       <p class="pm-muted pm-small" style="margin:8px 0">
-        旧Stock AnalyzerのSEC財務分析・Yahoo株価データ取得はNetlify Functionsに依存しています。
-        現段階では旧サービスへの依存を増やさないため、API移行と検証が完了するまで新しい売買判断用の分析画面は公開しません。
+        旧Stock Analyzerの機能は、修正版のSEC財務計算に置き換えてPortfolio Managerに統合しました（検証中の参考値として表示）。
+        分析結果は保有株数・取得原価・取引記録を自動変更しません。
       </p>
-      <p class="pm-muted pm-small" style="margin:8px 0">
-        既存の「企業評価」は引き続き使用できます。分析機能の統合後も保有株数・取得原価・投資記録は自動変更されません。
-      </p>
-      <a class="btn btn-ghost" href="#companies">既存の企業評価へ移動</a>
+      <div class="pm-actions">
+        <a class="btn btn-ghost" href="#analysis">個別企業分析</a>
+        <a class="btn btn-ghost" href="#screener">銘柄スクリーナー</a>
+        <a class="btn btn-ghost" href="#chart">株価チャート</a>
+        <a class="btn btn-ghost" href="#companies">投資仮説・企業評価</a>
+      </div>
     </div>
     <div class="pm-card">
       <h3>旧Stock Analyzerのウォッチリストを引き継ぐ</h3>
@@ -1062,6 +1066,7 @@
 <script src="app/staged-funding.js"></script>
 <script src="app/navigation.js"></script>
 <script src="app/api.js"></script>
+<script src="app/market-data.js"></script>
 <script src="app/analysis.js"></script>
 <script src="app/screener.js"></script>
 <script src="app/price-chart.js"></script>
@@ -1156,20 +1161,12 @@ async function fetchTechnicals(ticker) {
   if (cached && Date.now() - cached.t < TTL) return cached;
 
   const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1d&range=3mo`;
-  const proxies = [
-    'https://api.allorigins.win/raw?url=' + encodeURIComponent(url),
-    'https://corsproxy.io/?' + encodeURIComponent(url),
-  ];
   let closes = null;
-  for (const proxy of proxies) {
-    try {
-      const res = await fetch(proxy, { signal: AbortSignal.timeout(10000) });
-      if (!res.ok) continue;
-      const json = await res.json();
-      closes = json?.chart?.result?.[0]?.indicators?.quote?.[0]?.close?.filter(v => v != null);
-      if (closes && closes.length >= 20) break;
-    } catch(e) {}
-  }
+  try {
+    // Holdings ticker: own API only once deployed; never via third-party proxies when signed out.
+    const json = await PMMarketData.chart(url, { sensitive: true });
+    closes = json?.chart?.result?.[0]?.indicators?.quote?.[0]?.close?.filter(v => v != null);
+  } catch(e) {}
   if (!closes || closes.length < 20) return null;
 
   const result = { rsi: calcRSI(closes), maDev: calcMADev(closes), t: Date.now() };
@@ -1249,23 +1246,10 @@ function getEarningsDate(ticker) {
 async function fetchVixQuote(symbol) {
   const encoded = encodeURIComponent(symbol);
   const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encoded}?interval=1d&range=1d`;
-  const proxies = [
-    'https://api.allorigins.win/raw?url=' + encodeURIComponent(url),
-    'https://corsproxy.io/?' + encodeURIComponent(url),
-    'https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(url),
-  ];
-  let lastErr;
-  for (const proxyUrl of proxies) {
-    try {
-      const res = await fetch(proxyUrl, { signal: AbortSignal.timeout(10000) });
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      const data = await res.json();
-      const price = data?.chart?.result?.[0]?.meta?.regularMarketPrice;
-      if (!price || isNaN(price) || price <= 0) throw new Error('データなし');
-      return parseFloat(price);
-    } catch(e) { lastErr = e; }
-  }
-  throw lastErr;
+  const data = await PMMarketData.chart(url);
+  const price = data?.chart?.result?.[0]?.meta?.regularMarketPrice;
+  if (!price || isNaN(price) || price <= 0) throw new Error('データなし');
+  return parseFloat(price);
 }
 
 // ── 市場センチメント（F&G + VIX） ──────────────────
@@ -1300,23 +1284,13 @@ function vxnLabel(v) {
 }
 
 // FRED（セントルイス連邦準備銀行）API
-// allorigins.win/get エンドポイント（JSONラッパー形式）で取得
+// 取得は PMMarketData（自前 /api/market 優先。API未公開時のみ第三者中継にフォールバック）
 // /raw より安定・レート制限に強い
 async function fetchSentiment() {
   try {
     // CNN Fear & Greed（複数プロキシ自動フォールバック）
-    const fgUrl = 'https://production.dataviz.cnn.io/index/fearandgreed/graphdata/';
-    const fgProxies = [
-      'https://api.allorigins.win/raw?url=' + encodeURIComponent(fgUrl),
-      'https://corsproxy.io/?' + encodeURIComponent(fgUrl),
-      'https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(fgUrl),
-    ];
-    let fgRes = null;
-    for (const p of fgProxies) {
-      try { const r = await fetch(p, { signal: AbortSignal.timeout(8000) }); if (r.ok) { fgRes = r; break; } } catch(e) {}
-    }
-    if (fgRes.ok) {
-      const fgData = await fgRes.json();
+    const fgData = await PMMarketData.fearGreed();
+    {
       const fg = Math.round(fgData.fear_and_greed?.score ?? fgData.fear_and_greed_historical?.data?.[0]?.x ?? 0);
       if (fg > 0) {
         document.getElementById('fg-value').textContent = fg;
@@ -1328,7 +1302,7 @@ async function fetchSentiment() {
     }
   } catch (e) {}
 
-  // VIX / VXN — Stooq.com CSV（直接 or corsproxy.io フォールバック）
+  // VIX / VXN — PMMarketData 経由（自前API優先）
   const [vixResult, vxnResult] = await Promise.allSettled([
     fetchVixQuote('^VIX'),
     fetchVixQuote('^VXN'),
@@ -2191,10 +2165,7 @@ async function fetchSpyHistoricalReturn(startDateStr) {
   const period1 = Math.floor(new Date(startDateStr).getTime() / 1000);
   const period2 = Math.floor(Date.now() / 1000);
   const url = `https://query1.finance.yahoo.com/v8/finance/chart/%5EGSPC?period1=${period1}&period2=${period2}&interval=1mo`;
-  const proxyUrl = 'https://corsproxy.io/?' + encodeURIComponent(url);
-  const res = await fetch(proxyUrl, { signal: AbortSignal.timeout(12000) });
-  if (!res.ok) throw new Error('HTTP ' + res.status);
-  const data = await res.json();
+  const data = await PMMarketData.chart(url);
   const closes = data.chart.result[0].indicators.quote[0].close.filter(v => v != null);
   if (closes.length < 2) throw new Error('データ不足');
   return (closes[closes.length - 1] - closes[0]) / closes[0] * 100;

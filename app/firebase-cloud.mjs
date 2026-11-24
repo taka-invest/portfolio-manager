@@ -178,10 +178,15 @@ export async function init() {
   const valid = cfg && ['apiKey', 'authDomain', 'projectId', 'appId']
     .every(key => typeof cfg[key] === 'string' && cfg[key].length > 3);
   const buttons = ['pm-cloud-login', 'pm-cloud-logout', 'pm-cloud-upload', 'pm-cloud-download'];
-  if (!buttons.every(id => el(id))) return;
+  // Pages without the sync panel (e.g. research/library.html) still get PMCloud for API calls.
+  const headless = !buttons.every(id => el(id));
+  const ready = value => { if (typeof window.__pmCloudResolve === 'function') window.__pmCloudResolve(value); };
   if (!valid) {
-    status('Firebase未接続です。プロジェクト設定が完了するまで、従来のJSON保存を利用できます。');
-    buttons.forEach(id => { el(id).disabled = true; });
+    if (!headless) {
+      status('Firebase未接続です。プロジェクト設定が完了するまで、従来のJSON保存を利用できます。');
+      buttons.forEach(id => { el(id).disabled = true; });
+    }
+    ready(null);
     return;
   }
   try {
@@ -197,9 +202,12 @@ export async function init() {
     if (emulator) {
       f.connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true });
       d.connectFirestoreEmulator(db, '127.0.0.1', 8080);
-      status('ローカルEmulatorに接続しています（本番データには触れません）。');
+      if (!headless) status('ローカルEmulatorに接続しています（本番データには触れません）。');
     }
-    window.PMCloud = { idToken: () => auth.currentUser?.getIdToken() ?? Promise.resolve(null) };
+    // Wait until the persisted sign-in has been restored before deciding "not logged in".
+    window.PMCloud = { idToken: async () => { await auth.authStateReady(); return auth.currentUser ? auth.currentUser.getIdToken() : null; } };
+    ready(window.PMCloud);
+    if (headless) return;
     el('pm-cloud-login').addEventListener('click', login);
     el('pm-cloud-logout').addEventListener('click', logout);
     el('pm-cloud-upload').addEventListener('click', upload);
@@ -229,7 +237,8 @@ export async function init() {
       await guarded(inspectRemote);
     }, err => status(pretty(err), true));
   } catch {
-    status('Firebase SDKを読み込めません。オフラインの場合はJSON保存を利用してください。', true);
+    ready(null);
+    if (!headless) status('Firebase SDKを読み込めません。オフラインの場合はJSON保存を利用してください。', true);
   }
 }
 init();
