@@ -3,7 +3,7 @@
 次のセッションはまずこのファイルと`docs/MIGRATION_AUDIT.md`を読むこと。
 
 - Firebaseプロジェクト: Finance Base `finance-base-edcc7`（Sparkプラン、2026-11-23時点）
-- 作業ブランチ: `feature/phase2-stock-analyzer`（PR #18）。PR #16（`feature/firebase-foundation-phase1`）は2026-11-23にmainへsquashマージ済み
+- 作業ブランチ: 新しい作業ごとに`main`から作成。PR #16（基盤）・PR #18（Phase 2-3）はmainへsquashマージ済み
 - 旧サイト（移行完了まで維持）: GitHub Pages `portfolio_manager.html`／Netlify `masya-stock-analyzer`
 - Stock Analyzer最新ソース: `C:\Users\defaultuser0\Documents\masya_app\`（git管理外。読み取り専用で参照）
 
@@ -19,7 +19,7 @@
 | 5 | セキュリティ・費用 | 🟡 Blaze化済（2026-11-24 オーナー操作）。予算アラートの設定確認待ち |
 | 6 | CI/CD | 🟡 プレビュー/本番ワークフローと承認ゲート作成済。デプロイ用SA（本人操作）待ち |
 | 7 | 総合検証 | ⬜ |
-| 8 | 本番切替 | 🟡 Portfolio Managerのみ本番公開（2026-11-23）。Stock Analyzer未移行・旧サイトは維持 |
+| 8 | 本番切替 | 🟡 Portfolio Manager＋Stock Analyzer統合版を本番公開（2026-11-24）。旧サイトは維持、オーナーの実機確認待ち |
 
 ## 2026-11-23 セッション1 の実施内容
 
@@ -158,6 +158,14 @@ etlifyunctions` 2026-09-17版）→ `functions/src/legacy/`: analyze / screener
 - コンテナイメージの自動削除ポリシー：3日（Artifact Registry `gcf-artifacts`、asia-northeast1）
 - 本番での拒否確認：トークンなし・不正トークン・署名なし（Emulator形式）トークンはすべて401。CORSヘッダーなし、`Cache-Control: private, no-store`。Cloud Loggingには`api/status/durationMs/errorClass`のみ記録（UID・トークン・保有なし）
 - 本番の`firebase.json`に`/api/*`→各関数（東京）の転送を追加（**Hostingへの反映は未実施**。PR #18のマージと本番公開の承認後）
+
+## 本番公開 Phase 2-3（2026-11-24、オーナー承認「公開してよい」）
+- PR #18をmainへsquashマージ（`410012d`）。mainの内容は検証済みブランチ`1172d5b`と同一
+- mainで全テスト：単体97／ルール12／API結合5／ブラウザー50成功・12スキップ
+- `firebase deploy --only hosting`（main `410012d`）
+- 本番確認：app/*・research/library.html は200、firebase.json・firestore.rules・functions・tests・docs・`functions/.env`は404。`/api/financials|chart|market|analyze|screener`は同一オリジンの転送でFunctionsに届き、未ログインは401。画面：サイドバー10項目・新画面のモジュール読込・Firebase接続OK、コンソールエラー0件
+- 残り：オーナーによる本番でのログイン→個別企業分析・スクリーナー・チャート・市場分析の実機確認、予算アラートの設定確認
+- ロールバック：Console → Hosting → リリース履歴（直前版は`9cb5954`相当のPortfolio Managerのみの版）
 
 ## ユーザー対応待ち（ブロッカー）
 
