@@ -13,7 +13,7 @@
 |---|---|---|
 | 0 | 監査 | ✅ 完了（2026-11-23）`docs/MIGRATION_AUDIT.md` |
 | 1 | Firebase初期構築・認証・Firestore・同期 | 🟢 保存・別ブラウザー復元を実機確認。Hostingプレビュー未実施 |
-| 2 | Functions移行（analyze/screener/chart） | 🟡 最新版移植・修正版財務層・ゲートウェイ強化済。SEC実データ照合待ち（SEC連絡先が必要） |
+| 2 | Functions移行（analyze/screener/chart） | 🟡 修正版財務層をSEC実データで検証済（PLTR/APP/NVDA）。スコア・株価推定の載せ替えとEmulator結合テストが残り |
 | 3 | 画面統合 | ⬜ |
 | 4 | 既存機能保護（リバランス・ピラミッディング） | 🟡 既存テストで保護中。弾(A/B/C)の同期が未対応 |
 | 5 | セキュリティ・費用 | 🟡 maxInstances=1等は設定済。Blaze・予算アラートは承認待ち |
@@ -100,9 +100,16 @@ etlifyunctions` 2026-09-17版）→ `functions/src/legacy/`: analyze / screener
 - `functions/src/sec/company.js` ＋ `financialsApi`（認証ゲート経由）。応答に出典URL・取得時刻・通貨・`status: verification-pending`
 - テスト: 単体74件成功（合成companyfactsで手計算値と照合、旧エンジンの位置ずれ欠陥の再現、ゲートウェイのリトライ/UA/LRU、移植コードの直接通信禁止）
 
+### SEC実データ検証（2026-11-24）
+- SEC連絡先はオーナー承認のもと個人メールを使用。`functions/.env`（gitignore）にのみ保存し、リポジトリには書かない
+- `scripts/fetch-sec-fixtures.mjs`でPLTR/APP/NVDAのcompanyfactsを取得し、使用タグだけに絞った版を`tests/fixtures/sec/`に保存（SECの公開データ）
+- 結果は`docs/FINANCIAL_VERIFICATION.md`。元データ（四半期の売上・営業利益率）は旧版と全件一致。差異は旧版の欠陥のみ（前年比の比較相手が15か月前にずれる：PLTR 130.5%→95.9%、NVDA 118.4%→105.9%。通期の重複：APPの前年比16.4%→70.0%）
+- 実データで見つかった問題を修正：TTMのEPSが常に欠損になる（会計年度末は通期EPS、Q4は近似値として算出）、NVDA 2010年の期末日1日違いの重複
+- APPは2025年以降、設備投資をXBRLで開示していない → FCFは欠損のまま（0にしない）
+- テスト：単体80件成功（実データのフィクスチャテスト6件を含む）
+
 ### 次（Phase 2残り）
-1. **SEC実データ照合**: PLTR/APP/NVDAのcompanyfactsを取得し、10-Q/10-Kの公表値（売上・営業利益・希薄化後EPS・営業CF・設備投資）と照合 → フィクスチャ化。要`SEC_USER_AGENT`（実在の連絡先）
-2. 旧Netlify版の出力と修正版の差分表（差異の原因を記録）
+1. ~~SEC実データ照合~~ ✅ ／ ~~旧版との差分表~~ ✅（`docs/FINANCIAL_VERIFICATION.md`）
 3. Functions Emulatorで認証付き結合テスト（functions依存のインストール）
 4. 旧analyze.jsのスコア・株価推定を修正版データに載せ替え（欠損`??0`・楽観仮定の是正）
 

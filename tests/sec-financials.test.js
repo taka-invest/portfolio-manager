@@ -98,8 +98,11 @@ test('YoY, TTM, Rule of 40 (both definitions) and operating leverage are matched
 test('per-share values are never differenced; missing inputs stay null, never 0', async () => {
   const { analyzeFacts } = await load();
   const l = analyzeFacts(companyfacts).latest;
-  assert.equal(l.epsDiluted, null);            // no direct Q4 EPS; FY − 9M is invalid for EPS
-  assert.equal(l.epsDilutedTtm, null);
+  assert.equal(Math.round(l.epsDiluted * 100) / 100, 0.17); // Q4 ≈ FY 0.50 − (0.10+0.11+0.12), flagged approx
+  assert.equal(l.epsDilutedDerived, true);
+  assert.equal(l.epsDilutedTtm, 0.5);         // fiscal-year end: exact FY diluted EPS, not a sum
+  const q3 = analyzeFacts(companyfacts).quarters.find(q => q.end === '2024-09-30');
+  assert.equal(q3.epsDilutedTtm, null);       // 2023 quarterly EPS not filed -> no TTM, never 0
   const noCapex = structuredClone(companyfacts);
   delete noCapex.facts['us-gaap'].PaymentsToAcquirePropertyPlantAndEquipment;
   const m = analyzeFacts(noCapex).latest;
