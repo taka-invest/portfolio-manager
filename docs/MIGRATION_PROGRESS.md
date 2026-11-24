@@ -3,7 +3,7 @@
 次のセッションはまずこのファイルと`docs/MIGRATION_AUDIT.md`を読むこと。
 
 - Firebaseプロジェクト: Finance Base `finance-base-edcc7`（Sparkプラン、2026-11-23時点）
-- 作業ブランチ: `feature/firebase-foundation-phase1`（PR #16）
+- 作業ブランチ: `feature/phase2-stock-analyzer`（PR #18）。PR #16（`feature/firebase-foundation-phase1`）は2026-11-23にmainへsquashマージ済み
 - 旧サイト（移行完了まで維持）: GitHub Pages `portfolio_manager.html`／Netlify `masya-stock-analyzer`
 - Stock Analyzer最新ソース: `C:\Users\defaultuser0\Documents\masya_app\`（git管理外。読み取り専用で参照）
 
