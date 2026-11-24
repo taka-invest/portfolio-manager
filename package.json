@@ -7,7 +7,9 @@
     "test:browser": "playwright test",
     "build:firebase": "node scripts/build-firebase.mjs",
     "verify:firebase": "npm run build:firebase && node --test tests/firebase-foundation.test.js",
-    "test:rules": "firebase emulators:exec --only firestore --project demo-finance-base \"node --test tests/emulator/*.test.mjs\""
+    "test:rules": "firebase emulators:exec --only firestore --project demo-finance-base \"node --test tests/emulator/firestore-rules.test.mjs\"",
+    "test:api": "firebase emulators:exec --only auth,firestore,functions --project demo-finance-base \"node --test tests/emulator/functions-api.test.mjs\"",
+    "dev:emulators": "npm run build:firebase && firebase emulators:start --config firebase.emulator.json --only hosting,auth,firestore,functions --project demo-finance-base"
   },
   "devDependencies": {
     "@firebase/rules-unit-testing": "6.0.0",

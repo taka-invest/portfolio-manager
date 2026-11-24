@@ -9,9 +9,12 @@ export class AccessError extends Error {
   constructor(status, message) { super(message); this.status = status; }
 }
 
-export function bearer(header) {
+export function bearer(header, emulator = process.env.FUNCTIONS_EMULATOR === 'true') {
   const value = String(header || '');
-  if (!/^Bearer [\w-]+\.[\w-]+\.[\w-]+$/.test(value)) throw new AccessError(401, 'Google login required');
+  // Production tokens are always signed. The Auth Emulator issues unsigned tokens
+  // ("header.payload."), accepted ONLY when running inside the Functions Emulator.
+  const shape = emulator ? /^Bearer [\w-]+\.[\w-]+\.[\w-]*$/ : /^Bearer [\w-]+\.[\w-]+\.[\w-]+$/;
+  if (!shape.test(value)) throw new AccessError(401, 'Google login required');
   return value.slice(7);
 }
 

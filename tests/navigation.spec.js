@@ -30,25 +30,25 @@ test('desktop: six routes, rebalance subtabs, history, preference and in-progres
 
   // Unsaved form values stay in the mounted DOM when switching views.
   await page.locator('#cash-jpy').fill('12345');
-  await nav.getByRole('link', { name: '保有資産' }).click();
+  await nav.getByRole('link', { name: 'ポートフォリオ' }).click();
   await expect(page).toHaveURL(/#holdings$/);
   await expect(page.locator('#holdings')).toBeVisible();
   await expect(page.locator('#overview')).toBeHidden();
-  await nav.getByRole('link', { name: 'リバランス' }).click();
+  await nav.getByRole('link', { name: '売買・リバランス' }).click();
   await expect(page.locator('#allocation')).toBeVisible();
   await expect(page.locator('#rebalance')).toBeVisible();
   await expect(page.locator('#after')).toBeVisible();
   await expect(page.locator('#pm-rebalance-subnav')).toBeVisible();
   await page.getByRole('navigation', { name: 'リバランス内の移動' }).getByRole('link', { name: /売買後構成/ }).click();
   await expect(page).toHaveURL(/#after$/);
-  await expect(nav.getByRole('link', { name: 'リバランス' })).toHaveAttribute('aria-current', 'page');
+  await expect(nav.getByRole('link', { name: '売買・リバランス' })).toHaveAttribute('aria-current', 'page');
 
   await nav.getByRole('link', { name: '市場分析' }).click();
   await expect(page.locator('#market')).toBeVisible();
   await expect(page.locator('#rebalance')).toBeHidden();
-  await nav.getByRole('link', { name: '企業評価' }).click();
+  await nav.getByRole('link', { name: '投資仮説・企業評価' }).click();
   await expect(page.locator('#companies')).toBeVisible();
-  await nav.getByRole('link', { name: '取引・購入計画' }).click();
+  await nav.getByRole('link', { name: '取引履歴・投資ジャーナル' }).click();
   await expect(page.locator('#history')).toBeVisible();
   await page.goBack();
   await expect(page.locator('#companies')).toBeVisible();
@@ -90,7 +90,7 @@ test('mobile: drawer, overlay, Escape and selection', async ({ page }, testInfo)
   await expect(trigger).toHaveAttribute('aria-expanded', 'true');
   await expect(sidebar).toHaveJSProperty('inert', false);
   await expect(page.locator('#pm-nav-scrim')).toBeVisible();
-  await sidebar.getByRole('link', { name: 'リバランス' }).click();
+  await sidebar.getByRole('link', { name: '売買・リバランス' }).click();
   await expect(page.locator('#allocation')).toBeVisible();
   await expect(page.locator('#holdings')).toBeHidden();
   await expect(page.locator('#pm-nav-scrim')).toBeHidden();

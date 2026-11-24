@@ -21,7 +21,12 @@ test('Firebase Hosting bundle publishes only vetted static pages and assets', ()
 test('Firebase Hosting serves root app and only public static assets', () => {
   const config = JSON.parse(fs.readFileSync(path.join(root, 'firebase.json'), 'utf8'));
   assert.equal(config.hosting.public, 'dist/firebase');
-  assert.deepEqual(config.hosting.rewrites, [{ source: '/', destination: '/portfolio_manager.html' }]);
+  assert.deepEqual(config.hosting.rewrites.at(-1), { source: '/', destination: '/portfolio_manager.html' });
+  // Cloud Functions are deployed (2026-11-24): /api routes go only to our own functions in Tokyo.
+  for (const r of config.hosting.rewrites.slice(0, -1)) {
+    assert.match(r.source, /^\/api\/(financials|analyze|screener|chart|market)$/);
+    assert.equal(r.function.region, 'asia-northeast1');
+  }
   assert.equal(config.firestore.rules, 'firestore.rules');
 });
 test('Firebase integration targets finance-base-edcc7, holds no secrets, and is opt-in and cloud data can only enter via reviewed importer', () => {
@@ -79,4 +84,18 @@ test('deploy workflows: PRs reach only the preview channel; production is manual
   assert.match(prod, /needs: test/);
   assert.match(prod, /name: production/);
   assert.match(prod, /channelId: live/);
+});
+
+test('emulator config mirrors production except /api rewrites; production exposes no /api route yet', () => {
+  const prod = JSON.parse(fs.readFileSync(path.join(root, 'firebase.json'), 'utf8'));
+  const emu = JSON.parse(fs.readFileSync(path.join(root, 'firebase.emulator.json'), 'utf8'));
+  assert.deepEqual(prod.hosting.rewrites, emu.hosting.rewrites);
+  const api = emu.hosting.rewrites.filter(r => r.source.startsWith('/api/'));
+  assert.deepEqual(api.map(r => r.function.region), Array(5).fill('asia-northeast1'));
+  assert.deepEqual(emu.hosting.rewrites.at(-1), { source: '/', destination: '/portfolio_manager.html' });
+  const strip = c => ({ ...c, hosting: { ...c.hosting, rewrites: [] }, emulators: { ...c.emulators, hosting: undefined } });
+  assert.deepEqual(JSON.parse(JSON.stringify(strip(emu))), JSON.parse(JSON.stringify(strip(prod))));
+  const client = fs.readFileSync(path.join(root, 'app/firebase-cloud.mjs'), 'utf8');
+  assert.match(client, /location\.port === '5000'/);
+  assert.match(client, /projectId: 'demo-finance-base'/);
 });

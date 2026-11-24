@@ -10,3 +10,7 @@ window.PMFirebaseWebConfig = {
   messagingSenderId: '472264087274',
   appId: '1:472264087274:web:af5ac46e3e19c34f466993'
 };
+
+// Resolved by app/firebase-cloud.mjs once Auth is initialised (or unavailable), so
+// API calls made during page load can wait for the restored sign-in.
+window.PMCloudReady = window.PMCloudReady || new Promise(resolve => { window.__pmCloudResolve = resolve; });

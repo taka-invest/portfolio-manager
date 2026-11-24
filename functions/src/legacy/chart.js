@@ -1,24 +1,8 @@
-import https from 'https';
-
-function fetchJson(url) {
-  return new Promise((resolve, reject) => {
-    const req = https.get(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        'Accept': 'application/json',
-      },
-    }, res => {
-      let data = '';
-      res.on('data', chunk => data += chunk);
-      res.on('end', () => {
-        try { resolve(JSON.parse(data)); }
-        catch (e) { reject(new Error('JSON parse error')); }
-      });
-    });
-    req.on('error', reject);
-    req.setTimeout(10000, () => { req.destroy(); reject(new Error('timeout')); });
-  });
-}
+// Ported verbatim from the Netlify production source (masya_app, 2026-09-17) except
+// that every upstream request goes through ../sec-gateway.js (SEC UA, pacing, cache,
+// retry). Do not fix financial logic here: corrected logic lives in ../sec/.
+import { getJson } from '../sec-gateway.js';
+const fetchJson = url => getJson(url);
 
 export const handler = async (event) => {
   const headers = {

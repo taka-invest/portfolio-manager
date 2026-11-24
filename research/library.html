@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- Portfolio Manager統合版：masya_app最新版（2026-06-15, 84KB）を移植。旧Netlify APIの代わりに認証付きの /api/financials・/api/market を使う。保有データは変更しない。 -->
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
@@ -40,10 +41,13 @@
   .badge-orange  { background:rgba(251,146,60,0.15); border:1px solid rgba(251,146,60,0.4); color:#fed7aa; }
   .badge-purple  { background:rgba(168,85,247,0.15); border:1px solid rgba(168,85,247,0.4); color:#d8b4fe; }
   .badge-red     { background:rgba(239,68,68,0.12);  border:1px solid rgba(239,68,68,0.3);  color:#fca5a5; }
+  .hof-card { background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 20px; transition: all 0.3s; }
+  .hof-card:hover { border-color: rgba(255,255,255,0.18); background: rgba(255,255,255,0.06); }
+  .hof-progress { height: 4px; background: rgba(255,255,255,0.08); border-radius: 2px; overflow: hidden; }
+  .hof-progress-bar { height: 100%; background: linear-gradient(90deg, #6366f1, #8b5cf6); border-radius: 2px; transition: width 0.4s ease; }
 </style>
 </head>
 <body class="gradient-bg min-h-screen text-white">
-<!-- Portfolio Manager 統合フェーズ1: ライブラリの単体静的移植。既存ポートフォリオ保存データを変更しない。 -->
 
 <!-- ヘッダー -->
 <header class="border-b border-white/8 py-5 px-4 sticky top-0 z-50" style="background:rgba(13,13,26,0.95);backdrop-filter:blur(12px)">
@@ -61,6 +65,7 @@
       <a href="#masya-score" class="text-xs text-white/40 hover:text-white px-3 py-1.5 rounded-lg hover:bg-white/5 transition-all">マシャスコア</a>
       <a href="#cases"      class="text-xs text-white/40 hover:text-white px-3 py-1.5 rounded-lg hover:bg-white/5 transition-all">参入検証</a>
       <a href="#framework"  class="text-xs text-white/40 hover:text-white px-3 py-1.5 rounded-lg hover:bg-white/5 transition-all">判断フロー</a>
+      <a href="#hallofame" class="text-xs text-white/40 hover:text-white px-3 py-1.5 rounded-lg hover:bg-white/5 transition-all">🏆 殿堂</a>
     </div>
   </div>
 </header>
@@ -786,8 +791,115 @@
   <footer class="text-center text-xs text-white/20 pb-8 space-y-1">
     <p>このライブラリはマシャ塾の投資哲学と定量分析の融合による学習目的のコンテンツです</p>
     <p>投資判断はご自身の責任で行ってください ／ データ出所: SEC EDGAR (XBRL) / 市場データ</p>
-    <p class="mt-2"><a href="../portfolio_manager.html#companies" class="text-indigo-400 hover:text-indigo-300">← 分析アプリに戻る</a></p>
+    <p class="mt-2"><a href="../portfolio_manager.html#analysis" class="text-indigo-400 hover:text-indigo-300">← 分析アプリに戻る</a></p>
   </footer>
+
+  <!-- ━━━━━ 殿堂入り銘柄 & T1レーダー ━━━━━ -->
+  <section id="hallofame" class="fade-in">
+    <div class="text-center mb-8">
+      <h2 class="text-3xl font-black mb-2">🏆 殿堂入り銘柄 & T1レーダー</h2>
+      <p class="text-white/50 text-sm">SEC公式データ × 株価履歴でシグナルの実効性を実証。T1レーダーは今まさに発動中の銘柄をリアルタイム検出。</p>
+    </div>
+
+    <!-- タブ切り替え -->
+    <div class="flex gap-2 mb-6">
+      <button id="tabHof" onclick="switchHofTab('hof')"
+        class="px-5 py-2 rounded-xl text-sm font-bold transition-all bg-indigo-500 text-white">
+        🏆 殿堂入り銘柄
+      </button>
+      <button id="tabRadar" onclick="switchHofTab('radar')"
+        class="px-5 py-2 rounded-xl text-sm font-bold transition-all bg-white/5 text-white/50 hover:bg-white/10 hover:text-white/80">
+        🎯 T1レーダー
+      </button>
+    </div>
+
+    <!-- ━━ 殿堂パネル ━━ -->
+    <div id="panelHof">
+      <div class="card rounded-2xl p-5 mb-6">
+        <div class="flex flex-wrap gap-2 mb-4" id="hofTickerChips"></div>
+        <!-- カスタム銘柄入力 -->
+        <div class="flex gap-2 mb-4">
+          <input id="hofCustomInput" type="text" placeholder="銘柄追加: AAPL GOOGL AMD …（スペース区切り）"
+            class="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-sm text-white placeholder-white/25 focus:outline-none focus:border-indigo-400"
+            onkeydown="if(event.key==='Enter') addHofCustomTickers()"/>
+          <button onclick="addHofCustomTickers()"
+            class="bg-white/10 hover:bg-white/20 transition-all rounded-xl px-4 py-2 text-sm text-white/70 font-bold">追加</button>
+        </div>
+        <div class="flex items-center gap-4 flex-wrap">
+          <button id="hofScanBtn" onclick="runHofScan()"
+            class="bg-indigo-500 hover:bg-indigo-400 active:scale-95 transition-all rounded-xl px-6 py-2.5 text-sm font-bold text-white">
+            🔍 殿堂スキャン実行
+          </button>
+          <div class="flex-1 min-w-[200px]">
+            <div class="hof-progress" id="hofProgressWrap" style="display:none">
+              <div class="hof-progress-bar" id="hofProgressBar" style="width:0%"></div>
+            </div>
+            <p class="text-xs text-white/40 mt-1" id="hofStatus">銘柄を選択してスキャンを実行してください</p>
+          </div>
+        </div>
+      </div>
+      <div class="flex flex-wrap gap-2 mb-6 text-xs">
+        <span class="px-2.5 py-1 rounded-full font-bold" style="background:rgba(251,191,36,0.2);border:1px solid rgba(251,191,36,0.5);color:#fde68a">● T1 RoF100+×OpM拡大（最強）</span>
+        <span class="px-2.5 py-1 rounded-full font-bold" style="background:rgba(52,211,153,0.2);border:1px solid rgba(52,211,153,0.5);color:#6ee7b7">● T2 YoY加速+OpM急拡大</span>
+        <span class="px-2.5 py-1 rounded-full font-bold" style="background:rgba(251,146,60,0.2);border:1px solid rgba(251,146,60,0.5);color:#fed7aa">● T4 赤字→黒字転換</span>
+        <span class="px-2.5 py-1 rounded-full font-bold" style="background:rgba(99,102,241,0.2);border:1px solid rgba(99,102,241,0.5);color:#a5b4fc">● T3 RoF40突破</span>
+      </div>
+      <div id="hofResults" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5"></div>
+      <div id="hofSummary" class="hidden mt-8 card rounded-2xl p-6">
+        <h3 class="text-lg font-black mb-4">📊 Tier別 実績サマリー</h3>
+        <div id="hofSummaryContent" class="grid grid-cols-2 md:grid-cols-4 gap-4"></div>
+        <p class="text-xs text-white/30 mt-4">※ 過去の実績は将来を保証しません。SEC公式財務データに基づく定量分析です。</p>
+      </div>
+    </div>
+
+    <!-- ━━ T1レーダーパネル ━━ -->
+    <div id="panelRadar" class="hidden">
+      <!-- 説明カード -->
+      <div class="card rounded-2xl p-5 mb-6 border border-yellow-400/20" style="background:rgba(251,191,36,0.04)">
+        <div class="flex items-start gap-4">
+          <div class="text-3xl">🎯</div>
+          <div>
+            <h3 class="font-black text-yellow-300 mb-1">T1シグナル ライブレーダー</h3>
+            <p class="text-white/50 text-sm leading-relaxed">約80銘柄のSEC財務データをスキャンし、<span class="text-yellow-300 font-bold">直近QにT1条件（RoF40≥100 かつ OpM+3pp以上拡大）</span>が発動している銘柄をリアルタイム検出します。殿堂データの平均: T1発動後 <span class="text-yellow-300 font-bold">Peak +400%超、最適ホールド12〜24ヶ月。</span></p>
+          </div>
+        </div>
+      </div>
+
+      <!-- スキャンコントロール -->
+      <div class="card rounded-2xl p-5 mb-6">
+        <div class="flex items-center gap-4 flex-wrap mb-3">
+          <button id="radarScanBtn" onclick="runT1Radar()"
+            class="bg-yellow-500 hover:bg-yellow-400 active:scale-95 transition-all rounded-xl px-6 py-2.5 text-sm font-black text-black">
+            ⚡ T1スキャン開始
+          </button>
+          <div class="flex-1 min-w-[200px]">
+            <div class="hof-progress" id="radarProgressWrap" style="display:none">
+              <div class="hof-progress-bar" id="radarProgressBar" style="width:0%;background:linear-gradient(90deg,#fbbf24,#f59e0b)"></div>
+            </div>
+            <p class="text-xs text-white/40 mt-1" id="radarStatus">スキャンボタンで約80銘柄をチェックします（所要: 約30秒）</p>
+          </div>
+        </div>
+        <p class="text-xs text-white/25">スキャン対象: DYNAMIC_POOL（NVDA MSFT GOOGL META AMZN AAPL TSLA ORCL ARM ANET DELL VRT SMCI PLTR APP CRWD DDOG ZS NET PANW FTNT S NOW CRM ADBE INTU TEAM MNDY HUBS TTD GTLB CFLT FOUR VEEV WDAY MDB BILL AMD AVGO QCOM MU AMAT LRCX KLAC TXN MRVL ON NXPI ASML TSM MPWR NFLX SPOT UBER ABNB BKNG SHOP MELI RBLX V MA COIN PYPL SQ NU SOFI SCHW KKR BX BLK ISRG LLY NVO VRTX REGN AMGN GILD TMO DHR SYK DXCM AXON LMT GD RTX GE HON ETN DECK RCL HLT ONON NKE RDDT DUOL CELH CAVA）</p>
+      </div>
+
+      <!-- T1ヒット件数バッジ -->
+      <div id="radarHitBadge" class="hidden mb-5 flex items-center gap-3">
+        <div class="text-2xl font-black text-yellow-300" id="radarHitCount">0</div>
+        <div class="text-sm text-white/60">銘柄でT1シグナル検出 — <span class="text-yellow-300 font-bold">買いを検討する価値あり</span></div>
+      </div>
+
+      <!-- ヒット銘柄グリッド -->
+      <div id="radarResults" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 mb-6"></div>
+
+      <!-- スキャン済み全銘柄 (折りたたみ) -->
+      <div id="radarAllWrap" class="hidden">
+        <button onclick="toggleRadarAll()" class="text-xs text-white/30 hover:text-white/60 mb-3 transition-all" id="radarAllToggleBtn">
+          ▶ スキャン済み全銘柄を表示
+        </button>
+        <div id="radarAllResults" class="hidden grid grid-cols-2 md:grid-cols-4 xl:grid-cols-6 gap-2"></div>
+      </div>
+    </div>
+  </section>
 
 </div>
 
@@ -811,6 +923,528 @@ document.querySelectorAll('a[href^="#"]').forEach(a => {
     if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
   });
 });
+
+// ━━━━━ 殿堂入り銘柄 ━━━━━
+const HOF_TICKERS = [
+  'NVDA','APP','MU','MRVL','PLTR','CRWD','SMCI','META','CELH','DDOG','AVGO','TSLA'
+];
+const HOF_SELECTED = new Set(HOF_TICKERS);
+
+const TIER_CFG = {
+  T1: { color:'#fbbf24', bg:'rgba(251,191,36,0.2)', border:'rgba(251,191,36,0.5)', label:'T1 最強' },
+  T2: { color:'#34d399', bg:'rgba(52,211,153,0.2)', border:'rgba(52,211,153,0.5)', label:'T2 転換' },
+  T4: { color:'#fb923c', bg:'rgba(251,146,60,0.2)', border:'rgba(251,146,60,0.5)', label:'T4 黒字化' },
+  T3: { color:'#818cf8', bg:'rgba(99,102,241,0.2)', border:'rgba(99,102,241,0.5)', label:'T3 RoF40' },
+};
+
+// 銘柄チップ初期化
+function initHofChips() {
+  const wrap = document.getElementById('hofTickerChips');
+  if (!wrap) return;
+  HOF_TICKERS.forEach(t => {
+    const btn = document.createElement('button');
+    btn.className = 'px-3 py-1 rounded-full text-xs font-bold transition-all';
+    btn.dataset.ticker = t;
+    btn.textContent = t;
+    btn.onclick = () => {
+      if (HOF_SELECTED.has(t)) { HOF_SELECTED.delete(t); btn.style.cssText = 'background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.15);color:rgba(255,255,255,0.4)'; }
+      else { HOF_SELECTED.add(t); applyChipActive(btn); }
+    };
+    applyChipActive(btn);
+    wrap.appendChild(btn);
+  });
+}
+function applyChipActive(btn) {
+  btn.style.cssText = 'background:rgba(99,102,241,0.25);border:1px solid rgba(99,102,241,0.6);color:#c7d2fe';
+}
+
+// シグナル検出
+function detectSignals(trend) {
+  const sorted = [...trend].reverse();
+  const events = [];
+  for (let i = 0; i < sorted.length; i++) {
+    const q = sorted[i], prev = sorted[i-1];
+    const opM = q.opM ?? 0, revM = q.revM ?? 1;
+    const opPct = revM > 0 ? opM/revM*100 : null;
+    const prevOpM = prev?.opM ?? null, prevRevM = prev?.revM ?? 1;
+    const prevOpPct = prevRevM > 0 && prevOpM != null ? prevOpM/prevRevM*100 : null;
+    const rof40 = q.rof40 ?? 0, revYoY = q.revYoY ?? 0;
+    const t1 = rof40 >= 100 && opPct != null && prevOpPct != null && opPct > prevOpPct + 3;
+    const t4 = prevOpM != null && prevOpM <= 0 && opM > 0;
+    const t2 = revYoY > 20 && opPct != null && prevOpPct != null && opPct > prevOpPct + 5;
+    const t3 = rof40 >= 40;
+    const tier = t1?'T1': t4?'T4': t2?'T2': t3?'T3': null;
+    if (!tier || !q.end) continue;
+    const endD = new Date(q.end + 'T00:00:00Z');
+    endD.setUTCMonth(endD.getUTCMonth() + 1);
+    const signalMonth = `${endD.getUTCFullYear()}-${String(endD.getUTCMonth()+1).padStart(2,'0')}`;
+    events.push({ q: q.q, end: q.end, signalMonth, tier, rof40: +rof40.toFixed(1), opPct: opPct!=null?+opPct.toFixed(1):null, revYoY: +revYoY.toFixed(1) });
+  }
+  return events;
+}
+
+// 月キー計算
+function addMonths(ym, n) {
+  const [y, m] = ym.split('-').map(Number);
+  const d = new Date(Date.UTC(y, m-1+n, 1));
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,'0')}`;
+}
+
+// リターン計算
+function calcReturns(signalMonth, priceMap) {
+  const p0 = priceMap[signalMonth];
+  if (!p0) return null;
+  const ret = (mo) => { const p = priceMap[addMonths(signalMonth, mo)]; return p ? +((p/p0-1)*100).toFixed(1) : null; };
+  let peakRet = 0, peakMo = 0;
+  for (let mo = 1; mo <= 24; mo++) {
+    const p = priceMap[addMonths(signalMonth, mo)];
+    if (p && (p/p0-1) > peakRet) { peakRet = p/p0-1; peakMo = mo; }
+  }
+  return { p0: +p0.toFixed(2), ret3m: ret(3), ret6m: ret(6), ret12m: ret(12), ret24m: ret(24), peakRet: +((peakRet*100).toFixed(1)), peakMo };
+}
+
+// SVGチャート描画
+function drawPriceChart(priceMap, signalEvents, W=340, H=110) {
+  const entries = Object.entries(priceMap).sort(([a],[b]) => a.localeCompare(b));
+  if (entries.length < 2) return '<div class="text-white/20 text-xs text-center py-6">価格データなし</div>';
+  const prices = entries.map(([,v]) => v).filter(v => v != null);
+  const minP = Math.min(...prices), maxP = Math.max(...prices);
+  const range = maxP - minP || 1;
+  const pad = { l:4, r:4, t:10, b:4 };
+  const iW = W - pad.l - pad.r, iH = H - pad.t - pad.b;
+  const xOf = (i) => pad.l + (i / (entries.length-1)) * iW;
+  const yOf = (p) => pad.t + (1 - (p - minP) / range) * iH;
+
+  // ラインパス
+  let d = '';
+  entries.forEach(([,p], i) => { if (p != null) d += `${i===0?'M':'L'}${xOf(i).toFixed(1)},${yOf(p).toFixed(1)} `; });
+
+  // グラデーション下塗り
+  let fillD = d + `L${xOf(entries.length-1).toFixed(1)},${(pad.t+iH).toFixed(1)} L${pad.l},${(pad.t+iH).toFixed(1)} Z`;
+
+  // シグナルドット
+  const dots = signalEvents.map(ev => {
+    const idx = entries.findIndex(([k]) => k === ev.signalMonth);
+    if (idx < 0) return '';
+    const p = entries[idx][1];
+    if (!p) return '';
+    const cx = xOf(idx).toFixed(1), cy = yOf(p).toFixed(1);
+    const cfg = TIER_CFG[ev.tier] ?? TIER_CFG.T3;
+    return `<circle cx="${cx}" cy="${cy}" r="5" fill="${cfg.color}" stroke="#0d0d1a" stroke-width="1.5" opacity="0.95"/>
+            <text x="${cx}" y="${parseFloat(cy)-8}" text-anchor="middle" font-size="7" fill="${cfg.color}" font-weight="bold">${ev.tier}</text>`;
+  }).join('');
+
+  return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" class="w-full" style="height:${H}px">
+    <defs>
+      <linearGradient id="pg_${W}" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="#6366f1" stop-opacity="0.25"/>
+        <stop offset="100%" stop-color="#6366f1" stop-opacity="0.02"/>
+      </linearGradient>
+    </defs>
+    <path d="${fillD}" fill="url(#pg_${W})"/>
+    <path d="${d}" fill="none" stroke="#818cf8" stroke-width="1.5" stroke-linejoin="round"/>
+    ${dots}
+  </svg>`;
+}
+
+// カードHTML生成
+function buildHofCard(ticker, companyName, phase, signalResults) {
+  if (!signalResults.length) {
+    return `<div class="hof-card"><div class="flex items-center gap-2 mb-2"><span class="font-black text-base">${ticker}</span><span class="text-xs text-white/30">${companyName??''}</span></div><p class="text-white/25 text-xs">シグナルデータなし（外国株等）</p></div>`;
+  }
+
+  // 最初のメインシグナル（最高Tierの最初）
+  const tierPriority = { T1:4, T2:3, T4:2, T3:1 };
+  const keySignal = [...signalResults].sort((a,b) => (tierPriority[b.tier]??0) - (tierPriority[a.tier]??0))[0];
+  const cfg = TIER_CFG[keySignal?.tier] ?? TIER_CFG.T3;
+  const phaseLabel = { phase1:'Phase1 黎明期', phase2:'Phase2 成長期', phase3:'Phase3 成熟期' }[phase] ?? phase ?? '';
+
+  // リターンテーブル行
+  const retRows = signalResults.slice(0,3).map(ev => {
+    const r = ev.returns;
+    const tierCfg = TIER_CFG[ev.tier] ?? TIER_CFG.T3;
+    const fmtRet = (v) => v==null ? '<span class="text-white/20">—</span>' :
+      `<span class="${v>=0?'text-emerald-400':'text-red-400'} font-bold">${v>=0?'+':''}${v}%</span>`;
+    return `<tr class="border-t border-white/5">
+      <td class="py-1.5 pr-3">
+        <span class="text-xs font-bold px-1.5 py-0.5 rounded" style="background:${tierCfg.bg};border:1px solid ${tierCfg.border};color:${tierCfg.color}">${ev.tier}</span>
+        <span class="text-white/40 text-xs ml-1">${ev.signalMonth}</span>
+      </td>
+      <td class="py-1.5 text-right text-xs">${fmtRet(r?.ret3m)}</td>
+      <td class="py-1.5 text-right text-xs">${fmtRet(r?.ret6m)}</td>
+      <td class="py-1.5 text-right text-xs">${fmtRet(r?.ret12m)}</td>
+      <td class="py-1.5 text-right text-xs pl-2">${r?.peakRet != null ? `<span class="text-yellow-300 font-black">+${r.peakRet}%</span><span class="text-white/25 text-[10px] ml-1">@${r.peakMo}mo</span>` : '—'}</td>
+    </tr>`;
+  }).join('');
+
+  const bestPeak = Math.max(...signalResults.filter(e=>e.returns?.peakRet!=null).map(e=>e.returns.peakRet), 0);
+  const bestMo   = signalResults.find(e=>e.returns?.peakRet===bestPeak)?.returns?.peakMo;
+
+  return `<div class="hof-card">
+    <div class="flex items-start justify-between mb-3">
+      <div>
+        <span class="font-black text-lg mr-2">${ticker}</span>
+        <span class="text-xs text-white/40">${companyName?.slice(0,20)??''}</span>
+        <div class="mt-0.5">
+          <span class="text-xs px-2 py-0.5 rounded-full font-bold" style="background:${cfg.bg};border:1px solid ${cfg.border};color:${cfg.color}">${cfg.label}</span>
+          ${phaseLabel ? `<span class="text-xs text-white/30 ml-1">${phaseLabel}</span>` : ''}
+        </div>
+      </div>
+      ${bestPeak>0 ? `<div class="text-right"><div class="text-yellow-300 font-black text-lg">+${bestPeak}%</div><div class="text-white/30 text-[10px]">Peak@${bestMo}mo</div></div>` : ''}
+    </div>
+
+    <!-- SVGチャート -->
+    <div class="mb-3 rounded-lg overflow-hidden" style="background:rgba(0,0,0,0.2)">
+      ${signalResults[0]?.chartSvg ?? ''}
+    </div>
+
+    <!-- リターンテーブル -->
+    <table class="w-full text-xs">
+      <thead><tr class="text-white/25">
+        <th class="pb-1 text-left">シグナル</th>
+        <th class="pb-1 text-right">+3m</th>
+        <th class="pb-1 text-right">+6m</th>
+        <th class="pb-1 text-right">+12m</th>
+        <th class="pb-1 text-right pl-2">Peak</th>
+      </tr></thead>
+      <tbody>${retRows}</tbody>
+    </table>
+  </div>`;
+}
+
+// メインスキャン関数
+async function runHofScan() {
+  const selected = [...HOF_SELECTED];
+  if (!selected.length) { alert('銘柄を選択してください'); return; }
+
+  const btn = document.getElementById('hofScanBtn');
+  const statusEl = document.getElementById('hofStatus');
+  const progressBar = document.getElementById('hofProgressBar');
+  const progressWrap = document.getElementById('hofProgressWrap');
+  const resultsEl = document.getElementById('hofResults');
+  const summaryEl = document.getElementById('hofSummary');
+
+  btn.disabled = true;
+  progressWrap.style.display = 'block';
+  resultsEl.innerHTML = '';
+  summaryEl.classList.add('hidden');
+
+  const allSignalResults = []; // Tier別集計用
+
+  for (let i = 0; i < selected.length; i++) {
+    const ticker = selected[i];
+    const pct = Math.round((i / selected.length) * 95);
+    progressBar.style.width = pct + '%';
+    statusEl.textContent = `分析中... ${ticker} (${i+1}/${selected.length})`;
+
+    try {
+      // SEC + 株価を並行取得
+      // Firebase版：修正版SEC財務（/api/financials）＋月次株価（/api/market）。旧Netlify APIは使わない。
+      const [sec, chartData] = await Promise.all([pmSecTrend(ticker), pmMonthlyChart(ticker)]);
+
+      // 月次価格マップ
+      const r = chartData?.chart?.result?.[0];
+      const priceMap = {};
+      (r?.timestamp ?? []).forEach((ts, i) => {
+        const d = new Date(ts * 1000);
+        const key = `${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,'0')}`;
+        const c = r.indicators?.quote?.[0]?.close?.[i];
+        if (c != null) priceMap[key] = c;
+      });
+
+      // シグナル検出
+      const trend = sec?.trend ?? [];
+      const signals = detectSignals(trend);
+
+      // リターン計算付きシグナル
+      const signalResults = signals.map(ev => ({
+        ...ev,
+        returns: calcReturns(ev.signalMonth, priceMap),
+      }));
+
+      // チャートSVGを生成（最初のシグナルに付与）
+      const chartSvg = drawPriceChart(priceMap, signals);
+      if (signalResults[0]) signalResults[0].chartSvg = chartSvg;
+
+      // Tier別集計
+      signalResults.forEach(ev => {
+        if (ev.returns) allSignalResults.push({ ticker, tier: ev.tier, ...ev.returns });
+      });
+
+      // カード挿入
+      const card = document.createElement('div');
+      card.innerHTML = buildHofCard(ticker, sec?.companyName, sec?.companyPhase, signalResults);
+      resultsEl.appendChild(card.firstElementChild);
+
+    } catch(e) {
+      const errCard = document.createElement('div');
+      errCard.innerHTML = `<div class="hof-card"><span class="font-black">${ticker}</span><p class="text-red-400 text-xs mt-1">取得エラー: ${e.message}</p></div>`;
+      resultsEl.appendChild(errCard.firstElementChild);
+    }
+  }
+
+  // Tier別サマリー計算
+  const tierStats = {};
+  allSignalResults.forEach(ev => {
+    if (!tierStats[ev.tier]) tierStats[ev.tier] = { count:0, ret12: [], peak: [], peakMo: [] };
+    tierStats[ev.tier].count++;
+    if (ev.ret12m != null) tierStats[ev.tier].ret12.push(ev.ret12m);
+    if (ev.peakRet != null) { tierStats[ev.tier].peak.push(ev.peakRet); tierStats[ev.tier].peakMo.push(ev.peakMo); }
+  });
+
+  const avg = arr => arr.length ? +(arr.reduce((a,b)=>a+b,0)/arr.length).toFixed(1) : null;
+  const summaryContent = document.getElementById('hofSummaryContent');
+  summaryContent.innerHTML = Object.entries(tierStats).map(([tier, s]) => {
+    const cfg = TIER_CFG[tier] ?? TIER_CFG.T3;
+    const avgRet12 = avg(s.ret12);
+    const avgPeak = avg(s.peak);
+    const avgMo = avg(s.peakMo);
+    return `<div class="rounded-xl p-4 text-center" style="background:${cfg.bg};border:1px solid ${cfg.border}">
+      <div class="font-black text-sm mb-1" style="color:${cfg.color}">${cfg.label}</div>
+      <div class="text-white/50 text-xs mb-2">発生回数: ${s.count}件</div>
+      ${avgRet12!=null?`<div class="text-white/70 text-xs">平均+12m: <span class="font-bold text-white">${avgRet12>=0?'+':''}${avgRet12}%</span></div>`:''}
+      ${avgPeak!=null?`<div class="text-yellow-300 text-xs font-bold mt-1">平均Peak: +${avgPeak}%</div>`:''}
+      ${avgMo!=null?`<div class="text-white/40 text-[10px]">最適ホールド: 約${avgMo}ヶ月</div>`:''}
+    </div>`;
+  }).join('');
+
+  progressBar.style.width = '100%';
+  statusEl.textContent = `✅ ${selected.length}銘柄のスキャン完了`;
+  btn.disabled = false;
+  if (Object.keys(tierStats).length) summaryEl.classList.remove('hidden');
+}
+
+// ページ読み込み時に初期化
+document.addEventListener('DOMContentLoaded', initHofChips);
+
+// ━━━━━ タブ切り替え ━━━━━
+function switchHofTab(tab) {
+  const isHof = tab === 'hof';
+  document.getElementById('panelHof').classList.toggle('hidden', !isHof);
+  document.getElementById('panelRadar').classList.toggle('hidden', isHof);
+  const activeClass = 'bg-indigo-500 text-white';
+  const inactiveClass = 'bg-white/5 text-white/50 hover:bg-white/10 hover:text-white/80';
+  document.getElementById('tabHof').className = `px-5 py-2 rounded-xl text-sm font-bold transition-all ${isHof ? activeClass : inactiveClass}`;
+  document.getElementById('tabRadar').className = `px-5 py-2 rounded-xl text-sm font-bold transition-all ${isHof ? inactiveClass : 'bg-yellow-500/20 text-yellow-300 border border-yellow-400/30'}`;
+}
+
+// ━━━━━ カスタム銘柄追加 ━━━━━
+function addHofCustomTickers() {
+  const input = document.getElementById('hofCustomInput');
+  const tickers = input.value.toUpperCase().split(/[\s,/]+/).filter(t => t.length >= 1 && t.length <= 6);
+  const wrap = document.getElementById('hofTickerChips');
+  tickers.forEach(t => {
+    if (HOF_SELECTED.has(t) || HOF_TICKERS.includes(t)) return;
+    HOF_TICKERS.push(t);
+    HOF_SELECTED.add(t);
+    const btn = document.createElement('button');
+    btn.className = 'px-3 py-1 rounded-full text-xs font-bold transition-all';
+    btn.dataset.ticker = t;
+    btn.textContent = t + ' ✕';
+    applyChipActive(btn);
+    btn.onclick = () => {
+      HOF_SELECTED.delete(t);
+      const idx = HOF_TICKERS.indexOf(t);
+      if (idx > -1) HOF_TICKERS.splice(idx, 1);
+      btn.remove();
+    };
+    wrap.appendChild(btn);
+  });
+  input.value = '';
+}
+
+// ━━━━━ T1レーダー ━━━━━
+const RADAR_POOL = [
+  'NVDA','MSFT','GOOGL','META','AMZN','AAPL','TSLA','ORCL',
+  'ARM','ANET','DELL','VRT','SMCI','PLTR','APP','CRWD','DDOG','ZS','NET','PANW','FTNT','S',
+  'NOW','CRM','ADBE','INTU','TEAM','MNDY','HUBS','TTD','GTLB','CFLT','FOUR','VEEV','WDAY','MDB','BILL',
+  'AMD','AVGO','QCOM','MU','AMAT','LRCX','KLAC','TXN','MRVL','ON','NXPI','ASML','TSM','MPWR',
+  'NFLX','SPOT','UBER','ABNB','BKNG','SHOP','MELI','RBLX',
+  'V','MA','COIN','PYPL','SQ','NU','SOFI','SCHW','KKR','BX','BLK',
+  'ISRG','LLY','NVO','VRTX','REGN','AMGN','GILD','TMO','DHR','SYK','DXCM',
+  'AXON','LMT','GD','RTX','GE','HON','ETN',
+  'DECK','RCL','HLT','ONON','NKE',
+  'RDDT','DUOL','CELH','CAVA',
+];
+
+// T1判定（最新Qのみ）
+function checkT1Latest(trend) {
+  if (!trend || trend.length < 2) return null;
+  // trend は新しい順（index 0 が最新）
+  const latest = trend[0], prev = trend[1];
+  if (!latest || !prev) return null;
+  const rof40 = latest.rof40 ?? 0;
+  const revM = latest.revM ?? 1;
+  const opPct = revM > 0 ? (latest.opM ?? 0) / revM * 100 : null;
+  const prevRevM = prev.revM ?? 1;
+  const prevOpPct = prevRevM > 0 ? (prev.opM ?? 0) / prevRevM * 100 : null;
+  if (opPct == null || prevOpPct == null) return null;
+  const expansion = opPct - prevOpPct;
+  if (rof40 >= 100 && expansion > 3) {
+    // signalMonth = end + 1mo
+    const endD = new Date((latest.end ?? '') + 'T00:00:00Z');
+    endD.setUTCMonth(endD.getUTCMonth() + 1);
+    const signalMonth = `${endD.getUTCFullYear()}-${String(endD.getUTCMonth()+1).padStart(2,'0')}`;
+    return {
+      q: latest.q,
+      signalMonth,
+      rof40: +rof40.toFixed(1),
+      opPct: +opPct.toFixed(1),
+      expansion: +expansion.toFixed(1),
+      revYoY: +(latest.revYoY ?? 0).toFixed(1),
+    };
+  }
+  return null;
+}
+
+function buildRadarCard(ticker, companyName, t1) {
+  return `<div class="hof-card border-yellow-400/30" style="border-color:rgba(251,191,36,0.3);background:rgba(251,191,36,0.04)">
+    <div class="flex items-start justify-between mb-3">
+      <div>
+        <span class="font-black text-lg text-yellow-300 mr-2">${ticker}</span>
+        <span class="text-xs text-white/40">${(companyName??'').slice(0,22)}</span>
+        <div class="mt-1">
+          <span class="text-xs font-black px-2 py-0.5 rounded" style="background:rgba(251,191,36,0.2);border:1px solid rgba(251,191,36,0.5);color:#fde68a">🔥 T1 最強シグナル</span>
+        </div>
+      </div>
+      <div class="text-right text-xs text-white/40">${t1.signalMonth}</div>
+    </div>
+    <div class="grid grid-cols-3 gap-2 text-center">
+      <div class="rounded-lg p-2" style="background:rgba(255,255,255,0.04)">
+        <div class="text-yellow-300 font-black text-base">${t1.rof40}</div>
+        <div class="text-white/40 text-[10px]">RoF40</div>
+      </div>
+      <div class="rounded-lg p-2" style="background:rgba(255,255,255,0.04)">
+        <div class="text-emerald-400 font-black text-base">+${t1.expansion}pp</div>
+        <div class="text-white/40 text-[10px]">OpM拡大</div>
+      </div>
+      <div class="rounded-lg p-2" style="background:rgba(255,255,255,0.04)">
+        <div class="text-sky-400 font-black text-base">+${t1.revYoY}%</div>
+        <div class="text-white/40 text-[10px]">RevYoY</div>
+      </div>
+    </div>
+    <div class="mt-2 text-[10px] text-white/25 text-right">${t1.q} | OpM ${t1.opPct}%</div>
+  </div>`;
+}
+
+function buildRadarSmallChip(ticker, hit) {
+  const color = hit ? 'text-yellow-300 border-yellow-400/40' : 'text-white/25 border-white/10';
+  const icon = hit ? '🔥' : '·';
+  return `<div class="rounded-lg px-2 py-1.5 text-xs border ${color}" style="background:rgba(255,255,255,0.03)">
+    ${icon} <span class="font-bold">${ticker}</span>
+  </div>`;
+}
+
+function toggleRadarAll() {
+  const el = document.getElementById('radarAllResults');
+  const btn = document.getElementById('radarAllToggleBtn');
+  const hidden = el.classList.toggle('hidden');
+  btn.textContent = hidden ? '▶ スキャン済み全銘柄を表示' : '▼ 折りたたむ';
+}
+
+async function runT1Radar() {
+  const btn = document.getElementById('radarScanBtn');
+  const statusEl = document.getElementById('radarStatus');
+  const progressBar = document.getElementById('radarProgressBar');
+  const progressWrap = document.getElementById('radarProgressWrap');
+  const resultsEl = document.getElementById('radarResults');
+  const allEl = document.getElementById('radarAllResults');
+  const hitBadge = document.getElementById('radarHitBadge');
+  const hitCount = document.getElementById('radarHitCount');
+  const allWrap = document.getElementById('radarAllWrap');
+
+  btn.disabled = true;
+  btn.textContent = '⏳ スキャン中...';
+  progressWrap.style.display = 'block';
+  progressBar.style.width = '0%';
+  resultsEl.innerHTML = '';
+  allEl.innerHTML = '';
+  hitBadge.classList.add('hidden');
+  allWrap.classList.add('hidden');
+
+  const hits = [];
+  const allScanned = [];
+  const CONC = 5; // analyze エンドポイントを5並列で呼ぶ
+
+  for (let i = 0; i < RADAR_POOL.length; i += CONC) {
+    const batch = RADAR_POOL.slice(i, i + CONC);
+    const pct = Math.round((i / RADAR_POOL.length) * 95);
+    progressBar.style.width = pct + '%';
+    statusEl.textContent = `スキャン中... ${i+1}〜${Math.min(i+CONC, RADAR_POOL.length)} / ${RADAR_POOL.length}銘柄 | T1検出: ${hits.length}件`;
+
+    // analyze エンドポイントは trend 配列を返す（screener は返さない）
+    const results = await Promise.allSettled(
+      batch.map(ticker =>
+        pmSecTrend(ticker)
+          .then(sec => ({ ticker, sec }))
+      )
+    );
+
+    for (const res of results) {
+      if (res.status !== 'fulfilled') continue;
+      const { ticker, sec } = res.value;
+      if (!sec || sec.error) { allScanned.push({ ticker, hit: false }); continue; }
+      const t1 = checkT1Latest(sec.trend ?? []);
+      allScanned.push({ ticker, hit: !!t1 });
+      if (t1) {
+        hits.push({ ticker, companyName: sec.companyName, t1 });
+        const card = document.createElement('div');
+        card.innerHTML = buildRadarCard(ticker, sec.companyName, t1);
+        resultsEl.appendChild(card.firstElementChild);
+      }
+    }
+  } // end for loop
+
+  // 全銘柄チップ
+  allEl.innerHTML = allScanned.map(s => buildRadarSmallChip(s.ticker, s.hit)).join('');
+
+  progressBar.style.width = '100%';
+  hitCount.textContent = hits.length;
+  hitBadge.classList.remove('hidden');
+  allWrap.classList.remove('hidden');
+  btn.disabled = false;
+  btn.textContent = '⚡ T1スキャン開始';
+
+  if (hits.length === 0) {
+    resultsEl.innerHTML = `<div class="col-span-3 text-center py-10 text-white/30">
+      <div class="text-4xl mb-3">📭</div>
+      <div class="font-bold">現在T1シグナル発動中の銘柄はありません</div>
+      <div class="text-xs mt-1">定期的にスキャンして変化を確認しましょう</div>
+    </div>`;
+  }
+
+  statusEl.textContent = `✅ ${RADAR_POOL.length}銘柄スキャン完了 | T1検出: ${hits.length}件`;
+}
+</script>
+
+<script src="../app/firebase-config.js"></script>
+<script src="../app/api.js"></script>
+<script type="module" src="../app/firebase-cloud.mjs"></script>
+<script>
+// ── Portfolio Manager (Firebase) adapter ─────────────────────────────
+// Library pages call the authenticated APIs one at a time (Functions run with
+// maxInstances=1 / concurrency=1) and map corrected SEC quarters to the legacy
+// field names used by detectSignals / checkT1Latest (revM, opM, revYoY, rof40).
+let pmQueue = Promise.resolve();
+function pmEnqueue(fn) { const p = pmQueue.then(fn); pmQueue = p.catch(() => {}); return p; }
+async function pmCall(path) {
+  const out = await pmEnqueue(() => PMApi.call(path, { kind: 'ライブラリ' }));
+  if (out.error) throw new Error(out.error);
+  return out.data;
+}
+async function pmSecTrend(ticker) {
+  const d = await pmCall('/api/financials?ticker=' + encodeURIComponent(ticker));
+  const trend = (d.quarters || []).slice().reverse().map(q => ({
+    q: q.end, end: q.end,
+    revM: q.revenue != null ? q.revenue / 1e6 : null,
+    opM: q.operatingIncome != null ? q.operatingIncome / 1e6 : null,
+    revYoY: q.revenueYoYPct, opMargin: q.operatingMarginPct, rof40: q.ruleOf40Legacy
+  }));
+  return { companyName: PMApi.esc(d.name || ''), companyPhase: null, trend };
+}
+function pmMonthlyChart(ticker) {
+  return pmCall('/api/market?symbol=' + encodeURIComponent(ticker) + '&range=10y&interval=1mo');
+}
 </script>
 </body>
 </html>

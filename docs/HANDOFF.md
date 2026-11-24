@@ -1,7 +1,7 @@
 # 引き継ぎ報告書：Portfolio Manager × Stock Analyzer Firebase統合
 
 作成: 2026-11-23（Claude Code → 後任AIエージェント）
-対象ブランチ: `feature/firebase-foundation-phase1`（PR #16、未マージ） 最新コミットは `git log -1` で確認
+対象ブランチ: `feature/phase2-stock-analyzer`（PR #18）。PR #16はmainへマージ済み。最新状況は`docs/MIGRATION_PROGRESS.md`を参照
 
 > 後任の方へ：作業を始める前に、本書 → `docs/MIGRATION_PROGRESS.md`（詳細ログ）→ `docs/MIGRATION_AUDIT.md`（監査結果）→ `docs/DEPLOYMENT.md`（デプロイ手順）の順に読んでください。
 

@@ -26,6 +26,10 @@ jobs:
           java-version: '21'
       - name: Firestore security rules (emulator, demo project only)
         run: npm run test:rules
+      - name: Finance API access control (auth + firestore + functions emulators)
+        run: |
+          npm ci --prefix functions
+          npm run test:api
       - name: Install browser
         run: npx playwright install --with-deps chromium
       - name: Browser tests (desktop and mobile)

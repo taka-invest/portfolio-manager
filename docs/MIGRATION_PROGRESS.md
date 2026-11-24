@@ -3,7 +3,7 @@
 次のセッションはまずこのファイルと`docs/MIGRATION_AUDIT.md`を読むこと。
 
 - Firebaseプロジェクト: Finance Base `finance-base-edcc7`（Sparkプラン、2026-11-23時点）
-- 作業ブランチ: `feature/firebase-foundation-phase1`（PR #16）
+- 作業ブランチ: `feature/phase2-stock-analyzer`（PR #18）。PR #16（`feature/firebase-foundation-phase1`）は2026-11-23にmainへsquashマージ済み
 - 旧サイト（移行完了まで維持）: GitHub Pages `portfolio_manager.html`／Netlify `masya-stock-analyzer`
 - Stock Analyzer最新ソース: `C:\Users\defaultuser0\Documents\masya_app\`（git管理外。読み取り専用で参照）
 
@@ -13,10 +13,10 @@
 |---|---|---|
 | 0 | 監査 | ✅ 完了（2026-11-23）`docs/MIGRATION_AUDIT.md` |
 | 1 | Firebase初期構築・認証・Firestore・同期 | 🟢 保存・別ブラウザー復元を実機確認。Hostingプレビュー未実施 |
-| 2 | Functions移行（analyze/screener/chart） | ⬜ 最新版への差し替えと財務ロジック修正が必要 |
+| 2 | Functions移行（analyze/screener/chart） | 🟡 修正版の財務計算・スコア・株価推定とEmulator結合テストまで完了。本番デプロイ（Blaze）と画面（Phase 3）が残り |
 | 3 | 画面統合 | ⬜ |
 | 4 | 既存機能保護（リバランス・ピラミッディング） | 🟡 既存テストで保護中。弾(A/B/C)の同期が未対応 |
-| 5 | セキュリティ・費用 | 🟡 maxInstances=1等は設定済。Blaze・予算アラートは承認待ち |
+| 5 | セキュリティ・費用 | 🟡 Blaze化済（2026-11-24 オーナー操作）。予算アラートの設定確認待ち |
 | 6 | CI/CD | 🟡 プレビュー/本番ワークフローと承認ゲート作成済。デプロイ用SA（本人操作）待ち |
 | 7 | 総合検証 | ⬜ |
 | 8 | 本番切替 | 🟡 Portfolio Managerのみ本番公開（2026-11-23）。Stock Analyzer未移行・旧サイトは維持 |
@@ -89,6 +89,76 @@
 - ロールバック: Console → Hosting → リリース履歴、または`docs/DEPLOYMENT.md`
 - GitHub Pages / Netlify は維持（停止は最終工程で別途承認）
 
+## Phase 2 進捗（2026-11-24 セッション2）
+
+- 引継ぎ先は変更なし（オーナー判断で引き続きClaudeが担当）。リモートの`bed63ce`（USD/JPY手入力フォールバック、オーナーpush）を取込。段階買付のA/B/C・PLTR30%ロジックは不変であることを確認
+- **最新版Stock Analyzerを移植**（`Documents\masya_app
+etlifyunctions` 2026-09-17版）→ `functions/src/legacy/`: analyze / screener / chart / sec-8k-guidance。全上流通信を`sec-gateway.js`経由に置換（`contact@example.com`直書きを除去）。`eps-revisions.js`（Finvizスクレイピング）は参照用に保存し**非公開**
+- スクリーナーのnullクラッシュ（opMargin等の`toFixed`）を`Number.isFinite`判定で修正
+- `sec-gateway.js`強化: 429/502/503でRetry-After尊重＋指数バックオフ（最大2回）、LRU上限40件、`getText`（SEC HTML）、Yahooは旧版同等のブラウザUA（旧アプリとの数値比較用。代替データ源の検討は継続）
+- **修正版財務層** `functions/src/sec/financials.js`: 期間単位の重複除去（最新提出優先＝修正報告・後年比較表示を反映）、YTD差分による四半期導出（Q4＝通期−9M、CF四半期）、9M欠損時はQ4＝FY−(Q1+Q2+Q3)、期末日一致のYoY/TTM、FCF＝営業CF−設備投資、希薄化後EPS（差分導出しない）、Rule of 40（TTM成長＋TTM FCFマージン）と旧定義の併記、営業レバレッジ（TTM）、成長加速度。欠損はnull
+- `functions/src/sec/company.js` ＋ `financialsApi`（認証ゲート経由）。応答に出典URL・取得時刻・通貨・`status: verification-pending`
+- テスト: 単体74件成功（合成companyfactsで手計算値と照合、旧エンジンの位置ずれ欠陥の再現、ゲートウェイのリトライ/UA/LRU、移植コードの直接通信禁止）
+
+### SEC実データ検証（2026-11-24）
+- SEC連絡先はオーナー承認のもと個人メールを使用。`functions/.env`（gitignore）にのみ保存し、リポジトリには書かない
+- `scripts/fetch-sec-fixtures.mjs`でPLTR/APP/NVDAのcompanyfactsを取得し、使用タグだけに絞った版を`tests/fixtures/sec/`に保存（SECの公開データ）
+- 結果は`docs/FINANCIAL_VERIFICATION.md`。元データ（四半期の売上・営業利益率）は旧版と全件一致。差異は旧版の欠陥のみ（前年比の比較相手が15か月前にずれる：PLTR 130.5%→95.9%、NVDA 118.4%→105.9%。通期の重複：APPの前年比16.4%→70.0%）
+- 実データで見つかった問題を修正：TTMのEPSが常に欠損になる（会計年度末は通期EPS、Q4は近似値として算出）、NVDA 2010年の期末日1日違いの重複
+- APPは2025年以降、設備投資をXBRLで開示していない → FCFは欠損のまま（0にしない）
+- テスト：単体80件成功（実データのフィクスチャテスト6件を含む）
+
+### スコア・株価推定の載せ替えと結合テスト（2026-11-24）
+- `functions/src/sec/scoring.js`：マシャ式（原価率5段階・総合スコア・投資判断・撤退シグナル・10年後3価格）を修正版のデータに載せ替え。配点・閾値は不変。欠損は0扱いせず`missing`に列挙。赤字企業には目標利益率を当てはめない。希薄化版の株価を併記。修正再表示がある企業は同じ基準の期間でCAGRを計算。前提と警告を出力
+- `financials.js`：原価率（四半期・TTM）、四半期の営業レバレッジ、TTM営業利益率、自己資本・現金・長期債務（直近の値）、表紙の発行済株式数、希薄化後株数の推移、修正再表示の検出
+- `company.js`：`financialsApi`の応答に`evaluation`と`quote`（Yahoo v8、出典・時刻付き。取れなければnull）を追加
+- ゲートウェイ：一時的なネットワーク障害（DNS EAI_AGAIN等）も再試行するよう修正（実通信で発生したため）
+- 認証ゲート：署名なしトークンはFunctions Emulator内でだけ受け付ける（本番は署名必須のまま。テスト済み）
+- **Emulator結合テスト**（`npm run test:api`、auth+firestore+functions）：トークンなし・不正→401、許可リスト外のGoogleユーザー→3つのAPIすべてで403、Google以外のログイン→403、許可ユーザー→不正入力400・PLTRは200（SECの実データ・出典付き）。CIでは連絡先がないため503になるのを正しい動作として検証。構造化ログにUID・保有情報が出ないことも確認
+- `functions/package-lock.json`を追加。CI（verify・production）に`test:api`を追加
+- テスト：単体88件・ルール12件・API結合4件すべて成功
+
+### 次（Phase 2残り）
+1. ~~SEC実データ照合~~ ✅ ／ ~~旧版との差分表~~ ✅（`docs/FINANCIAL_VERIFICATION.md`）
+3. ~~Emulator結合テスト~~ ✅ ／ ~~スコア・株価推定の載せ替え~~ ✅
+4. Cloud Functionsの本番デプロイ（**Blazeプランへの変更と予算アラートの承認が必要**）
+5. Phase 3：画面統合（個別企業分析・スクリーナー・チャート画面をPortfolio Managerに組み込む）
+
+## Phase 3 着手（2026-11-24）：個別企業分析画面
+- サイドバーに「個別企業分析」（`#analysis`）を追加。`app/analysis.js`は読み取り専用で、保有株数・現金・計画・取引は変更しない
+- 銘柄の候補は、保有・目標配分・ウォッチリスト・企業評価の銘柄を一元化して表示（画面ごとに別管理しない）
+- `/api/financials`をIDトークン付きで呼ぶ。状態を区別して表示：未ログイン／許可なし(403)／API未公開（Hostingの404ページ＝Functions未デプロイ）／SEC連絡先未設定(503)／上流の失敗(5xx)／通信エラー
+- 表示：検証中バナー（売買判断に使わない旨）、スコア・判定・撤退シグナル、TTM指標、四半期8期（算出したQ4に「※算出」）、10年後モデル（前提は日本語ラベル・警告付き）、判定の内訳、指標の定義、出典（SECのURL・取得時刻・株価の取得元）。外部の文字列はすべてエスケープ
+- **本番の`firebase.json`には`/api`の転送を入れない**（Functions未デプロイのままHostingを更新しても壊れないように）。Emulator専用の`firebase.emulator.json`に`/api/*`の転送を記載。`npm run dev:emulators`でHosting:5000＋Auth＋Firestore＋Functions（demoプロジェクト）が起動し、クライアントは:5000のときだけEmulatorに接続
+- Functions：上流の失敗をエラー種別・コード・上流ステータスだけでログ出力（URL・UID・保有は出さない）
+- テスト：Playwright（PC・スマホ）に5ケース（候補の一元化、未ログイン、API未公開、403/503、PLTRの実データ表示・XSSエスケープ・ポートフォリオ不変・横スクロールなし）。単体89件・ブラウザー36件成功
+- CI修正：SEC連絡先がないCI環境で、不正な入力にも503を返していた → 入力の検証を連絡先チェックより先に実行（連絡先あり・なしの両方でAPI結合テスト4件成功、PR #18のCI成功）
+- **Emulatorでの通し確認**：Hosting `/api/financials` → Functions（認証・許可UID）→ SEC実データ → 画面に表示（NVDA：スコア75・強い買い・継続保有、四半期8期、出典表示）。ブラウザーペインではGoogleログインのポップアップが開かないため、Emulatorで発行したGoogleユーザーのIDトークンで代替した（本番のポップアップログインは確認済み）
+
+## Phase 3：銘柄スクリーナー・株価チャート（2026-11-24）
+- `functions/src/sec/screen.js`：旧スクリーナーの参入シグナル（赤字→黒字+40、RoF40 40/60/80突破+30/+25/+30、営業利益率+5pt以上+20、成長加速+10pt以上+15、新高値×1.5、連続×0.25）とフェーズ判定（phase1/2/3/金融）を**そのまま**修正版データに適用。旧版は前四半期が欠損でも「転換」シグナルを出していた → 欠損時は出さない。行ごとにマシャ点・撤退シグナル・株価を付与。銘柄ごとの失敗は他銘柄に波及しない
+- `functions/src/sec/chart.js`：Yahoo chart（非公式）の終値を正規化（調整後終値を優先、欠損点は除外、期間1y/5y/10yのみ許可）。出典・取得時刻・調整有無を返す
+- `screenerApi`（POST、10銘柄まで、`{mode:'getpool'}`で旧候補プール）・`chartApi`（GET ticker・range）を修正版に切替（旧`legacy/screener.js`・`chart.js`のハンドラーは使わない）
+- 画面：`#screener`（入力検証・保有/目標/ウォッチリストから自動入力・列ソート・行クリックで個別企業分析へ・CSV）、`#chart`（アクセシブルなインラインSVG。表示幅で描画しスマホでも文字が読める）。共通のAPI呼び出し・エラー分類・銘柄の一元化を`app/api.js`に集約
+- テスト：単体95件、ブラウザー42件成功・12件スキップ（PC・スマホ）、API結合5件（スクリーナー・チャートの入力制限を追加）
+- **Emulatorでの通し確認（実データ）**：スクリーナー PLTR/NVDA/APP/AVGO/CRDO → 全行表示（例：PLTR 前年比95.9%・フェーズ3・85点）。チャート NVDA 5年週足262点。CRDOは撤退ルールにより「撤退検討」（前年比4期連続減速 273%→115%、営業利益率 36.8%→25.2%、RoF40 238→140）。高成長からの減速でも発火する旧ルールどおりの結果
+
+## Phase 3 仕上げ（2026-11-24）
+- **サイドバーを10項目構成に**：PORTFOLIO（ダッシュボード／ポートフォリオ／売買・リバランス）・RESEARCH（個別企業分析／投資仮説・企業評価／銘柄スクリーナー／市場分析／株価チャート／投資指標ライブラリ）・RECORDS（取引履歴・投資ジャーナル）＋設定・データ管理。既存の「企業評価」（投資仮説・シナリオ）は削除せず「投資仮説・企業評価」として残した。投資リサーチ画面の古い注意書き（分析画面は公開しない）を新画面へのリンクに更新
+- **市場データの自前API化**：`/api/market`（`functions/src/sec/market.js`）でVIX・VXN・^GSPC・テクニカル用の株価・CNN Fear & Greedをサーバー側で取得（記号・期間の許可リスト、Yahoo互換の最小形に整形、出典付き）。画面は`app/market-data.js`経由で**自前API優先**。Functions未公開の間だけ旧中継（allorigins/corsproxy/codetabs）にフォールバックし、画面に「第三者の中継サービス経由」と表示。**保有銘柄のテクニカル取得は未ログイン時に中継へ送らない**。なお`fetchAllTechnicals`はどこからも呼ばれていない（既存の未使用コード）
+- ログイン状態の復元待ち：`PMCloud.idToken`は`auth.authStateReady()`後にトークンを返し、`PMCloudReady`でページ読込直後のAPI呼び出しも待つ（以前は読込直後に「未ログイン」と判定されていた）。`firebase-cloud.mjs`は同期パネルのないページ（ライブラリ）でも`PMCloud`を提供
+- **投資指標ライブラリを最新版（84KB）に差し替え**：殿堂入りシグナル検証とT1レーダーの旧Netlify呼び出しを、`/api/financials`（修正版四半期→旧項目名に変換）と`/api/market`（月次10年）に置換。Functionsの同時実行数1に合わせて順番に呼ぶ。戻るリンクをPortfolio Managerへ
+- テスト：単体97件、ブラウザー50件成功・12件スキップ（市場データ3件・ライブラリ1件を追加）、API結合5件
+- **Emulatorで実データ確認**：市場分析 VIX 26.6／VXN 36.3／Fear & Greed 17（Extreme Fear）を自前API経由で表示、ライブラリの殿堂入り検証 NVDA・PLTR（T1/T3シグナルとその後リターン）。途中でローカルDNSの一時障害（EAI_AGAIN）が出たが、分類ログで原因を特定でき、再実行で成功
+
+## Cloud Functions 本番デプロイ（2026-11-24、オーナー承認済）
+- オーナーがBlazeプランに変更。課金有効を確認（予算アラートはAPIで読めず、画面での確認待ち）
+- `firebase deploy --only functions`（ブランチ`feature/phase2-stock-analyzer`の`ecd05aa`）：analyzeApi / financialsApi / screenerApi / chartApi / marketApi を **asia-northeast1** に作成。Node.js 22、第2世代
+- 本番の設定を読み取りで確認：全関数 最大インスタンス1・同時実行1・512MiB・1vCPU・タイムアウト180秒・最小インスタンス0。環境変数`SEC_USER_AGENT`は設定済み（値はリポジトリに含めない）
+- コンテナイメージの自動削除ポリシー：3日（Artifact Registry `gcf-artifacts`、asia-northeast1）
+- 本番での拒否確認：トークンなし・不正トークン・署名なし（Emulator形式）トークンはすべて401。CORSヘッダーなし、`Cache-Control: private, no-store`。Cloud Loggingには`api/status/durationMs/errorClass`のみ記録（UID・トークン・保有なし）
+- 本番の`firebase.json`に`/api/*`→各関数（東京）の転送を追加（**Hostingへの反映は未実施**。PR #18のマージと本番公開の承認後）
+
 ## ユーザー対応待ち（ブロッカー）
 
 1. ~~CLI再認証~~ ✅ ／ ~~Webアプリ構成値~~ ✅
@@ -96,7 +166,7 @@
 2b. `firebase init hosting:github`（デプロイ用SA＋GitHub Secret）は**保留**。GitHub認可で会社用アカウントが選ばれやすいため、承認URLは最初からtaka-investでログインしたシークレットウィンドウで開くこと。1回目は反映遅れで失敗し、未使用SA `github-action-1261182527@` が残存（鍵なし、後で削除）
 3. ~~本人UIDの登録~~ ✅（画面表示のUIDは l/I の判別が難しいため、`firebase auth:export`で正確な値を確認してから登録した）
 4. **SEC_USER_AGENT**: 実際の運用連絡先（例:「FinanceBase 氏名 連絡先メール」）の指定。
-5. **Blazeプランへの変更**（Cloud Functionsのデプロイに必須）と予算アラート額の承認。
+5. ~~Blazeプランへの変更~~ ✅ ／ **予算アラート（推奨 月1,000円・50/90/100%通知）の設定確認**
 
 ## 未解決事項
 

@@ -42,7 +42,7 @@ test('PC: rebalance shortcut opens the buy/sell deltas with USD/JPY and optional
   const errors=[];
   page.on('pageerror',e=>errors.push(e.message));
   await page.goto('/portfolio_manager.html#overview');
-  await page.getByRole('navigation',{name:'主要機能'}).getByRole('link',{name:'リバランス'}).click();
+  await page.getByRole('navigation',{name:'主要機能'}).getByRole('link',{name:'売買・リバランス'}).click();
   await expect(page).toHaveURL(/#rebalance$/);
   const table=page.locator('#ideal-table');
   await expect(table).toContainText('現在株数');
