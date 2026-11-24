@@ -143,3 +143,20 @@ test('ported legacy sources never call upstreams directly or use the placeholder
   const index = readFileSync(join(base, 'functions/src/index.js'), 'utf8');
   assert.doesNotMatch(index, /eps-revisions/, 'Finviz scraper must not be deployed');
 });
+
+test('unsigned (emulator-style) tokens are rejected outside the Functions Emulator', async () => {
+  const { bearer } = await importSource('functions/src/auth.js');
+  assert.throws(() => bearer('Bearer aaa.bbb.', false), e => e.status === 401);
+  assert.equal(bearer('Bearer aaa.bbb.', true), 'aaa.bbb.');
+  assert.equal(bearer('Bearer aaa.bbb.ccc', false), 'aaa.bbb.ccc');
+});
+
+test('gateway retries transient network failures (e.g. DNS EAI_AGAIN) then succeeds', async () => {
+  const g = await importSource('functions/src/sec-gateway.js');
+  g.clearForTest();
+  let n = 0;
+  const flaky = async () => { if (n++ === 0) throw new TypeError('fetch failed'); return { ok: true, json: async () => ({ ok: true }) }; };
+  assert.deepEqual(await g.getJson('https://query1.finance.yahoo.com/v8/finance/chart/RETRY', {}, flaky, async () => {}), { ok: true });
+  assert.equal(n, 2);
+  g.clearForTest();
+});

@@ -33,11 +33,21 @@ export const CONCEPTS = {
   epsBasic: ['EarningsPerShareBasic'],
   operatingCashFlow: ['NetCashProvidedByUsedInOperatingActivities'],
   capex: ['PaymentsToAcquirePropertyPlantAndEquipment', 'PaymentsToAcquireProductiveAssets'],
-  dilutedShares: ['WeightedAverageNumberOfDilutedSharesOutstanding']
+  dilutedShares: ['WeightedAverageNumberOfDilutedSharesOutstanding'],
+  costOfRevenue: ['CostOfRevenue', 'CostOfGoodsAndServicesSold'],
+  buyback: ['PaymentsForRepurchaseOfCommonStock'],
+  stockIssued: ['ProceedsFromIssuanceOfCommonStock']
+};
+// Point-in-time (balance sheet) concepts.
+export const INSTANT_CONCEPTS = {
+  cash: ['CashAndCashEquivalentsAtCarryingValue'],
+  equity: ['StockholdersEquity'],
+  longTermDebt: ['LongTermDebtNoncurrent', 'LongTermDebt']
 };
 const UNITS = { epsDiluted: 'USD/shares', epsBasic: 'USD/shares', dilutedShares: 'shares' };
 // Per-share and share-count values cannot be differenced into quarters.
-const ADDITIVE = new Set(['revenue', 'grossProfit', 'operatingIncome', 'netIncome', 'operatingCashFlow', 'capex']);
+const ADDITIVE = new Set(['revenue', 'grossProfit', 'operatingIncome', 'netIncome', 'operatingCashFlow', 'capex',
+  'costOfRevenue', 'buyback', 'stockIssued']);
 
 /** All duration facts for a metric, merged across fallback tags, one per exact period. */
 export function durationFacts(companyfacts, metric) {
@@ -56,6 +66,54 @@ export function durationFacts(companyfacts, metric) {
     }
   });
   return [...best.values()].sort((a, b) => a.end.localeCompare(b.end) || a.start.localeCompare(b.start));
+}
+
+/** Period ends whose filed values differ between filings by > tolerance (restatements). */
+export function restatedPeriods(companyfacts, metric, tolerance = 0.005) {
+  const gaap = companyfacts?.facts?.['us-gaap'] ?? {};
+  const unit = UNITS[metric] ?? 'USD';
+  const seen = new Map(); // start|end -> [vals]
+  for (const tag of CONCEPTS[metric]) {
+    for (const f of gaap[tag]?.units?.[unit] ?? []) {
+      if (!f.start || !f.end || !finite(f.val)) continue;
+      const k = f.start + '|' + f.end;
+      if (!seen.has(k)) seen.set(k, []);
+      seen.get(k).push(f.val);
+    }
+  }
+  const out = new Set();
+  for (const [k, vals] of seen) {
+    const min = Math.min(...vals), max = Math.max(...vals);
+    if (max > 0 && (max - min) / max > tolerance) out.add(k.split('|')[1]);
+  }
+  return out;
+}
+
+/** Latest point-in-time value (balance sheet), most recently filed for the latest date. */
+export function latestInstant(companyfacts, metric) {
+  const gaap = companyfacts?.facts?.['us-gaap'] ?? {};
+  let best = null;
+  INSTANT_CONCEPTS[metric].forEach((tag, priority) => {
+    for (const f of gaap[tag]?.units?.USD ?? []) {
+      if (f.start || !f.end || !finite(f.val)) continue;
+      const better = !best || f.end > best.end || (f.end === best.end && (f.filed > best.filed ||
+        (f.filed === best.filed && priority < best.priority)));
+      if (better) best = { end: f.end, val: f.val, filed: f.filed, form: f.form, tag, priority };
+    }
+  });
+  return best;
+}
+
+/** Shares outstanding from the cover page (dei), summed across share classes on the latest date. */
+export function sharesOutstanding(companyfacts) {
+  const list = companyfacts?.facts?.dei?.EntityCommonStockSharesOutstanding?.units?.shares ?? [];
+  if (!list.length) return null;
+  const latest = list.reduce((m, f) => (f.end > m ? f.end : m), '');
+  const onDate = list.filter(f => f.end === latest && finite(f.val));
+  // One value per filing per class; take the most recent filing on that date.
+  const filed = onDate.reduce((m, f) => (f.filed > m ? f.filed : m), '');
+  const vals = onDate.filter(f => f.filed === filed);
+  return { end: latest, val: vals.reduce((s, f) => s + f.val, 0), classes: vals.length };
 }
 
 /** Discrete fiscal quarters: direct ~3-month facts, plus differences of YTD cumulatives. */
@@ -186,6 +244,9 @@ export function analyzeFacts(companyfacts) {
     const fyEps = series.epsDiluted.a.find(a => a.end === r.end);
     const epsTtm = fyEps ? { val: fyEps.val, derived: false } : ttm(series.epsDiluted.q, r.end);
     const epsPrev = yearAgo(series.epsDiluted.q, r.end);
+    const cogs = at('costOfRevenue', r.end);
+    const cogsTtm = ttm(series.costOfRevenue.q, r.end);
+    const opYoY = growthPct(op?.val, yearAgo(series.operatingIncome.q, r.end)?.val);
     const revYoY = growthPct(r.val, prev?.val);
     const revTtmYoY = growthPct(revTtm?.val, revTtmPrev?.val);
     const opTtmYoY = growthPct(opTtm?.val, opTtmPrev?.val);
@@ -194,6 +255,11 @@ export function analyzeFacts(companyfacts) {
       revenue: r.val, grossProfit: gp?.val ?? null, operatingIncome: op?.val ?? null,
       netIncome: ni?.val ?? null, epsDiluted: eps ? (eps.derived ? round(eps.val, 2) : eps.val) : null, epsDilutedDerived: eps?.derived ?? null,
       operatingCashFlow: ocf?.val ?? null, capex: cap?.val ?? null, fcf,
+      costOfRevenue: cogs?.val ?? null,
+      costRatioPct: round(pct(cogs?.val, r.val)), costRatioTtmPct: round(pct(cogsTtm?.val, revTtm?.val)),
+      operatingLeverageQ: finite(opYoY) && finite(revYoY) && revYoY >= 1 ? round(opYoY / revYoY, 2) : null,
+      operatingMarginTtmPct: round(pct(opTtm?.val, revTtm?.val)),
+      operatingIncomeTtmPrev: opTtmPrev?.val ?? null,
       grossMarginPct: round(pct(gp?.val, r.val)), operatingMarginPct: round(pct(op?.val, r.val)),
       fcfMarginPct: round(pct(fcf, r.val)),
       revenueYoYPct: round(revYoY),
@@ -214,10 +280,17 @@ export function analyzeFacts(companyfacts) {
   });
   return {
     quarters: rows,
-    annual: series.revenue.a.map(a => ({ start: a.start, end: a.end, revenue: a.val,
+    annual: series.revenue.a.map(a => ({ start: a.start, end: a.end, revenue: a.val, accn: a.src.accn, filed: a.src.filed,
       operatingIncome: series.operatingIncome.a.find(x => x.end === a.end)?.val ?? null,
       netIncome: series.netIncome.a.find(x => x.end === a.end)?.val ?? null })),
     latest: rows.at(-1) ?? null,
+    annualFlows: Object.fromEntries(['buyback', 'stockIssued', 'netIncome', 'operatingIncome'].map(m =>
+      [m, series[m].a.map(a => ({ end: a.end, val: a.val }))])),
+    balance: Object.fromEntries(Object.keys(INSTANT_CONCEPTS).map(m => [m, latestInstant(companyfacts, m)])),
+    shares: sharesOutstanding(companyfacts),
+    restatedRevenueEnds: [...restatedPeriods(companyfacts, 'revenue')].sort(),
+    dilutedSharesSeries: series.dilutedShares.q.map(q => ({ end: q.end, val: q.val })),
+    latestDilutedShares: series.dilutedShares.q.at(-1)?.val ?? null,
     definitions: {
       quarter: '80〜100日の会計期間。10-Qの単独四半期値、またはYTD累計の差分（Q4＝通期−9か月、CFの各四半期）。derived=trueは差分で算出',
       dedupe: '同一期間の値は最新提出（修正報告・後年の比較表示を含む）を採用',
@@ -228,7 +301,8 @@ export function analyzeFacts(companyfacts) {
       fcf: '営業CF − 設備投資（PaymentsToAcquirePropertyPlantAndEquipment）。どちらか欠損ならnull',
       ruleOf40: 'TTM売上成長率(%) + TTM FCFマージン(%)',
       ruleOf40Legacy: '旧アプリ互換：単四半期の前年同期比売上成長率 + 同四半期のGAAP営業利益率',
-      operatingLeverage: 'TTM営業利益成長率 ÷ TTM売上成長率（売上成長率1%未満はnull）'
+      operatingLeverage: 'TTM営業利益成長率 ÷ TTM売上成長率（売上成長率1%未満はnull）。operatingLeverageQは単四半期の前年比どうし',
+      costRatio: '売上原価（CostOfRevenue / CostOfGoodsAndServicesSold）÷ 売上'
     }
   };
 }
