@@ -1,3 +1,6 @@
+// Ported verbatim from the Netlify production source (masya_app, 2026-09-17) except
+// that every upstream request goes through ../sec-gateway.js (SEC UA, pacing, cache,
+// retry). Do not fix financial logic here: corrected logic lives in ../sec/.
 // Netlify Function: 伝説の会計学 分析エンジン v3
 // 参入シグナル検知 / RoF40 / 営業レバレッジ / 16四半期対応
 // APP・MU等の複数XBRLタグ対応（最新データ優先）
@@ -357,11 +360,43 @@ async function getAnalystData(ticker) {
     const beatPcts = epsHistory.map(h => h.beatPct).filter(v => v !== null);
     const avgBeatPct = beatPcts.length > 0
       ? +(beatPcts.reduce((a, b) => a + b, 0) / beatPcts.length).toFixed(1) : null;
+    // Beat加速度: 最古→最新でビート幅が拡大しているか
+    const beatAccel = beatPcts.length >= 2
+      ? +(beatPcts[beatPcts.length - 1] - beatPcts[0]).toFixed(1) : null;
+    const maxBeatPct = beatPcts.length > 0 ? +Math.max(...beatPcts).toFixed(1) : null;
 
-    return { epsHistory, forwardEstimates, avgBeatPct };
+    // 目標株価 & アナリスト評価（financialData モジュール）
+    let targetLowPrice = null, targetMeanPrice = null, targetHighPrice = null;
+    let recommendationKey = null, numberOfAnalysts = null, recommendationBreakdown = null;
+    try {
+      const url2 = `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${ticker}?modules=financialData%2CrecommendationTrend`;
+      const data2 = await fetchJson(url2);
+      const fd  = data2?.quoteSummary?.result?.[0]?.financialData ?? {};
+      const rec = (data2?.quoteSummary?.result?.[0]?.recommendationTrend?.trend ?? [])[0] ?? {};
+      targetLowPrice   = fd.targetLowPrice?.raw  ?? null;
+      targetMeanPrice  = fd.targetMeanPrice?.raw  ?? null;
+      targetHighPrice  = fd.targetHighPrice?.raw  ?? null;
+      recommendationKey = fd.recommendationKey    ?? null;
+      numberOfAnalysts  = fd.numberOfAnalystOpinions?.raw ?? null;
+      recommendationBreakdown = {
+        strongBuy: rec.strongBuy ?? 0, buy: rec.buy ?? 0,
+        hold: rec.hold ?? 0, sell: rec.sell ?? 0, strongSell: rec.strongSell ?? 0,
+      };
+    } catch(e2) { /* price target unavailable */ }
+
+    return {
+      epsHistory, forwardEstimates, avgBeatPct, beatAccel, maxBeatPct,
+      targetLowPrice, targetMeanPrice, targetHighPrice,
+      recommendationKey, numberOfAnalysts, recommendationBreakdown,
+    };
   } catch (e) {
     console.error("Analyst data error:", e.message);
-    return { epsHistory: [], forwardEstimates: [], avgBeatPct: null };
+    return {
+      epsHistory: [], forwardEstimates: [], avgBeatPct: null,
+      beatAccel: null, maxBeatPct: null,
+      targetLowPrice: null, targetMeanPrice: null, targetHighPrice: null,
+      recommendationKey: null, numberOfAnalysts: null, recommendationBreakdown: null,
+    };
   }
 }
 
@@ -371,13 +406,16 @@ function investmentJudgment(calc, analyst, companyPhase) {
   let bullScore = 0;   // プラス材料の合計点
   let bearScore = 0;   // マイナス材料の合計点
 
-  // ── 成長性 ──
-  const revGrowth = calc.revGrowth ?? 0;
-  if (revGrowth >= 50)      { bullScore += 25; signals.push({ type: 'bull', icon: '🔥', text: `売上成長率 +${revGrowth}%（化け物級）` }); }
-  else if (revGrowth >= 30) { bullScore += 18; signals.push({ type: 'bull', icon: '🚀', text: `売上成長率 +${revGrowth}%（高成長）` }); }
-  else if (revGrowth >= 16) { bullScore += 12; signals.push({ type: 'bull', icon: '📈', text: `売上成長率 +${revGrowth}%（注目水準）` }); }
-  else if (revGrowth >= 0)  { bullScore +=  5; signals.push({ type: 'neutral', icon: '➡️', text: `売上成長率 +${revGrowth}%（普通）` }); }
-  else                      { bearScore += 15; signals.push({ type: 'bear', icon: '📉', text: `売上マイナス成長 ${revGrowth}%` }); }
+  // ── 成長性（TTM優先）──
+  const revGrowth = calc.ttmRevGrowth ?? calc.revGrowth ?? 0;
+  const revGrowthSrc = calc.ttmRevGrowth != null ? 'TTM' : '年次';
+  const _rg = revGrowth.toFixed(1);
+  const _rs = revGrowthSrc;
+  if (revGrowth >= 50)      { bullScore += 25; signals.push({ type: 'bull', icon: '🔥', text: `売上成長率 +${_rg}%（化け物級）[${_rs}]` }); }
+  else if (revGrowth >= 30) { bullScore += 18; signals.push({ type: 'bull', icon: '🚀', text: `売上成長率 +${_rg}%（高成長）[${_rs}]` }); }
+  else if (revGrowth >= 16) { bullScore += 12; signals.push({ type: 'bull', icon: '📈', text: `売上成長率 +${_rg}%（注目水準）[${_rs}]` }); }
+  else if (revGrowth >= 0)  { bullScore +=  5; signals.push({ type: 'neutral', icon: '➡️', text: `売上成長率 +${_rg}%（普通）[${_rs}]` }); }
+  else                      { bearScore += 15; signals.push({ type: 'bear', icon: '📉', text: `売上マイナス成長 ${_rg}%[${_rs}]` }); }
 
   // ── 収益の質（原価率グレード）──
   const costLevel = calc.masyaCostGrade?.level ?? 0;
@@ -875,6 +913,27 @@ function masyaCalc(fin, mkt, ticker) {
   const ttmEps = ttmEpsArr.length === 4
     ? +ttmEpsArr.reduce((a, b) => a + b, 0).toFixed(4) : null;
 
+  // ── TTM財務指標（直近4四半期合算）── 年次データのタイムラグを補正
+  const ttm4Q  = (fin.trend ?? []).slice(0, 4);
+  const prev4Q = (fin.trend ?? []).slice(4, 8);
+  const _sum = (arr, key) => arr.map(q => q[key]).filter(v => v != null).reduce((a, b) => a + b, 0);
+  const _ok  = (arr, key, n = 3) => arr.filter(q => q[key] != null).length >= n;
+  const ttmRevSum  = _sum(ttm4Q, 'revM');
+  const ttmCogsSum = _sum(ttm4Q, 'cogsM');
+  const ttmOpSum   = _sum(ttm4Q, 'opM');
+  const ttmRevOk   = _ok(ttm4Q, 'revM');
+  const prevRevSum = _sum(prev4Q, 'revM');
+  const prevRevOk  = _ok(prev4Q, 'revM');
+  const prevOpSum  = _sum(prev4Q, 'opM');
+  const prevOpOk   = _ok(prev4Q, 'opM');
+  // TTM原価率・TTM営業利益率・TTM売上成長率
+  const ttmCostRatio   = (ttmRevOk && ttmCogsSum > 0 && ttmRevSum > 0) ? ttmCogsSum / ttmRevSum : null;
+  const ttmOpMarginPct = (ttmRevOk && ttmRevSum > 0) ? +(ttmOpSum / ttmRevSum * 100).toFixed(1) : null;
+  const ttmRevGrowth   = (ttmRevOk && prevRevOk && prevRevSum > 0)
+    ? Math.max(-100, Math.min(2000, (ttmRevSum / prevRevSum - 1) * 100)) : null;
+  // 投資判断に使う「実効値」: TTM優先、なければ年次
+  const effectiveCostRatio = ttmCostRatio ?? costRatio;
+
   // 10年後EPS（$）— sharesM > 1M株 かつ EPS < $500 のサニティガード
   const eps10yr = (ni10yr !== null && sharesM && sharesM > 1)
     ? +(ni10yr / sharesM).toFixed(2) : null;  // ni10yr は $M 単位、sharesM は百万株
@@ -890,8 +949,8 @@ function masyaCalc(fin, mkt, ticker) {
     ? +((niNow - niPrev) / Math.abs(niPrev) * 100).toFixed(1) : null;
 
   // ── マシャ指標 ────────────────────────────────────
-  // 原価率5段階評価
-  const masyaCostGradeResult = masyaCostGrade(costRatio);
+  // 原価率5段階評価（TTM優先）
+  const masyaCostGradeResult = masyaCostGrade(effectiveCostRatio);
 
   // 営業利益成長率（年次）
   const opGrowthYoY = (opNow !== null && opPrev !== null && opPrev !== 0)
@@ -900,19 +959,21 @@ function masyaCalc(fin, mkt, ticker) {
   const opGrowthSimple = (opNow !== null && opPrev !== null && opPrev !== 0)
     ? +((opNow - opPrev) / Math.abs(opPrev) * 100).toFixed(1) : null;
 
-  // キャッシュリッチ判定（マシャ2条件）
-  // 条件1: 原価率 < 50%
-  // 条件2: 営業利益 前年比プラス（赤字縮小または黒字成長）
-  const cashRichCond1 = costRatio !== null && costRatio < 0.50;
-  const cashRichCond2 = opGrowthSimple !== null && opGrowthSimple > 0;
-  const isCashRich = cashRichCond1 && cashRichCond2;
+  // キャッシュリッチ判定（マシャ2条件）— TTM優先
+  // 条件1: 原価率 < 50%（TTM優先）
+  // 条件2: 営業利益 前年比プラス（TTM合算優先、なければ年次）
+  const cashRichCond1 = effectiveCostRatio !== null && effectiveCostRatio < 0.50;
+  const cashRichCond2_ttm = (ttmRevOk && prevOpOk) ? ttmOpSum > prevOpSum : null;
+  const cashRichCond2 = cashRichCond2_ttm ?? (opGrowthSimple !== null && opGrowthSimple > 0);
+  const isCashRich = cashRichCond1 && !!cashRichCond2;
 
   // 売上成長率カテゴリ
   const growthCategoryResult = growthCategory(revGrowth);
 
-  // 営業利益率カテゴリ（マシャ基準）
-  const latestOpMargin = (opNow !== null && revNow !== null && revNow > 0)
-    ? Math.max(-500, Math.min(100, opNow / revNow * 100)) : null;
+  // 営業利益率カテゴリ（マシャ基準）— TTM優先
+  const latestOpMargin = ttmOpMarginPct ??
+    ((opNow !== null && revNow !== null && revNow > 0)
+      ? Math.max(-500, Math.min(100, opNow / revNow * 100)) : null);
   let opMarginCategory;
   if (latestOpMargin === null) opMarginCategory = { label: "データ不足", color: "gray" };
   else if (latestOpMargin >= 70) opMarginCategory = { label: "🏆 最強（70%超）", color: "gold" };
@@ -957,6 +1018,9 @@ function masyaCalc(fin, mkt, ticker) {
     masyaScore,
     // 10年後EPS×PER 3価格モデル
     ttmEps, eps10yr: eps10yrSafe, rev10yr, ni10yr,
+    // TTM vs 年次（フロント参考表示用）
+    ttmCostRatio, ttmOpMarginPct, ttmRevGrowth,
+    costRatioAnn: costRatio, revGrowthAnn: revGrowth,
     revCAGR: revCAGR !== null ? +(revCAGR * 100).toFixed(1) : null,
     projectedCAGR: +(projectedCAGR * 100).toFixed(1),
     projectedOpmPct,
@@ -996,6 +1060,38 @@ export const handler = async (event) => {
     }
 
     const calc = masyaCalc(fin, mkt, ticker);
+
+    // ── PEG・R&D効率・インクリメンタルROIC ───────────
+    {
+      const M = 1_000_000;
+      // Forward PEG = (Price / TTM EPS) / 来年度EPS成長率%
+      const fwdEpsG = analyst.forwardEstimates?.find(e => e.period === '+1y')?.epsGrowthPct;
+      calc.pegRatio = (calc.ttmEps > 0 && calc.price && fwdEpsG > 0)
+        ? +(calc.price / calc.ttmEps / fwdEpsG).toFixed(2) : null;
+      calc.forwardEpsGrowthPct = fwdEpsG ?? null;
+
+      // R&D効率 = 売上成長率 / R&D費成長率（直近4Q平均 vs 前4Q平均）
+      const rdC = fin.trend.slice(0,4).map(q=>q.rdM).filter(v=>v!=null);
+      const rdP = fin.trend.slice(4,8).map(q=>q.rdM).filter(v=>v!=null);
+      const rdAvgC = rdC.length ? rdC.reduce((a,b)=>a+b,0)/rdC.length : null;
+      const rdAvgP = rdP.length ? rdP.reduce((a,b)=>a+b,0)/rdP.length : null;
+      calc.rdGrowthPct = (rdAvgC && rdAvgP && rdAvgP > 0)
+        ? +((rdAvgC - rdAvgP) / rdAvgP * 100).toFixed(1) : null;
+      const _revGrowthForRd = calc.ttmRevGrowth ?? calc.revGrowth;
+      calc.rdEfficiency = (_revGrowthForRd && calc.rdGrowthPct && calc.rdGrowthPct > 0)
+        ? +(_revGrowthForRd / calc.rdGrowthPct).toFixed(2) : null;
+
+      // インクリメンタルROIC = ΔNOPAT / Δ投下資本
+      const eqP  = fin.eqA?.[1]?.val   != null ? fin.eqA[1].val   / M : null;
+      const debtP = fin.debtA?.[1]?.val != null ? fin.debtA[1].val / M : null;
+      const cashP = fin.cashA?.[1]?.val != null ? fin.cashA[1].val / M : null;
+      const icNow  = (calc.equityNow??0) + (calc.debtNow??0) - (calc.cashNow??0);
+      const icPrev = (eqP??0) + (debtP??0) - (cashP??0);
+      const deltaIC    = icNow - icPrev;
+      const deltaNOPAT = (calc.opNow && calc.opPrev) ? (calc.opNow - calc.opPrev) * 0.79 : null;
+      calc.incrementalROIC = (deltaNOPAT && deltaIC && Math.abs(deltaIC) > 10)
+        ? +(deltaNOPAT / Math.abs(deltaIC) * 100).toFixed(1) : null;
+    }
 
     // ── 金融業フラグ ──────────────────────────────
     const FINANCIAL_TICKERS = [

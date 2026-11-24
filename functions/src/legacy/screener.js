@@ -1,8 +1,14 @@
+// Ported verbatim from the Netlify production source (masya_app, 2026-09-17) except
+// that every upstream request goes through ../sec-gateway.js (SEC UA, pacing, cache,
+// retry). Do not fix financial logic here: corrected logic lives in ../sec/.
 // Netlify Function: バッチスクリーナー専用エンジン
 // 10銘柄/コール、5並列処理、シグナルスコア算出
 
+
+// SEC EDGAR 用（SEC推奨フォーマット）
 import { getJson } from '../sec-gateway.js';
 const fetchJson = url => getJson(url);
+const fetchJsonBrowser = url => getJson(url);
 
 // ── CIK一括解決 ─────────────────────────────────
 async function resolveCiks(tickers) {
@@ -161,11 +167,11 @@ async function analyzeOneTicker(ticker, cikInfo) {
     name: (name ?? '').substring(0, 35),
     latestQ:       latest?.label ?? null,
     rof40:         latest?.rof40 ?? null,
-    opMargin:      latest?.opMargin !== undefined ? +latest.opMargin.toFixed(1) : null,
-    grossMargin:   latest?.grossMargin !== undefined ? +latest.grossMargin.toFixed(1) : null,
-    revYoY:        latest?.revYoY !== null ? +latest.revYoY.toFixed(1) : null,
-    yoyAccel:      latest?.yoyAccel !== null ? +latest.yoyAccel.toFixed(1) : null,
-    revM:          latest?.revM !== undefined ? +latest.revM.toFixed(0) : null,
+    opMargin:      Number.isFinite(latest?.opMargin) ? +latest.opMargin.toFixed(1) : null /* FIX: null/undefined crashed the whole screener */,
+    grossMargin:   Number.isFinite(latest?.grossMargin) ? +latest.grossMargin.toFixed(1) : null /* FIX: null/undefined crashed the whole screener */,
+    revYoY:        Number.isFinite(latest?.revYoY) ? +latest.revYoY.toFixed(1) : null /* FIX: null/undefined crashed the whole screener */,
+    yoyAccel:      Number.isFinite(latest?.yoyAccel) ? +latest.yoyAccel.toFixed(1) : null /* FIX: null/undefined crashed the whole screener */,
+    revM:          Number.isFinite(latest?.revM) ? +latest.revM.toFixed(0) : null /* FIX: null/undefined crashed the whole screener */,
     signalScore:   bestSig?.signalScore ?? 0,
     signalQ:       bestSig?.label ?? null,
     signalFlags:   bestSig?.signals ?? {},
@@ -175,22 +181,74 @@ async function analyzeOneTicker(ticker, cikInfo) {
   };
 }
 
-// ── Yahoo Finance 株価取得（バッチ）──────────────
+// ── Yahoo Finance 株価取得（v8/chart 個別呼び出し、最大5並列）──────────────
+// v7/quote はcrumb認証が必要になり空を返す。v8/chart はanalyze.jsで動作確認済み。
 async function getPrices(tickers) {
   const result = {};
-  try {
-    const symbols = tickers.join(',');
-    const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${symbols}`;
-    const data = await fetchJson(url);
-    for (const q of (data?.quoteResponse?.result ?? [])) {
-      result[q.symbol] = {
-        price:  q.regularMarketPrice  ?? null,
-        mktcap: q.marketCap           ?? null,
-        chg1d:  q.regularMarketChangePercent ?? null,
+  const CONC = 5;
+  for (let i = 0; i < tickers.length; i += CONC) {
+    const batch = tickers.slice(i, i + CONC);
+    const batchR = await Promise.allSettled(batch.map(async (ticker) => {
+      const url = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=5d`;
+      const data = await fetchJsonBrowser(url);
+      const meta = data?.chart?.result?.[0]?.meta ?? {};
+      return {
+        ticker,
+        price:      meta.regularMarketPrice ?? meta.chartPreviousClose ?? null,
+        mktcap:     meta.marketCap  ?? null,
+        chg1d:      meta.regularMarketChangePercent ?? null,
+        chg52wHigh: null,  // v8/chartではregularMarketDayHigh等はあるが52週乖離なし
       };
+    }));
+    for (const r of batchR) {
+      if (r.status === 'fulfilled' && r.value?.ticker) {
+        const { ticker, ...rest } = r.value;
+        result[ticker] = rest;
+      }
     }
-  } catch(e) { /* price取得失敗は無視 */ }
+  }
   return result;
+}
+
+// ── 動的スキャン用プール（$10B+確実な約80銘柄）──────────────
+// フロントエンドがこのリストを取得してバッチスキャンに使う
+export const DYNAMIC_POOL = [
+  // AI/Megacap
+  'NVDA','MSFT','GOOGL','META','AMZN','AAPL','TSLA','ORCL',
+  // AI Infrastructure & Security
+  'ARM','ANET','DELL','VRT','SMCI','PLTR','APP','CRWD','DDOG','ZS','NET','PANW','FTNT','S',
+  // SaaS
+  'NOW','CRM','ADBE','INTU','TEAM','MNDY','HUBS','TTD','GTLB','CFLT','FOUR','VEEV','WDAY','MDB','BILL',
+  // Semiconductor
+  'AMD','AVGO','QCOM','MU','AMAT','LRCX','KLAC','TXN','MRVL','ON','NXPI','ASML','TSM','MPWR',
+  // Consumer Tech
+  'NFLX','SPOT','UBER','ABNB','BKNG','SHOP','MELI','RBLX',
+  // FinTech
+  'V','MA','COIN','PYPL','SQ','NU','SOFI','SCHW','KKR','BX','BLK',
+  // Healthcare
+  'ISRG','LLY','NVO','VRTX','REGN','AMGN','GILD','TMO','DHR','SYK','DXCM',
+  // Defense/Industrial
+  'AXON','LMT','GD','RTX','GE','HON','ETN',
+  // Consumer/Lifestyle
+  'DECK','RCL','HLT','ONON','NKE',
+  // Emerging Growth
+  'RDDT','DUOL','CELH','CAVA',
+];
+
+// ── 複合スコア計算 ────────────────────────────────
+// Phase 1: ボーナスシステム（決算予想修正・ガイダンス検出）
+function calcCompositeScore(signalScore, revYoY, chg52wHigh, epsRevisionBonus = 0, guidanceBonus = 0) {
+  const sigPart  = (signalScore ?? 0) * 0.60;
+  const yoyNorm  = Math.min(100, Math.max(0, (revYoY ?? 0) * 1.5));  // 67%YoY→100pt
+  const yoyPart  = yoyNorm * 0.25;
+  const momNorm  = Math.min(100, Math.max(0, 100 + (chg52wHigh ?? -50)));  // 52週高値=100pt
+  const momPart  = momNorm * 0.15;
+
+  // Phase 1: 先行シグナルボーナス（既存signalScoreの20%まで追加可能）
+  const bonusMax = (signalScore ?? 0) * 0.20;
+  const totalBonus = Math.min(bonusMax, (epsRevisionBonus ?? 0) + (guidanceBonus ?? 0));
+
+  return Math.round(sigPart + yoyPart + momPart + totalBonus);
 }
 
 // ── Netlify Handler ──────────────────────────────
@@ -202,22 +260,25 @@ export const handler = async (event) => {
   };
   if (event.httpMethod === "OPTIONS") return { statusCode: 200, headers: cors, body: "" };
 
-  let tickers = [];
-  try {
-    const body = JSON.parse(event.body || '{}');
-    tickers = (body.tickers ?? []).slice(0, 10).map(t => t.toUpperCase().trim()).filter(Boolean);
-  } catch(e) {
+  let body = {};
+  try { body = JSON.parse(event.body || '{}'); } catch(e) {
     return { statusCode: 400, headers: cors, body: JSON.stringify({ error: "Invalid JSON body" }) };
   }
 
-  if (tickers.length === 0)
-    return { statusCode: 400, headers: cors, body: JSON.stringify({ error: "tickersが必要です" }) };
+  const cors_ok = (data) => ({ statusCode: 200, headers: cors, body: JSON.stringify(data) });
+  const cors_err = (msg, code = 400) => ({ statusCode: code, headers: cors, body: JSON.stringify({ error: msg }) });
+
+  // ── 動的プール取得モード（即座に銘柄リストのみ返す）──────────
+  if (body.mode === 'getpool') {
+    return cors_ok(DYNAMIC_POOL);
+  }
+
+  // ── 通常モード（既存: セクタータブ等）──────────────
+  const tickers = (body.tickers ?? []).slice(0, 10).map(t => t.toUpperCase().trim()).filter(Boolean);
+  if (tickers.length === 0) return cors_err("tickersが必要です");
 
   try {
-    // CIK一括解決（1コール）
     const cikMap = await resolveCiks(tickers);
-
-    // SEC分析: 5並列
     const CONC = 5;
     const secResults = [];
     for (let i = 0; i < tickers.length; i += CONC) {
@@ -230,11 +291,7 @@ export const handler = async (event) => {
       );
       secResults.push(...batchR);
     }
-
-    // Yahoo価格（一括）
     const prices = await getPrices(tickers);
-
-    // 結果マージ
     const output = secResults.map((r, i) => {
       const base = r.status === 'fulfilled' && r.value
         ? r.value
@@ -242,9 +299,8 @@ export const handler = async (event) => {
       const priceInfo = prices[tickers[i]] ?? {};
       return { ...base, ...priceInfo };
     });
-
-    return { statusCode: 200, headers: cors, body: JSON.stringify(output) };
+    return cors_ok(output);
   } catch(err) {
-    return { statusCode: 500, headers: cors, body: JSON.stringify({ error: err.message }) };
+    return cors_err(err.message, 500);
   }
 };

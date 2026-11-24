@@ -13,7 +13,7 @@
 |---|---|---|
 | 0 | 監査 | ✅ 完了（2026-11-23）`docs/MIGRATION_AUDIT.md` |
 | 1 | Firebase初期構築・認証・Firestore・同期 | 🟢 保存・別ブラウザー復元を実機確認。Hostingプレビュー未実施 |
-| 2 | Functions移行（analyze/screener/chart） | ⬜ 最新版への差し替えと財務ロジック修正が必要 |
+| 2 | Functions移行（analyze/screener/chart） | 🟡 最新版移植・修正版財務層・ゲートウェイ強化済。SEC実データ照合待ち（SEC連絡先が必要） |
 | 3 | 画面統合 | ⬜ |
 | 4 | 既存機能保護（リバランス・ピラミッディング） | 🟡 既存テストで保護中。弾(A/B/C)の同期が未対応 |
 | 5 | セキュリティ・費用 | 🟡 maxInstances=1等は設定済。Blaze・予算アラートは承認待ち |
@@ -88,6 +88,23 @@
 - **本番実機確認（ユーザー、11:53 JST）**: 本番URLでGoogleログイン→許可UIDでFirestore読込→差分「0 → 22件」→承認→保有資産に22件表示 ✅
 - ロールバック: Console → Hosting → リリース履歴、または`docs/DEPLOYMENT.md`
 - GitHub Pages / Netlify は維持（停止は最終工程で別途承認）
+
+## Phase 2 進捗（2026-11-24 セッション2）
+
+- 引継ぎ先は変更なし（オーナー判断で引き続きClaudeが担当）。リモートの`bed63ce`（USD/JPY手入力フォールバック、オーナーpush）を取込。段階買付のA/B/C・PLTR30%ロジックは不変であることを確認
+- **最新版Stock Analyzerを移植**（`Documents\masya_app
+etlifyunctions` 2026-09-17版）→ `functions/src/legacy/`: analyze / screener / chart / sec-8k-guidance。全上流通信を`sec-gateway.js`経由に置換（`contact@example.com`直書きを除去）。`eps-revisions.js`（Finvizスクレイピング）は参照用に保存し**非公開**
+- スクリーナーのnullクラッシュ（opMargin等の`toFixed`）を`Number.isFinite`判定で修正
+- `sec-gateway.js`強化: 429/502/503でRetry-After尊重＋指数バックオフ（最大2回）、LRU上限40件、`getText`（SEC HTML）、Yahooは旧版同等のブラウザUA（旧アプリとの数値比較用。代替データ源の検討は継続）
+- **修正版財務層** `functions/src/sec/financials.js`: 期間単位の重複除去（最新提出優先＝修正報告・後年比較表示を反映）、YTD差分による四半期導出（Q4＝通期−9M、CF四半期）、9M欠損時はQ4＝FY−(Q1+Q2+Q3)、期末日一致のYoY/TTM、FCF＝営業CF−設備投資、希薄化後EPS（差分導出しない）、Rule of 40（TTM成長＋TTM FCFマージン）と旧定義の併記、営業レバレッジ（TTM）、成長加速度。欠損はnull
+- `functions/src/sec/company.js` ＋ `financialsApi`（認証ゲート経由）。応答に出典URL・取得時刻・通貨・`status: verification-pending`
+- テスト: 単体74件成功（合成companyfactsで手計算値と照合、旧エンジンの位置ずれ欠陥の再現、ゲートウェイのリトライ/UA/LRU、移植コードの直接通信禁止）
+
+### 次（Phase 2残り）
+1. **SEC実データ照合**: PLTR/APP/NVDAのcompanyfactsを取得し、10-Q/10-Kの公表値（売上・営業利益・希薄化後EPS・営業CF・設備投資）と照合 → フィクスチャ化。要`SEC_USER_AGENT`（実在の連絡先）
+2. 旧Netlify版の出力と修正版の差分表（差異の原因を記録）
+3. Functions Emulatorで認証付き結合テスト（functions依存のインストール）
+4. 旧analyze.jsのスコア・株価推定を修正版データに載せ替え（欠損`??0`・楽観仮定の是正）
 
 ## ユーザー対応待ち（ブロッカー）
 
