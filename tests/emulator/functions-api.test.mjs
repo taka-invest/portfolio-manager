@@ -7,9 +7,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 const PROJECT = 'demo-finance-base';
-const AUTH = 'http://127.0.0.1:9099';
-const FS = 'http://127.0.0.1:8080';
-const FN = `http://127.0.0.1:5001/${PROJECT}/asia-northeast1`;
+const AUTH = 'http://127.0.0.1:9199';
+const FS = 'http://127.0.0.1:8180';
+const FN = `http://127.0.0.1:5101/${PROJECT}/asia-northeast1`;
 
 async function googleUser(sub) {
   // Auth emulator accepts an unsigned JSON id_token for federated sign-in.

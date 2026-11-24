@@ -25,7 +25,7 @@ test('yahooChart returns a trimmed Yahoo-compatible shape with source; fearGreed
   assert.equal(url, 'https://query1.finance.yahoo.com/v8/finance/chart/%5EVIX?range=1d&interval=1d');
   assert.equal(out.chart.result[0].meta.regularMarketPrice, 17.2);
   assert.equal(out.chart.result[0].meta.secret, undefined);
-  assert.deepEqual(out.chart.result[0].indicators.quote[0], { close: [17.2] });
+  assert.deepEqual(out.chart.result[0].indicators.quote[0], { close: [17.2], volume: [5] }); // OHLCV kept, unknown keys dropped
   assert.match(out.source.provider, /Yahoo/);
   const fg = await fearGreed(async () => ({ fear_and_greed: { score: 41.6, rating: 'fear', timestamp: 't' }, other: 1 }));
   assert.equal(fg.fear_and_greed.score, 41.6);

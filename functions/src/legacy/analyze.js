@@ -1,11 +1,14 @@
-// Ported verbatim from the Netlify production source (masya_app, 2026-09-17) except
-// that every upstream request goes through ../sec-gateway.js (SEC UA, pacing, cache,
-// retry). Do not fix financial logic here: corrected logic lives in ../sec/.
+// Ported from the Netlify production source (masya_app, 2026-09-17). Changes:
+//  1. every upstream request goes through ../sec-gateway.js (SEC UA, pacing, cache, retry)
+//  2. getFinancials() takes its base data from ../sec/legacy-adapter.js (corrected
+//     quarters/annuals); the legacy signal/score/valuation code is otherwise unchanged
+//  3. small fixes marked FIX (missing growth not treated as 0; 2021 peak needs 10y range)
 // Netlify Function: 伝説の会計学 分析エンジン v3
 // 参入シグナル検知 / RoF40 / 営業レバレッジ / 16四半期対応
 // APP・MU等の複数XBRLタグ対応（最新データ優先）
 
 import { getJson } from '../sec-gateway.js';
+import { legacyBase } from '../sec/legacy-adapter.js';
 const fetchJson = url => getJson(url);
 
 // ── 1. CIK取得 ───────────────────────────────────
@@ -37,170 +40,11 @@ async function getLatestFilings(cik) {
 // ── 3. XBRL財務データ ────────────────────────────
 async function getFinancials(cik) {
   const data = await fetchJson(`https://data.sec.gov/api/xbrl/companyfacts/CIK${cik}.json`);
-  const g = data?.facts?.["us-gaap"] ?? {};
-
-  function getVals(concept, unit = "USD") {
-    return g[concept]?.units?.[unit] ?? [];
-  }
-
-  // ── 単独四半期フィルタ（期間75〜110日 or fp=Q1/Q2/Q3）──
-  function quarterFilter(d) {
-    if (d.start && d.end) {
-      const days = (new Date(d.end) - new Date(d.start)) / 86400000;
-      return days >= 75 && days <= 110;
-    }
-    // startなし: 10-QのQ1/Q2/Q3期間として扱う（フォールバック）
-    if (d.form === "10-Q" && ["Q1","Q2","Q3"].includes(d.fp) && !d.start) return true;
-    return false;
-  }
-
-  // ── 「最新データを持つ概念を優先」選択 ──────────────
-  function bestConcept(concepts, unit = "USD", filter = null, maxN = 20) {
-    let best = [];
-    let bestEnd = "";
-    for (const concept of concepts) {
-      let vals = getVals(concept, unit);
-      if (filter) vals = vals.filter(filter);
-      vals = vals.sort((a, b) => b.end.localeCompare(a.end)).slice(0, maxN);
-      if (vals.length > 0 && vals[0].end > bestEnd) {
-        bestEnd = vals[0].end;
-        best = vals;
-      }
-    }
-    return best;
-  }
-
-  // ── 年次 (10-K FY) ──
-  function annualFilter(d) { return d.form === "10-K" && d.fp === "FY"; }
-
-  // --- 年次 PL/BS/CF ---
-  const REV_CONCEPTS  = ["RevenueFromContractWithCustomerExcludingAssessedTax","Revenues","SalesRevenueNet","SalesRevenueGoodsNet","RevenueFromContractWithCustomerIncludingAssessedTax"];
-  const COGS_CONCEPTS = ["CostOfRevenue","CostOfGoodsAndServicesSold","CostOfGoodsAndServices","CostOfSales","CostOfGoodsSold"];
-  const OP_CONCEPTS    = ["OperatingIncomeLoss"];
-  const AMORT_CONCEPTS = [
-    "AmortizationOfIntangibleAssets",
-    "FiniteLivedIntangibleAssetsAmortizationExpense",
-    "AcquiredFiniteLivedIntangibleAssetsAmortizationExpense",
-  ];
-
-  const revA  = bestConcept(REV_CONCEPTS,  "USD", annualFilter, 6);
-  const cogsA = bestConcept(COGS_CONCEPTS, "USD", annualFilter, 6);
-  const opA   = bestConcept(OP_CONCEPTS,   "USD", annualFilter, 6);
-  const cashA = bestConcept(
-    ["CashAndCashEquivalentsAtCarryingValue","CashCashEquivalentsAndShortTermInvestments","CashAndCashEquivalentsAndShortTermInvestments"],
-    "USD", annualFilter, 4
-  );
-  const debtA = bestConcept(["LongTermDebt","LongTermDebtNoncurrent","LongTermDebtCurrent"], "USD", annualFilter, 4);
-  const eqA   = bestConcept(["StockholdersEquity","StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest"], "USD", annualFilter, 6);
-  const issA  = bestConcept(["ProceedsFromIssuanceOfCommonStock","ProceedsFromIssuanceOfCommonStockUnderStockOptionPlans"], "USD", annualFilter, 6);
-  const bbA   = bestConcept(["PaymentsForRepurchaseOfCommonStock"], "USD", annualFilter, 6);
-  // 資本の部の内訳（マシャ式分解）: 資本剰余金 / 利益剰余金
-  const apicA = bestConcept(["AdditionalPaidInCapital","AdditionalPaidInCapitalCommonStock"], "USD", annualFilter, 4);
-  const reA   = bestConcept(["RetainedEarningsAccumulatedDeficit"], "USD", annualFilter, 4);
-
-  // --- 発行済株式数 ---
-  const sharesRaw    = getVals("CommonStockSharesOutstanding", "shares")
-    .sort((a, b) => b.end.localeCompare(a.end));
-  const sharesLatest = sharesRaw.length > 0 ? sharesRaw[0].val : null;
-  // 年次株式数（10-K FY末ベース、株数減少率の算出用）
-  const sharesAnnual = getVals("CommonStockSharesOutstanding", "shares")
-    .filter(annualFilter)
-    .sort((a, b) => b.end.localeCompare(a.end))
-    .slice(0, 6);
-
-  // --- 年次 純利益 ---
-  const netIncA = bestConcept(["NetIncomeLoss","ProfitLoss","NetIncomeLossAvailableToCommonStockholdersBasic"], "USD", annualFilter, 6);
-
-  // --- 四半期トレンド（最大16四半期）---
-  const revQ  = bestConcept(REV_CONCEPTS,  "USD", quarterFilter, 20);
-  const cogsQ = bestConcept(COGS_CONCEPTS, "USD", quarterFilter, 20);
-  const opQ    = bestConcept(OP_CONCEPTS,    "USD", quarterFilter, 20);
-  const amortQ = bestConcept(AMORT_CONCEPTS, "USD", quarterFilter, 20);
-
-  // EPS・純利益（四半期）
-  const epsQRaw    = bestConcept(["EarningsPerShareDiluted","EarningsPerShareBasic"], "USD/shares", quarterFilter, 20);
-  const netIncQRaw = bestConcept(["NetIncomeLoss","ProfitLoss","NetIncomeLossAvailableToCommonStockholdersBasic"], "USD", quarterFilter, 20);
-
-  // SG&A / R&D（Phase1分析・OpExレバレッジ用）
-  const sgaQ = bestConcept([
-    "SellingGeneralAndAdministrativeExpense",
-    "GeneralAndAdministrativeExpense",
-  ], "USD", quarterFilter, 20);
-  const rdQ  = bestConcept([
-    "ResearchAndDevelopmentExpense",
-    "ResearchAndDevelopmentExpenseExcludingAcquiredInProcessCost",
-  ], "USD", quarterFilter, 20);
-
-  // 四半期ラベル生成
-  function quarterLabel(endDate) {
-    const d = new Date(endDate + "T00:00:00Z");
-    const m = d.getUTCMonth() + 1;
-    const y = d.getUTCFullYear();
-    const q = m <= 3 ? "Q1" : m <= 6 ? "Q2" : m <= 9 ? "Q3" : "Q4";
-    return `${y} ${q}`;
-  }
-
-  // 同一期末日の重複除去（最初のもの優先 = newestFirst後の重複はiで先に出る）
-  function dedupeByEnd(arr) {
-    const seen = new Map();
-    for (const item of arr) {
-      if (!seen.has(item.end)) seen.set(item.end, item);
-    }
-    return [...seen.values()];
-  }
-
-  const revQD    = dedupeByEnd(revQ);
-  const cogsQD   = dedupeByEnd(cogsQ);
-  const opQD     = dedupeByEnd(opQ);
-  const amortQD  = dedupeByEnd(amortQ);
-  const sgaQD    = dedupeByEnd(sgaQ);
-  const rdQD     = dedupeByEnd(rdQ);
-  const epsQD    = dedupeByEnd(epsQRaw);
-  const netIncQD = dedupeByEnd(netIncQRaw);
-
-  // --- 基本トレンドデータ構築 ---
-  const baseTrend = revQD.slice(0, 16).map((r, i) => {
-    const end      = r.end;
-    const revM     = r.val / 1_000_000;
-    const cogsE    = cogsQD.find(c => c.end === end);
-    const opE      = opQD.find(o => o.end === end);
-    const cogsM    = cogsE ? cogsE.val / 1_000_000 : null;
-    const opM      = opE   ? opE.val   / 1_000_000 : null;
-    const costRatio = cogsE ? cogsE.val / r.val : null;
-    const opMargin  = (opE && r.val >= 1_000_000) ? Math.max(-500, Math.min(200, opE.val / r.val * 100)) : null;
-    // 調整後営業利益率: GAAP + 無形資産償却費（M&A償却の影響を除去）
-    const amortE    = amortQD.find(a => a.end === end);
-    const amortM    = amortE ? +(amortE.val / 1_000_000).toFixed(1) : null;
-    const adjOpM    = opM !== null ? opM + (amortE ? amortE.val / 1_000_000 : 0) : null;
-    const adjOpMargin = (adjOpM !== null && r.val > 0) ? +(adjOpM / r.val * 100).toFixed(1) : null;
-    const prevR     = revQD[i + 1];
-    const prev4R    = revQD[i + 4];
-    const revQoQ    = (prevR  && r.val) ? (r.val / prevR.val  - 1) * 100 : null;
-    const revYoY    = (prev4R && r.val) ? (r.val / prev4R.val - 1) * 100 : null;
-
-    const sgaE = sgaQD.find(s => s.end === end);
-    const rdE  = rdQD.find(r  => r.end === end);
-    const sgaM = sgaE ? +(sgaE.val / 1_000_000).toFixed(1) : null;
-    const rdM  = rdE  ? +(rdE.val  / 1_000_000).toFixed(1) : null;
-    const grossProfitM = cogsE ? +(revM - cogsM).toFixed(1) : null;
-    const grossMargin  = cogsE ? +((1 - cogsE.val / r.val) * 100).toFixed(1) : null;
-    // OpEx合計（原価+SG&A+R&D）とその対売上比率（レバレッジ効率）
-    const opExM    = (cogsM !== null && sgaM !== null) ? +(cogsM + sgaM + (rdM ?? 0)).toFixed(1) : null;
-    const opExRatio= (opExM !== null && revM > 0) ? +(opExM / revM * 100).toFixed(1) : null;
-
-    // EPS・純利益
-    const epsE    = epsQD.find(e => e.end === end);
-    const netIncE = netIncQD.find(n => n.end === end);
-    const epsQ_   = epsE ? +Number(epsE.val).toFixed(4) : null;
-    const netIncM = netIncE ? +(netIncE.val / 1_000_000).toFixed(2) : null;
-    // EPS YoY（4Q前との差）
-    const prev4Eps = epsQD.find(e => e.end === (revQD[i + 4]?.end ?? ''));
-    const epsYoY   = (epsQ_ !== null && prev4Eps != null) ? +(epsQ_ - prev4Eps.val).toFixed(4) : null;
-
-    return { end, label: quarterLabel(end), revM, cogsM, opM, costRatio, opMargin, adjOpMargin, amortM,
-             revQoQ, revYoY, sgaM, rdM, grossProfitM, grossMargin, opExM, opExRatio,
-             epsQ: epsQ_, netIncM, epsYoY };
-  }).filter(q => q.revM > 0);
+  // CORRECTED DATA EXTRACTION (see ../sec/legacy-adapter.js): Q4 synthesis, latest
+  // filing per period, date-matched YoY/QoQ, one row per fiscal year. Everything
+  // below (signals, scores, valuation) is the unchanged legacy logic.
+  const { revA, cogsA, opA, netIncA, cashA, debtA, eqA, issA, bbA, apicA, reA,
+    sharesLatest, sharesAnnual, baseTrend } = legacyBase(data);
 
   // --- 参入シグナル / 派生指標を追加 ---
   const trend = baseTrend.map((q, i) => {
@@ -407,11 +251,13 @@ function investmentJudgment(calc, analyst, companyPhase) {
   let bearScore = 0;   // マイナス材料の合計点
 
   // ── 成長性（TTM優先）──
-  const revGrowth = calc.ttmRevGrowth ?? calc.revGrowth ?? 0;
+  // FIX: missing growth is no longer treated as 0% ("普通" +5pt); it is reported as data-missing.
+  const revGrowth = calc.ttmRevGrowth ?? calc.revGrowth ?? null;
   const revGrowthSrc = calc.ttmRevGrowth != null ? 'TTM' : '年次';
-  const _rg = revGrowth.toFixed(1);
+  const _rg = revGrowth != null ? revGrowth.toFixed(1) : '—';
   const _rs = revGrowthSrc;
-  if (revGrowth >= 50)      { bullScore += 25; signals.push({ type: 'bull', icon: '🔥', text: `売上成長率 +${_rg}%（化け物級）[${_rs}]` }); }
+  if (revGrowth == null)    { signals.push({ type: 'neutral', icon: '❔', text: '売上成長率データ不足（加点・減点なし）' }); }
+  else if (revGrowth >= 50)      { bullScore += 25; signals.push({ type: 'bull', icon: '🔥', text: `売上成長率 +${_rg}%（化け物級）[${_rs}]` }); }
   else if (revGrowth >= 30) { bullScore += 18; signals.push({ type: 'bull', icon: '🚀', text: `売上成長率 +${_rg}%（高成長）[${_rs}]` }); }
   else if (revGrowth >= 16) { bullScore += 12; signals.push({ type: 'bull', icon: '📈', text: `売上成長率 +${_rg}%（注目水準）[${_rs}]` }); }
   else if (revGrowth >= 0)  { bullScore +=  5; signals.push({ type: 'neutral', icon: '➡️', text: `売上成長率 +${_rg}%（普通）[${_rs}]` }); }
@@ -614,7 +460,8 @@ async function getMarketData(ticker) {
   let currentPrice = null, marketCap = null, peak2021 = null, sharesOutstanding = null;
 
   try {
-    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=5y`;
+    // FIX: 2021 peak needs history back to Jan 2021 (range=5y no longer reaches it).
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=10y`;
     const data = await fetchJson(url);
     const meta   = data?.chart?.result?.[0]?.meta ?? {};
     const quotes = data?.chart?.result?.[0]?.indicators?.quote?.[0] ?? {};

@@ -51,10 +51,14 @@ const ADDITIVE = new Set(['revenue', 'grossProfit', 'operatingIncome', 'netIncom
 
 /** All duration facts for a metric, merged across fallback tags, one per exact period. */
 export function durationFacts(companyfacts, metric) {
+  return factsForTags(companyfacts, CONCEPTS[metric], UNITS[metric] ?? 'USD');
+}
+
+/** Same merge rule for an explicit tag list (used by the legacy-engine adapter). */
+export function factsForTags(companyfacts, tags, unit = 'USD') {
   const gaap = companyfacts?.facts?.['us-gaap'] ?? {};
-  const unit = UNITS[metric] ?? 'USD';
   const best = new Map(); // "start|end" -> fact
-  CONCEPTS[metric].forEach((tag, priority) => {
+  tags.forEach((tag, priority) => {
     for (const f of gaap[tag]?.units?.[unit] ?? []) {
       if (!f.start || !f.end || !finite(f.val)) continue;
       const key = f.start + '|' + f.end;
