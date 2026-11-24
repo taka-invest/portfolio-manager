@@ -13,7 +13,7 @@
 |---|---|---|
 | 0 | 監査 | ✅ 完了（2026-11-23）`docs/MIGRATION_AUDIT.md` |
 | 1 | Firebase初期構築・認証・Firestore・同期 | 🟢 保存・別ブラウザー復元を実機確認。Hostingプレビュー未実施 |
-| 2 | Functions移行（analyze/screener/chart） | 🟡 修正版財務層をSEC実データで検証済（PLTR/APP/NVDA）。スコア・株価推定の載せ替えとEmulator結合テストが残り |
+| 2 | Functions移行（analyze/screener/chart） | 🟡 修正版の財務計算・スコア・株価推定とEmulator結合テストまで完了。本番デプロイ（Blaze）と画面（Phase 3）が残り |
 | 3 | 画面統合 | ⬜ |
 | 4 | 既存機能保護（リバランス・ピラミッディング） | 🟡 既存テストで保護中。弾(A/B/C)の同期が未対応 |
 | 5 | セキュリティ・費用 | 🟡 maxInstances=1等は設定済。Blaze・予算アラートは承認待ち |
@@ -108,10 +108,21 @@ etlifyunctions` 2026-09-17版）→ `functions/src/legacy/`: analyze / screener
 - APPは2025年以降、設備投資をXBRLで開示していない → FCFは欠損のまま（0にしない）
 - テスト：単体80件成功（実データのフィクスチャテスト6件を含む）
 
+### スコア・株価推定の載せ替えと結合テスト（2026-11-24）
+- `functions/src/sec/scoring.js`：マシャ式（原価率5段階・総合スコア・投資判断・撤退シグナル・10年後3価格）を修正版のデータに載せ替え。配点・閾値は不変。欠損は0扱いせず`missing`に列挙。赤字企業には目標利益率を当てはめない。希薄化版の株価を併記。修正再表示がある企業は同じ基準の期間でCAGRを計算。前提と警告を出力
+- `financials.js`：原価率（四半期・TTM）、四半期の営業レバレッジ、TTM営業利益率、自己資本・現金・長期債務（直近の値）、表紙の発行済株式数、希薄化後株数の推移、修正再表示の検出
+- `company.js`：`financialsApi`の応答に`evaluation`と`quote`（Yahoo v8、出典・時刻付き。取れなければnull）を追加
+- ゲートウェイ：一時的なネットワーク障害（DNS EAI_AGAIN等）も再試行するよう修正（実通信で発生したため）
+- 認証ゲート：署名なしトークンはFunctions Emulator内でだけ受け付ける（本番は署名必須のまま。テスト済み）
+- **Emulator結合テスト**（`npm run test:api`、auth+firestore+functions）：トークンなし・不正→401、許可リスト外のGoogleユーザー→3つのAPIすべてで403、Google以外のログイン→403、許可ユーザー→不正入力400・PLTRは200（SECの実データ・出典付き）。CIでは連絡先がないため503になるのを正しい動作として検証。構造化ログにUID・保有情報が出ないことも確認
+- `functions/package-lock.json`を追加。CI（verify・production）に`test:api`を追加
+- テスト：単体88件・ルール12件・API結合4件すべて成功
+
 ### 次（Phase 2残り）
 1. ~~SEC実データ照合~~ ✅ ／ ~~旧版との差分表~~ ✅（`docs/FINANCIAL_VERIFICATION.md`）
-3. Functions Emulatorで認証付き結合テスト（functions依存のインストール）
-4. 旧analyze.jsのスコア・株価推定を修正版データに載せ替え（欠損`??0`・楽観仮定の是正）
+3. ~~Emulator結合テスト~~ ✅ ／ ~~スコア・株価推定の載せ替え~~ ✅
+4. Cloud Functionsの本番デプロイ（**Blazeプランへの変更と予算アラートの承認が必要**）
+5. Phase 3：画面統合（個別企業分析・スクリーナー・チャート画面をPortfolio Managerに組み込む）
 
 ## ユーザー対応待ち（ブロッカー）
 

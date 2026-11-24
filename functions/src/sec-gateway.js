@@ -52,7 +52,9 @@ async function request(url, kind, options, fetcher, sleep) {
   if (sec && !contactConfigured()) throw new Error('SEC_USER_AGENT is not configured.');
   for (let attempt = 0; ; attempt++) {
     if (sec) await secPace(undefined, sleep);
-    const response = await fetcher(url, {
+    let response;
+    try {
+      response = await fetcher(url, {
       ...options,
       headers: {
         Accept: kind === 'json' ? 'application/json' : 'text/html,application/xhtml+xml',
@@ -61,7 +63,13 @@ async function request(url, kind, options, fetcher, sleep) {
         ...options.headers
       },
       signal: AbortSignal.timeout(TIMEOUT_MS)
-    });
+      });
+    } catch (err) {
+      // Transient network failure (DNS EAI_AGAIN, reset, timeout): retry with backoff.
+      if (attempt >= MAX_RETRIES) throw err;
+      await sleep(retryDelay(null, attempt));
+      continue;
+    }
     if (response.ok) return kind === 'json' ? response.json() : response.text();
     const retryable = response.status === 429 || response.status === 503 || response.status === 502;
     if (!retryable || attempt >= MAX_RETRIES) {
