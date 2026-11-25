@@ -224,6 +224,16 @@ etlifyunctions` 2026-09-17版）→ `functions/src/legacy/`: analyze / screener
 - 戻し方：Netlify管理画面のDeploysで直前の公開を「Publish deploy」
 - 残り：最終バックアップ（旧GitHub PagesのJSON書き出し・各PCのウォッチリスト）→ 旧サイト停止（要承認、削除はさらに別工程）
 
+## Phase 8-2 旧サイトの停止（2026-11-26、オーナー承認「両方停止してよい」）
+- 前提：オーナーが各PCのウォッチリスト引き継ぎと、旧GitHub Pages版のJSON書き出しを完了
+- 旧URLへの参照を確認：Documents配下で記録・テスト以外に参照なし
+- **Netlify（masya-stock-analyzer）**：`Documents\masya_app_closed`（index.htmlと`_redirects`のみ、Functionsなし）を下書きで確認後に本番公開。全ページが新URLへ301（`/`→`#analysis`、`/screener.html`→`#screener`、`/library.html`→`#research`）。旧Functions（analyze・chart等）は配信されなくなり、SEC・Yahooへの外部アクセスも停止
+  - 戻し方：NetlifyのDeploysで「Phase8 migration notice」（2026-11-24）を「Publish deploy」
+- **GitHub Pages（taka-invest.github.io/portfolio-manager）**：Pages設定をオフ。旧URLは404。リポジトリ・コードは不変。旧URLのブラウザー保存データは消えないが、開けなくなる
+  - 戻し方：リポジトリ設定でPagesをオン（main・ルート）
+- 停止後も新アプリの本番スモーク 50/50
+- **削除はしていない**（Netlifyサイトの削除、`app/legacy-notice.js`等の旧URL向けコードの整理は、様子を見てから別工程で承認を得て実施）
+
 ## ユーザー対応待ち（ブロッカー）
 
 1. ~~CLI再認証~~ ✅ ／ ~~Webアプリ構成値~~ ✅
