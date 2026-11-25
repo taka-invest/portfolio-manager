@@ -3,7 +3,7 @@
 次のセッションはまずこのファイルと`docs/MIGRATION_AUDIT.md`を読むこと。
 
 - Firebaseプロジェクト: Finance Base `finance-base-edcc7`（Sparkプラン、2026-11-23時点）
-- 作業ブランチ: `feature/phase2-stock-analyzer`（PR #18）。PR #16（`feature/firebase-foundation-phase1`）は2026-11-23にmainへsquashマージ済み
+- 作業ブランチ: 新しい作業ごとに`main`から作成。PR #16（基盤）・PR #18（Phase 2-3）はmainへsquashマージ済み
 - 旧サイト（移行完了まで維持）: GitHub Pages `portfolio_manager.html`／Netlify `masya-stock-analyzer`
 - Stock Analyzer最新ソース: `C:\Users\defaultuser0\Documents\masya_app\`（git管理外。読み取り専用で参照）
 
@@ -13,13 +13,13 @@
 |---|---|---|
 | 0 | 監査 | ✅ 完了（2026-11-23）`docs/MIGRATION_AUDIT.md` |
 | 1 | Firebase初期構築・認証・Firestore・同期 | 🟢 保存・別ブラウザー復元を実機確認。Hostingプレビュー未実施 |
-| 2 | Functions移行（analyze/screener/chart） | 🟡 修正版の財務計算・スコア・株価推定とEmulator結合テストまで完了。本番デプロイ（Blaze）と画面（Phase 3）が残り |
-| 3 | 画面統合 | ⬜ |
+| 2 | Functions移行（analyze/screener/chart） | 🟢 修正版の財務計算・スコア・株価推定。Functions 5本を東京に本番デプロイ済（2026-11-24） |
+| 3 | 画面統合 | 🟢 10項目ナビ・個別企業分析・スクリーナー・チャート・市場データ自前API・最新ライブラリ（本番公開済） |
 | 4 | 既存機能保護（リバランス・ピラミッディング） | 🟡 既存テストで保護中。弾(A/B/C)の同期が未対応 |
 | 5 | セキュリティ・費用 | 🟡 Blaze化済（2026-11-24 オーナー操作）。予算アラートの設定確認待ち |
 | 6 | CI/CD | 🟡 プレビュー/本番ワークフローと承認ゲート作成済。デプロイ用SA（本人操作）待ち |
 | 7 | 総合検証 | 🟡 自動検証は完了（`docs/VERIFICATION_PHASE7.md`）。オーナーの実機確認4項目が残り |
-| 8 | 本番切替 | 🟡 Portfolio Managerのみ本番公開（2026-11-23）。Stock Analyzer未移行・旧サイトは維持 |
+| 8 | 本番切替 | 🟡 統合版を本番公開（2026-11-24、PER/PSR追加版も反映済）。旧サイトは維持。停止は最終工程で要承認 |
 
 ## 2026-11-23 セッション1 の実施内容
 
@@ -159,6 +159,21 @@ etlifyunctions` 2026-09-17版）→ `functions/src/legacy/`: analyze / screener
 - 本番での拒否確認：トークンなし・不正トークン・署名なし（Emulator形式）トークンはすべて401。CORSヘッダーなし、`Cache-Control: private, no-store`。Cloud Loggingには`api/status/durationMs/errorClass`のみ記録（UID・トークン・保有なし）
 - 本番の`firebase.json`に`/api/*`→各関数（東京）の転送を追加（**Hostingへの反映は未実施**。PR #18のマージと本番公開の承認後）
 
+## 本番公開 Phase 2-3（2026-11-24、オーナー承認「公開してよい」）
+- PR #18をmainへsquashマージ（`410012d`）。mainの内容は検証済みブランチ`1172d5b`と同一
+- mainで全テスト：単体97／ルール12／API結合5／ブラウザー50成功・12スキップ
+- `firebase deploy --only hosting`（main `410012d`）
+- 本番確認：app/*・research/library.html は200、firebase.json・firestore.rules・functions・tests・docs・`functions/.env`は404。`/api/financials|chart|market|analyze|screener`は同一オリジンの転送でFunctionsに届き、未ログインは401。画面：サイドバー10項目・新画面のモジュール読込・Firebase接続OK、コンソールエラー0件
+- **オーナーの本番実機確認（2026-11-24）**：本番URLでGoogleログイン→個別企業分析（NVDA）が表示されることを確認 ✅
+- 残り：予算アラートの設定確認、Phase 7 総合検証、Phase 8 旧サイト停止（要承認）
+- ロールバック：Console → Hosting → リリース履歴（直前版は`9cb5954`相当のPortfolio Managerのみの版）
+
+## 本番反映 Phase 7（2026-11-24、オーナー承認「反映してよい」）
+- PR #20をmainへsquashマージ（`0531f60`）。mainで単体98／ルール12／API結合5／ブラウザー54成功・12スキップ
+- Functions 5本を再デプロイ（`--force`、上限設定は不変を確認：最大1・同時1・512MiB・180秒）→ Hosting公開
+- 本番スモーク 42/42 合格。本番の`app/analysis.js`にPER/PSR表示を確認
+- **オーナーの本番実機確認**：個別企業分析にPER（TTM）・PSR（TTM）が表示されることを確認 ✅
+
 ## Phase 8 着手と画面の見直し（2026-11-24）
 - オーナー確認：本番でログアウトできた ✅
 - 依存調査：公開ファイル・Functionsに`netlify`/`github.io`への参照なし。GitHub Pagesはmainのルートを公開（mainにマージすると旧URLも更新される）。Netlifyは`Documents\masya_app`の`deploy.bat`でデプロイ、CLIログイン済み
@@ -172,6 +187,13 @@ etlifyunctions` 2026-09-17版）→ `functions/src/legacy/`: analyze / screener
   - CSSとmjsにも`Cache-Control: no-cache`（古いCSSが残って画面が崩れる問題をEmulatorで発見）。本番スモークに検査を追加
 - テスト：単体100件、API結合5件、ブラウザー60件成功・12スキップ。Emulatorで実データ（NVDA週足262本）を表示確認
 
+## 本番反映 画面の見直し（2026-11-24、オーナー承認「反映してよい」）
+- PR #21をmainへsquashマージ（`a3907b7`）。mainで単体100／ルール12／API結合5／ブラウザー60成功・12スキップ（API結合で1回、実SEC通信のケースがローカルDNS障害で失敗→再実行で成功。テストに1回再試行を追加）
+- Functions 5本再デプロイ（上限設定は不変を確認）→ Hosting公開
+- 本番スモーク 45/45（CSS/JS/MJSのキャッシュ制御を含む）。本番に紺テーマと新しい分析画面が配信されていることを確認
+- GitHub Pagesもmain `a3907b7`で再構築され、旧URLに移行案内（新URLへのリンク）が表示されることを確認
+- Netlifyの移行案内（`Documents\masya_app_cutover`）は未デプロイ。オーナーが新画面に納得した後に、Phase 8の最終工程として承認を得て実施
+
 ## 旧Stock Analyzer画面の無改変移植（2026-11-24、オーナー要望）
 - オーナー判断：「画面は旧版、数値は修正版」。Phase 3で作り直した分析・スクリーナー画面（`app/analysis.js`・`app/screener.js`）は廃止
 - `research/index.html`・`research/screener.html`：`Documents\masya_app`の旧ページを**そのまま**移植。差分は、先頭に3行の読込（firebase-config・legacy-shim・firebase-cloud）と、Netlify前提のルートリンク4か所の相対化のみ（diffで10行）
@@ -181,6 +203,36 @@ etlifyunctions` 2026-09-17版）→ `functions/src/legacy/`: analyze / screener
 - Portfolio Managerの「個別企業分析」「銘柄スクリーナー」は、移植した旧ページを埋め込み（ルートを開いたときに読込、新しいタブでも開ける）
 - Emulatorのポートを TripCraft と重ならない番号に変更（hosting 5100 / functions 5101 / firestore 8180・ws 9250 / auth 9199 / hub 4410 / logging 4510）。**この作業中、ポートが重なっていたためTripCraftのEmulatorにテスト用ユーザー1件と許可リスト1件を誤って書き込んだ**（メモリー上のみ・その後Emulatorは停止済みで残存なし）
 - テスト：単体102・ルール12・API結合5・ブラウザー54成功（旧画面の振り替え・ログイン要求・埋め込みを追加）。Emulator実データでNVDAの旧画面（チャートタブ）を確認
+
+## 本番反映 旧画面の移植（2026-11-24、オーナー承認「反映してよい」）
+- PR #23をmainへマージ（`0d74171`）。mainで単体102／ルール12／API結合5／ブラウザー54成功・12スキップ
+- Functions 5本再デプロイ（`--force`、上限設定は不変を確認：最大1・同時1・512MiB・180秒）→ Hosting公開
+- 本番スモーク 46/46 合格。本番の`research/index.html`に`legacy-shim.js`、`portfolio_manager.html`に`pm-legacy-frame`が配信されていることを確認
+- **オーナーの本番実機確認**：**埋め込みが表示されない不具合を発見**（個別企業分析・銘柄スクリーナーが旧Netlify画面と同じ見た目か）
+
+## 本番反映 埋め込み拒否の修正（2026-11-24、オーナー承認「反映してよい」）
+- 症状：本番の個別企業分析で「finance-base-edcc7.web.app で接続が拒否されました」。全HTMLに`X-Frame-Options: DENY`を付けていたため、同じサイト内のiframe埋め込みも拒否されていた。Hosting Emulatorはカスタムヘッダーを適用せず（mainの設定でも同じ）、ブラウザーテストはヘッダーのない簡易サーバーのため、検出できなかった
+- 修正（PR #24、main `43f26fa`）：`research/*.html`は`SAMEORIGIN`＋`frame-ancestors 'self'`、`/`と`portfolio_manager.html`は`DENY`のまま。あわせて`/`が1時間キャッシュされていた問題（どのHTMLルールにも当たらず`max-age=3600`）をno-storeに
+- 再発防止：設定の単体テスト`tests/hosting-headers.test.js`（mainの旧設定で失敗することを確認）、本番スモークに埋め込み可否と`/`のキャッシュを追加
+- 検証：プレビューでスモーク50/50と埋め込み表示を確認 → CI（verify）合格 → Hostingのみ本番公開（Functionsは変更なし）→ 本番スモーク 50/50、本番で両画面の埋め込み読込を確認
+- **オーナーの本番実機確認**：旧画面が本番で表示されることを確認 ✅
+
+## Phase 8-1 Netlifyへの移行案内（2026-11-24、オーナー承認「公開してよい」）
+- 公開元：`Documents\masya_app_cutover`（`masya_app`のコピー。差分は3ページ上部の案内バーと「ウォッチリストをコピー」ボタンのみ、元フォルダーは不変、`_batch_*`等の作業ファイルは含めない）
+- 下書き公開で確認：3ページに案内バー、コピーボタン（未保存時の表示・保存時のコピー）、旧analyze関数200 → 本番公開（`masya-stock-analyzer.netlify.app`）
+- 本番確認：3ページに案内バー、旧analyze関数200。旧サイトは停止していない（引き続き利用可）
+- 戻し方：Netlify管理画面のDeploysで直前の公開を「Publish deploy」
+- 残り：最終バックアップ（旧GitHub PagesのJSON書き出し・各PCのウォッチリスト）→ 旧サイト停止（要承認、削除はさらに別工程）
+
+## Phase 8-2 旧サイトの停止（2026-11-26、オーナー承認「両方停止してよい」）
+- 前提：オーナーが各PCのウォッチリスト引き継ぎと、旧GitHub Pages版のJSON書き出しを完了
+- 旧URLへの参照を確認：Documents配下で記録・テスト以外に参照なし
+- **Netlify（masya-stock-analyzer）**：`Documents\masya_app_closed`（index.htmlと`_redirects`のみ、Functionsなし）を下書きで確認後に本番公開。全ページが新URLへ301（`/`→`#analysis`、`/screener.html`→`#screener`、`/library.html`→`#research`）。旧Functions（analyze・chart等）は配信されなくなり、SEC・Yahooへの外部アクセスも停止
+  - 戻し方：NetlifyのDeploysで「Phase8 migration notice」（2026-11-24）を「Publish deploy」
+- **GitHub Pages（taka-invest.github.io/portfolio-manager）**：Pages設定をオフ。旧URLは404。リポジトリ・コードは不変。旧URLのブラウザー保存データは消えないが、開けなくなる
+  - 戻し方：リポジトリ設定でPagesをオン（main・ルート）
+- 停止後も新アプリの本番スモーク 50/50
+- **削除はしていない**（Netlifyサイトの削除、`app/legacy-notice.js`等の旧URL向けコードの整理は、様子を見てから別工程で承認を得て実施）
 
 ## ユーザー対応待ち（ブロッカー）
 

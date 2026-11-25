@@ -62,7 +62,9 @@ test('allowlisted Google user: bad input -> 400; valid ticker -> 200 with source
   await allow(u.uid);
   const bad = await call('financialsApi?ticker=' + encodeURIComponent('PLTR/../x'), u.token);
   assert.equal(bad.status, 400);
-  const res = await call('financialsApi?ticker=PLTR', u.token);
+  let res = await call('financialsApi?ticker=PLTR', u.token);
+  // Only this case reaches the real SEC; retry once on a transient upstream failure (local DNS flakes).
+  if (res.status === 502) { await new Promise(r => setTimeout(r, 2000)); res = await call('financialsApi?ticker=PLTR', u.token); }
   if (process.env.SEC_USER_AGENT || res.status === 200) {
     assert.equal(res.status, 200);
     const body = await res.json();
