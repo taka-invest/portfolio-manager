@@ -6,6 +6,9 @@
   const fxEndpoint = 'https://api.frankfurter.dev/v2/providers/ecb/rate/usd/jpy';
   const spotEndpoint = 'https://www.live-rates.com/rates';
   const hourlyEndpoint = 'https://api.exchangerate.fun/latest?base=USD';
+  // Own authenticated API: Yahoo USD/JPY (JPY=X) fetched server-side, with the
+  // provider's own quote time. Reliable (no 3-calls/hour limit) when signed in.
+  const serverFxPath = '/api/market?symbol=JPY%3DX&range=1d&interval=1d';
   const formatters = new Map();
   const utcDate = t => new Date(t).toISOString().slice(0, 10);
   const shift = (date, days) => utcDate(Date.parse(date) + days * day);
@@ -154,7 +157,25 @@
 
   const errCode = e => e.status === 429 ? 'limited' : [401, 403].includes(e.status) ? 'denied' : 'failed';
 
-  async function fetchFx(fetcher) {
+  /** USD/JPY from the own API, or null (not signed in, API error, implausible data). */
+  async function serverFx(caller) {
+    if (typeof caller !== 'function') return null;
+    try {
+      const out = await caller(serverFxPath, { kind: '為替' });
+      const meta = out && out.data && out.data.chart && out.data.chart.result && out.data.chart.result[0] &&
+        out.data.chart.result[0].meta;
+      const rate = Number(meta && meta.regularMarketPrice);
+      const at = Number(meta && meta.regularMarketTime) * 1000;
+      if (!(rate >= 50 && rate <= 300) || !Number.isFinite(at) || at <= 0) return null;
+      return { rate, at, date: utcDate(at), kind: 'spot', source: 'Yahoo Finance USD/JPY（自前API経由・提供元時刻付き）' };
+    } catch (_) { return null; }
+  }
+
+  async function fetchFx(fetcher, caller = root.PMApi && root.PMApi.call) {
+    // 1) Own API. Used only when the provider timestamp is recent (FX trades
+    //    around the clock on weekdays; weekend quotes fall through and are labelled).
+    const own = await serverFx(caller);
+    if (own && own.at > Date.now() - 20 * 60000 && own.at <= Date.now() + 60000) return own;
     // Live-Rates keyless endpoint is /rates (not /api/price, which needs a key).
     // Provider timestamps are required to classify a quote as intraday.
     // Live-Rates allows three unauthenticated calls/hour; never treat an
@@ -223,7 +244,7 @@
     return { quotes, spaceX, limited, retryMs };
   }
 
-  const api = { quoteStatus, fxStatus, manualFx, fetchFx, fetchQuotes, finnhub, usClosed, ecbClosed };
+  const api = { quoteStatus, fxStatus, manualFx, fetchFx, serverFx, fetchQuotes, finnhub, usClosed, ecbClosed };
   if (typeof module === 'object' && module.exports) module.exports = api;
   else root.PMMarket = api;
 })(globalThis);
