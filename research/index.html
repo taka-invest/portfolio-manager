@@ -404,7 +404,9 @@ function rowBg(q, isLatest) {
 // 実績とは混ぜない。判定ルールは実績と同じ（research/forecast.js の enrich）。
 let pmTrendData = null;
 const pmEsc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
-const pmMoney = m => m == null ? '—' : (Math.abs(m) >= 1000 ? '$' + (m / 1000).toFixed(2) + 'B' : '$' + m.toFixed(0) + 'M');
+const pmMoney = (m, d = 2) => m == null ? '—' : (Math.abs(m) >= 1000 ? '$' + (m / 1000).toFixed(d) + 'B' : '$' + m.toFixed(Math.max(0, d - 2)) + 'M');
+// A narrow range (e.g. $2.649B–$2.653B) must not collapse to the same rounded figure.
+const pmRange = (lo, hi) => { let d = 2; while (d < 4 && lo !== hi && pmMoney(lo, d) === pmMoney(hi, d)) d++; return [pmMoney(lo, d), pmMoney(hi, d), d]; };
 function pmStorage() { try { return window.localStorage; } catch { return null; } }
 
 function pmForecastRows(trend, d) {
@@ -435,7 +437,7 @@ function pmGuidanceHtml(trend, d) {
   const st = pmStorage();
   const pick = st && d.ticker ? F.readPick(st, d.ticker) : null;
   const gEnd = F.guidanceQuarter(trend, g.filingDate);
-  const fmtR = c => c.approx ? '約 ' + pmMoney(c.mid) : `${pmMoney(c.low)} 〜 ${pmMoney(c.high)}（中央 ${pmMoney(c.mid)}）`;
+  const fmtR = c => { if (c.approx) return '約 ' + pmMoney(c.mid); const [lo, hi, d] = pmRange(c.low, c.high); return `${lo} 〜 ${hi}（中央 ${pmMoney(c.mid, d)}）`; };
   const cons = d.outlook.next?.revenueEstimateM;
   const items = (g.revenue || []).map((c, i) => {
     const usable = c.period === 'quarter' && !c.segment && gEnd;
