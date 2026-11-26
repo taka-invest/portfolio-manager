@@ -298,8 +298,12 @@ etlifyunctions` 2026-09-17版）→ `functions/src/legacy/`: analyze / screener
 - サーバー：`functions/src/sec/estimates.js`（Finnhub `calendar/earnings`・`stock/earnings`）を `/api/analyze` の `outlook` に追加。キーは `functions/.env` の `FINNHUB_API_KEY`（オーナーが追記、gitignore）
 - 実データ確認：Finnhub無料枠で次回決算の売上予想・EPS予想・EPSサプライズ4回分が取得できる（APP・PLTR・NVDAで確認）
 - テスト：単体5件・ブラウザー3件（PC・スマホ）を追加。単体144、ブラウザー94成功・12スキップ、Functionsエミュレーター5/5。CI合格
-- Functions（5関数）とHostingを本番公開 → 本番スモーク 50/50、`forecast.js` の配信を確認、分析APIのログにエラーなし。ログイン後の画面表示はオーナー確認待ち
+- Functions（5関数）とHostingを本番公開 → 本番スモーク 50/50、`forecast.js` の配信を確認、分析APIのログにエラーなし。**オーナーが本番でPLTRの予想行（2026 Q4（予）コンセンサス $2.71B・+92.5%）を確認** ✅
 - 第2段階（8-Kの会社ガイダンス読み取り）は未着手
+
+## ファビコン（2026-11-26、オーナー承認「反映してよい」）
+- PR #43（main `5e23daa`）：SVGファビコン、`/favicon.ico`（16・32・48px）、Apple touch icon（180px）、`icon-192/512.png`、`site.webmanifest`、`theme-color`。4ページすべてに設定、ビルドで `favicon.ico` も公開
+- テスト：`tests/favicon.test.js` 2件。単体146。CI合格。Hostingのみ本番公開 → 本番スモーク 50/50、アイコン4ファイルの配信（200・正しいContent-Type）を確認
 
 ## ユーザー対応待ち（ブロッカー）
 
