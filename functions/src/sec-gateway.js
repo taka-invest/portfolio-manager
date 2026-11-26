@@ -8,6 +8,10 @@
 'use strict';
 
 const MAX_ENTRIES = 40;          // parsed JSON objects kept in memory
+// companyfacts can be several MB of JSON (several times that once parsed). A full
+// screener scan touches ~120 of them, so the cache is also capped by response size
+// to keep the 512MiB instance well clear of its memory limit.
+const MAX_CACHE_BYTES = 40 * 1024 * 1024;
 const SEC_TTL_MS = 10 * 60_000;
 const OTHER_TTL_MS = 2 * 60_000;
 const SEC_GAP_MS = 550;
@@ -39,10 +43,14 @@ export function retryDelay(response, attempt) {
   return Math.min(1000 * 2 ** attempt, 8000);
 }
 
+const cachedBytes = () => { let n = 0; for (const e of cache.values()) n += e.size || 0; return n; };
+function evict() {
+  while (cache.size > MAX_ENTRIES || (cache.size > 1 && cachedBytes() > MAX_CACHE_BYTES)) cache.delete(cache.keys().next().value);
+}
 function remember(url, entry) {
   cache.delete(url);
   cache.set(url, entry);
-  while (cache.size > MAX_ENTRIES) cache.delete(cache.keys().next().value);
+  evict();
 }
 
 function contactConfigured() {
@@ -72,7 +80,12 @@ async function request(url, kind, options, fetcher, sleep) {
       await sleep(retryDelay(null, attempt));
       continue;
     }
-    if (response.ok) return kind === 'json' ? response.json() : response.text();
+    if (response.ok) {
+      if (kind !== 'json') { const text = await response.text(); return { value: text, size: text.length }; }
+      if (typeof response.text !== 'function') return { value: await response.json(), size: 0 };
+      const text = await response.text();
+      return { value: JSON.parse(text), size: text.length };
+    }
     const retryable = response.status === 429 || response.status === 503 || response.status === 502;
     if (!retryable || attempt >= MAX_RETRIES) {
       const err = new Error('Upstream HTTP ' + response.status);
@@ -87,10 +100,15 @@ function cached(url, kind, options, fetcher, sleep) {
   const key = kind + ':' + url;
   const old = cache.get(key);
   if (old && old.expires > Date.now()) { remember(key, old); return old.promise; }
-  const promise = request(url, kind, options, fetcher, sleep);
-  remember(key, { expires: Date.now() + (isSec(url) ? SEC_TTL_MS : OTHER_TTL_MS), promise });
-  promise.catch(() => cache.delete(key));
-  return promise;
+  const entry = { expires: Date.now() + (isSec(url) ? SEC_TTL_MS : OTHER_TTL_MS), size: 0 };
+  entry.promise = request(url, kind, options, fetcher, sleep).then(r => {
+    entry.size = r.size;
+    if (cache.get(key) === entry) evict();
+    return r.value;
+  });
+  remember(key, entry);
+  entry.promise.catch(() => { if (cache.get(key) === entry) cache.delete(key); });
+  return entry.promise;
 }
 
 export function getJson(url, options = {}, fetcher = fetch, sleep = sleepReal) {
@@ -101,4 +119,6 @@ export function getText(url, options = {}, fetcher = fetch, sleep = sleepReal) {
 }
 
 export function cacheSizeForTest() { return cache.size; }
+export function cacheBytesForTest() { return cachedBytes(); }
+export const CACHE_LIMITS = { MAX_ENTRIES, MAX_CACHE_BYTES };
 export function clearForTest() { cache.clear(); nextSecAt = 0; }

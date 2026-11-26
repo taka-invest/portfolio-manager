@@ -72,3 +72,19 @@ npx firebase deploy --only functions --project finance-base-edcc7
 - 全関数 `maxInstances: 1` / `concurrency: 1` / 512MiB / 180秒（費用の上限を抑えるため）。変更時は費用見込みを再確認
 - 古いコンテナイメージは3日で自動削除（`firebase functions:artifacts:setpolicy --location asia-northeast1 --days 3`）
 - Hostingの`/api/*`転送は`firebase.json`に記載。Functionsを削除する場合は転送も外すこと
+- 同時1件のため、クライアントは1関数あたり1リクエストずつ送る（スクリーナーは1バッチずつ・混雑429/5xxは1回だけ再試行）。並列化してもSECの毎秒2件制限で速くならない
+- スクリーナーは1リクエスト90秒で新しい銘柄の取得を打ち切り、残りは「時間切れ」行で返す（関数の180秒強制終了で全件失うのを防ぐ）
+- 取得キャッシュは件数40かつ応答サイズ合計40MBまで（companyfactsは1社数MB。全件スキャンで512MiBを超えないため）
+
+## 緊急停止・費用の上限
+
+費用が想定外に増えた、または不審なアクセスがある場合の止め方（上から順に影響が小さい）。
+
+1. **APIの利用を止める（データは残る）**：自分のUIDの許可を外す。60秒以内に全APIが403になり、上流（SEC・Yahoo）への問い合わせも止まる。
+   ```powershell
+   node scripts/allowlist-uid.mjs <UID> --disable
+   ```
+   再開は `--disable` を付けずに同じコマンドを実行。未ログイン・未許可のリクエストは認証で即401となり、上流には届かない
+2. **関数ごと止める**：Firebase Console → Functions、またはGoogle Cloud Console → Cloud Run で該当サービスを削除する（再開は`firebase deploy --only functions`）。Hostingの画面は動き続け、APIだけ「未公開」と表示される
+3. **上限**：全関数 `maxInstances: 1`。どれだけ呼ばれても同時に動くのは1関数1台のため、費用は時間に比例する上限で止まる。予算アラート（月1,000円・50/90/100%）を必ず有効にしておく
+4. ログ確認は `npx firebase functions:log --project finance-base-edcc7 --only <関数名>`。アプリのログはAPI名・ステータス・処理時間・エラー分類のみ。**監査ログ（AuditLog）にはアカウントのメールが含まれるため、ログをファイルに保存・共有しない**

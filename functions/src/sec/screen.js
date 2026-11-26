@@ -87,15 +87,22 @@ export function screenFacts(ticker, companyfacts) {
   };
 }
 
+// The function is killed at 180s (timeoutSeconds). Stop starting new tickers well
+// before that so a slow upstream yields partial rows plus "retry" rows, not a 5xx.
+export const SCREEN_BUDGET_MS = 90_000;
+export const TIMEOUT_ERROR = '時間切れ（混雑のため未取得。再スキャンしてください）';
+
 /** Screen up to 10 tickers sequentially (SEC pacing is enforced by the gateway). */
-export async function screenTickers(tickers, { fetchJson = getJson, withPrice = true } = {}) {
+export async function screenTickers(tickers, { fetchJson = getJson, withPrice = true, now = () => Date.now(), budgetMs = SCREEN_BUDGET_MS } = {}) {
   const out = [];
+  const deadline = now() + budgetMs;
   for (const ticker of tickers) {
+    if (now() > deadline) { out.push({ ticker, error: TIMEOUT_ERROR }); continue; }
     try {
       const { cik } = await resolveCik(ticker, fetchJson);
       const facts = await fetchJson(`https://data.sec.gov/api/xbrl/companyfacts/CIK${cik}.json`);
       const row = screenFacts(ticker, facts);
-      const quote = withPrice ? await latestPrice(ticker, fetchJson) : null;
+      const quote = withPrice && now() <= deadline ? await latestPrice(ticker, fetchJson) : null;
       out.push({ ...row, price: quote?.price ?? null, priceAsOf: quote?.asOf ?? null });
     } catch (err) {
       out.push({ ticker, error: err.status === 404 ? 'SECの企業一覧に見つかりません' : '取得に失敗しました' });

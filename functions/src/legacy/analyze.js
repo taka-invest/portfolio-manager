@@ -164,8 +164,14 @@ async function getFinancials(cik) {
 }
 
 // ── 4a. Yahoo Finance アナリスト予想データ ──────────
+// Yahoo v10 quoteSummary and v7 quote require a session crumb and answer 401 to
+// server requests (checked 2026-11-26). They are skipped rather than called and
+// failed on every analysis; the fields stay empty exactly as when the calls failed.
+const YAHOO_CRUMB_APIS = false;
+
 async function getAnalystData(ticker) {
   try {
+    if (!YAHOO_CRUMB_APIS) throw new Error('Yahoo quoteSummary requires a crumb (skipped)');
     const url = `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${ticker}?modules=earningsHistory%2CearningsTrend`;
     const data = await fetchJson(url);
     const res = data?.quoteSummary?.result?.[0] ?? {};
@@ -234,7 +240,7 @@ async function getAnalystData(ticker) {
       recommendationKey, numberOfAnalysts, recommendationBreakdown,
     };
   } catch (e) {
-    console.error("Analyst data error:", e.message);
+    if (YAHOO_CRUMB_APIS) console.error("Analyst data error:", e.message);
     return {
       epsHistory: [], forwardEstimates: [], avgBeatPct: null,
       beatAccel: null, maxBeatPct: null,
@@ -482,7 +488,7 @@ async function getMarketData(ticker) {
     console.error("Yahoo chart API error:", e.message);
   }
 
-  if (!marketCap) {
+  if (!marketCap && YAHOO_CRUMB_APIS) {
     try {
       const url2 = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${ticker}`;
       const data2 = await fetchJson(url2);
