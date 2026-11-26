@@ -133,7 +133,36 @@
     return ago && ago.revM > 0 ? ago.revM * (1 + own.revYoY / 100) : null;
   }
 
-  const api = { enrich, forecastRow, consensusQuarter, nextQuarterEnd, quarterLabel, yearAgo, readOwn, saveOwn, ownRevenue };
+  /**
+   * Guidance in the latest earnings release is for the quarter after the one it
+   * reports. It maps to the forecast quarter only when the release was filed
+   * 10–120 days after the latest actual quarter ended (i.e. it reported that quarter).
+   */
+  function guidanceQuarter(trend, filingDate) {
+    if (!trend?.length || !filingDate) return null;
+    const lag = (Date.parse(filingDate) - Date.parse(trend[0].end)) / DAY;
+    return lag >= 10 && lag <= 120 ? nextQuarterEnd(trend[0].end) : null;
+  }
+  /** Guidance figure the owner adopted for a ticker: { accession, low, high }. */
+  const GKEY = t => 'pm_guidance_' + t;
+  function readPick(storage, ticker) {
+    try {
+      const v = JSON.parse(storage.getItem(GKEY(ticker)));
+      return v && typeof v.accession === 'string' && Number.isFinite(v.low) && Number.isFinite(v.high) ? v : null;
+    } catch { return null; }
+  }
+  function savePick(storage, ticker, v) {
+    if (!v) storage.removeItem(GKEY(ticker));
+    else storage.setItem(GKEY(ticker), JSON.stringify({ accession: v.accession, low: v.low, high: v.high, at: new Date().toISOString() }));
+  }
+  /** The adopted figure, only if it is still one of the current release's candidates. */
+  function adoptedGuidance(guidance, pick) {
+    if (!guidance?.revenue || !pick || pick.accession !== guidance.accession) return null;
+    return guidance.revenue.find(c => c.low === pick.low && c.high === pick.high && c.period === 'quarter' && !c.segment) ?? null;
+  }
+
+  const api = { enrich, forecastRow, consensusQuarter, nextQuarterEnd, quarterLabel, yearAgo, readOwn, saveOwn, ownRevenue,
+    guidanceQuarter, readPick, savePick, adoptedGuidance };
   if (typeof module === 'object' && module.exports) module.exports = api;
   else root.PMForecast = api;
 })(globalThis);

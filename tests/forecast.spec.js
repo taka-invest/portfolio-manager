@@ -74,3 +74,30 @@ test('without a server key: no consensus row, the reason is shown, own assumptio
   await press(page.getByRole('button', { name: '自分の想定を反映' }));
   await expect(page.locator('#pm-trend-wrap tr[data-kind="own"]')).toHaveCount(1);
 });
+
+const GUIDANCE = { filingDate: '2026-11-03', accession: '0001321655-26-000099', url: 'https://www.sec.gov/Archives/edgar/data/1321655/000132165526000099/ex991.htm',
+  revenue: [
+    { low: 2649, high: 2653, mid: 2651, approx: false, segment: false, period: 'quarter', periodText: 'Q4 2026', snippet: 'For Q4 2026, we expect: • Revenue of between $2.649 - $2.653 billion.' },
+    { low: 8530, high: 8534, mid: 8532, approx: false, segment: false, period: 'year', periodText: 'full year 2026', snippet: 'raising our revenue guidance to between $8.530 - $8.534 billion' }],
+  other: ['Adjusted income from operations of between $1.640 - $1.644 billion'] };
+
+test('company guidance: candidates with source, adopt the quarterly figure as a row, compare with consensus, remove', async ({ page }, info) => {
+  await open(page, { ...OUTLOOK, guidance: GUIDANCE });
+  const box = page.locator('#pm-guidance');
+  await expect(box).toContainText('8-K 2026-11-03 提出');
+  await expect(box.locator('a[href^="https://www.sec.gov/"]')).toHaveAttribute('target', '_blank');
+  await expect(box.locator('li[data-guidance="0"]')).toContainText('四半期［Q4 2026］');
+  await expect(box.locator('li[data-guidance="0"]')).toContainText('コンセンサスは中央値比 -7.6%');   // 2450 vs 2651
+  await expect(box.locator('li[data-guidance="1"]')).toContainText('通期（参考）');
+  await expect(box.locator('li[data-guidance="1"] button')).toHaveCount(0);                     // full year cannot be a quarter row
+  await expect(box).toContainText('非GAAPを含む');
+  await expect(page.locator('#pm-trend-wrap tr[data-kind="guidance"]')).toHaveCount(0);          // nothing used until adopted
+  await press(box.locator('li[data-guidance="0"] button'));
+  const row = page.locator('#pm-trend-wrap tr[data-kind="guidance"]');
+  await expect(row).toContainText('会社ガイダンス');
+  await expect(row).toContainText('$2.65B');
+  await expect(page.locator('#pm-guidance li[data-guidance="0"] button')).toHaveText('使用中・外す');
+  await page.locator('#pm-trend-wrap').screenshot({ path: `test-results/guidance-${info.project.name}.png` });
+  await press(page.locator('#pm-guidance li[data-guidance="0"] button'));
+  await expect(row).toHaveCount(0);
+});

@@ -416,10 +416,56 @@ function pmForecastRows(trend, d) {
     if (end) rows.push(F.forecastRow(trend, { end, revM: next.revenueEstimateM, epsQ: next.epsEstimate, kind: 'consensus', source: 'コンセンサス' }));
   }
   const st = pmStorage();
+  const g = d?.outlook?.guidance;
+  const gEnd = g ? F.guidanceQuarter(trend, g.filingDate) : null;
+  const adopted = st && d?.ticker && gEnd ? F.adoptedGuidance(g, F.readPick(st, d.ticker)) : null;
+  if (adopted) rows.push(F.forecastRow(trend, { end: gEnd, revM: adopted.mid, kind: 'guidance', source: '会社ガイダンス' }));
   const own = st && d?.ticker ? F.readOwn(st, d.ticker) : null;
   const ownRev = own ? F.ownRevenue(trend, own) : null;
   if (ownRev != null) rows.push(F.forecastRow(trend, { revM: ownRev, opMargin: own.opMargin, kind: 'own', source: '自分の想定' }));
   return rows.filter(Boolean);
+}
+
+function pmGuidanceHtml(trend, d) {
+  const F = window.PMForecast;
+  const g = d?.outlook?.guidance;
+  if (!d?.outlook) return '';
+  if (!g) return '<p class="text-[11px] text-white/30 mt-2">会社ガイダンス：サーバーが未対応のため未取得です</p>';
+  if (g.error && !g.revenue) return `<p class="text-[11px] text-white/40 mt-2">会社ガイダンス：${pmEsc(g.error)}</p>`;
+  const st = pmStorage();
+  const pick = st && d.ticker ? F.readPick(st, d.ticker) : null;
+  const gEnd = F.guidanceQuarter(trend, g.filingDate);
+  const fmtR = c => c.approx ? '約 ' + pmMoney(c.mid) : `${pmMoney(c.low)} 〜 ${pmMoney(c.high)}（中央 ${pmMoney(c.mid)}）`;
+  const cons = d.outlook.next?.revenueEstimateM;
+  const items = (g.revenue || []).map((c, i) => {
+    const usable = c.period === 'quarter' && !c.segment && gEnd;
+    const inUse = usable && pick && pick.accession === g.accession && pick.low === c.low && pick.high === c.high;
+    const tag = c.segment ? '区分別の売上（参考）' : c.period === 'year' ? '通期（参考）' : c.period === 'quarter' ? '四半期' : '期間不明（参考）';
+    const vsCons = usable && cons != null && F.consensusQuarter(trend, d.outlook.next) === gEnd
+      ? `<span class="text-white/40 ml-2">コンセンサスは中央値比 <span class="${cons >= c.mid ? 'text-emerald-300' : 'text-red-300'}">${cons >= c.mid ? '+' : ''}${((cons / c.mid - 1) * 100).toFixed(1)}%</span></span>` : '';
+    const btn = !usable ? '' : inUse
+      ? `<button type="button" class="ml-2 rounded bg-amber-500/20 border border-amber-500/40 text-amber-200 px-2 py-0.5" onclick="pmPickGuidance(-1)">使用中・外す</button>`
+      : `<button type="button" class="ml-2 rounded bg-white/5 border border-white/20 text-white/70 px-2 py-0.5" onclick="pmPickGuidance(${i})">予想行に使う</button>`;
+    return `<li class="py-1" data-guidance="${i}"><span class="text-white/40">${tag}［${pmEsc(c.periodText || '期間の記載なし')}］</span> 売上 <span class="font-bold text-white/80">${fmtR(c)}</span>${vsCons}${btn}
+      <details class="text-[11px] text-white/35 mt-0.5"><summary class="cursor-pointer">原文</summary>${pmEsc(c.snippet)}</details></li>`;
+  }).join('');
+  const other = (g.other || []).map(t => `<li>${pmEsc(t)}</li>`).join('');
+  return `
+    <div class="mt-3 border-t border-white/10 pt-2 text-xs" id="pm-guidance">
+      <div class="font-bold text-white/60">🏢 会社ガイダンス（決算発表 8-K ${pmEsc(g.filingDate || '')} 提出）
+        ${g.url ? `<a href="${pmEsc(g.url)}" target="_blank" rel="noopener noreferrer" class="ml-2 font-normal text-indigo-300 underline">原文（SEC）</a>` : ''}</div>
+      ${items ? `<ul class="mt-1">${items}</ul>` : '<p class="text-white/40 mt-1">売上のガイダンスを読み取れませんでした（原文で確認してください）。</p>'}
+      ${!gEnd && items ? '<p class="text-[11px] text-white/35">この決算発表は最新の実績四半期のものと確認できないため、予想行には使えません。</p>' : ''}
+      ${other ? `<div class="mt-2 text-white/45">その他のガイダンス（非GAAPを含む・参考。表の営業利益率はGAAPのため直接は比べられません）<ul class="list-disc pl-4 text-[11px] text-white/40">${other}</ul></div>` : ''}
+      <p class="text-[11px] text-white/30 mt-1">読み取りは自動です。原文と照合し、正しい場合だけ「予想行に使う」を押してください。</p>
+    </div>`;
+}
+function pmPickGuidance(i) {
+  const st = pmStorage(), d = pmTrendData, g = d?.outlook?.guidance;
+  if (!st || !d?.ticker || !g) return;
+  const c = i >= 0 ? g.revenue[i] : null;
+  window.PMForecast.savePick(st, d.ticker, c ? { accession: g.accession, low: c.low, high: c.high } : null);
+  pmRerenderTrend();
 }
 
 function pmForecastRowHtml(q, trend) {
@@ -427,6 +473,8 @@ function pmForecastRowHtml(q, trend) {
   const opmYoY = q.opMargin != null && ago?.opMargin != null ? q.opMargin - ago.opMargin : null;
   const badge = q.kind === 'own'
     ? '<span class="text-[10px] rounded px-1 py-0.5 bg-sky-500/20 text-sky-300 border border-sky-500/30">自分の想定</span>'
+    : q.kind === 'guidance'
+    ? '<span class="text-[10px] rounded px-1 py-0.5 bg-amber-500/20 text-amber-300 border border-amber-500/30">会社ガイダンス</span>'
     : '<span class="text-[10px] rounded px-1 py-0.5 bg-violet-500/20 text-violet-300 border border-violet-500/30">コンセンサス</span>';
   const dash = '<span class="text-white/20">—</span>';
   return `
@@ -487,7 +535,8 @@ function pmForecastPanel(trend, d, rows) {
       ${own ? '<button type="button" class="rounded bg-white/5 border border-white/15 text-white/50 px-2 py-1.5" onclick="pmOwnClear()">消去</button>' : ''}
     </div>
     ${ownRow ? `<p class="text-xs mt-2 text-white/70" id="pm-own-result">この想定どおりなら：前年比 ${ownRow.revYoY != null ? ownRow.revYoY.toFixed(1) + '%' : '—'}・RoF40 ${ownRow.rof40 != null ? ownRow.rof40.toFixed(0) : '—（営業利益率が必要）'}・シグナル ${ownRow.opMargin != null ? (flags.length ? flags.join('・') + `（スコア試算 ${ownRow.signalScore}）` : 'なし') : '—（営業利益率が必要）'}</p>` : ''}
-    <p class="text-[11px] text-white/30 mt-1">予想は実績と分けて点線・斜体で表示します。コンセンサスは売上・EPSのみのため、利益率・RoF40・スコアは自分の想定でのみ試算します。自分の想定はこのブラウザーにだけ保存されます。</p>
+    ${pmGuidanceHtml(trend, d)}
+    <p class="text-[11px] text-white/30 mt-1">予想は実績と分けて点線・斜体で表示します。コンセンサスとガイダンスは売上中心のため、利益率・RoF40・スコアは自分の想定でのみ試算します。自分の想定と採用したガイダンスはこのブラウザーにだけ保存されます。</p>
   </div>`;
 }
 
