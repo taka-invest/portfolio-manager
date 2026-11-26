@@ -286,6 +286,12 @@ etlifyunctions` 2026-09-17版）→ `functions/src/legacy/`: analyze / screener
 - テスト：`tests/cleanup.test.js` 3件を追加、関連ブラウザーテストを更新、`legacy-notice.spec.js` は対象と共に削除。単体137、ブラウザー82成功・12スキップ。CI合格
 - Hostingのみ本番公開 → 本番スモーク 50/50、`legacy-notice.js` 404・プロキシ／JSONBinのコードが配信されていないことを確認
 
+## 改善⑦ 運用とセキュリティ・コード側（2026-11-26、オーナー承認「確認した・反映してよい」）
+- PR #39（main `e960dee`）：アプリ本体・研究3ページにContent-Security-Policyを適用（スクリプト読み込み元と通信先を限定、`frame-ancestors`、`object-src 'none'` 等。インラインスクリプトのため `'unsafe-inline'` は残る）、Permissions-Policy追加、lightweight-charts 4.2.0 を `research/vendor/` から自前配信（unpkg廃止）
+- 確認：`tests/hosting-headers.test.js`・`tests/csp.spec.js`（本番と同じCSPで違反ゼロ・未登録の送信先はブロック）。プレビューで実CDN込みの違反ゼロ、**オーナーがプレビューでGoogleログインとクラウド状態の表示を確認** ✅。単体139、ブラウザー88成功・12スキップ。CI合格
+- Hostingのみ本番公開 → 本番スモーク 50/50、本番ヘッダー（CSP・Permissions-Policy・X-Frame-Options）と自前配信ファイルを確認、本番画面でCSP違反なし
+- Firebase側（日次バックアップ・障害通知）は未実施（承認待ち）。現状：Firestore削除保護は有効、PITR無効、バックアップスケジュールなし
+
 ## ユーザー対応待ち（ブロッカー）
 
 1. ~~CLI再認証~~ ✅ ／ ~~Webアプリ構成値~~ ✅
