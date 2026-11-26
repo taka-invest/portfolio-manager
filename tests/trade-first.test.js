@@ -18,7 +18,7 @@ const lot = (ticker, shares) => ({
 function scenario(fields, prices, confirmed = false) {
   const state = D.validate({ ...D.blank(), confirmed, cashTarget: 10,
     cash: { jpy: 10000, usd: 0, extraJpy: 0, extraIncluded: true }, ...fields });
-  const market = { fx: { rate: 100, date: '2026-11-20' },
+  const market = { fx: { rate: 100, date: '2026-11-20', kind: 'hourly', at: now },
     quotes: Object.fromEntries(Object.entries(prices).map(([ticker, usd]) =>
       [ticker, { usd, at }])) };
   return { state, market, preview: R.ideal(state, market, now), result: R.simulate(state, market, now) };

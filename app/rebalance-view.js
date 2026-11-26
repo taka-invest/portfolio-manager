@@ -124,6 +124,7 @@
     const cards = '<div class="pm-trade-kpis">' + [
       ['売却予定額', yen(out.saleJpy), usd(out.saleUsd)],
       ['売却概算税', yen(out.tax), '所得税・住民税の概算'],
+      ['売買手数料（概算）', yen(out.fees), '0.495%・1注文上限22ドル'],
       ['買付可能枠', yen(out.buyBudget), usd(out.buyBudget / out.fx.rate) + '相当'],
       ['購入予定額', yen(out.purchaseJpy), usd(out.purchaseUsd)]
     ].map(([label, value, sub]) =>

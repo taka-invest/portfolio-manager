@@ -13,7 +13,8 @@ async function setUp(page,confirmed=false){
   await page.clock.setFixedTime(new Date('2026-11-22T12:00:00Z'));
   const state={...D.blank(),confirmed,
     positions:[lot('PLTR',20),lot('APP',5),lot('GOOGL',2)],
-    targets:[t('PLTR',30,{sellCap:0}),t('APP',20),t('NVDA',40)],cashTarget:10,
+    // Fixed specification (PLTR sell cap 0 by default); GOOGL is held but has no target.
+    targets:D.blank().targets,cashTarget:10,
     cash:{jpy:10000,usd:0,extraJpy:0,extraIncluded:true}};
   await page.addInitScript(({key,state})=>{
     localStorage.setItem(key,JSON.stringify(state));
@@ -22,11 +23,14 @@ async function setUp(page,confirmed=false){
   await page.route('**/*',route=>{
     const u=new URL(route.request().url());
     if(u.hostname==='127.0.0.1')return route.continue();
+    // Order-grade spot USD/JPY (③ refuses the daily ECB reference).
+    if(u.hostname==='www.live-rates.com')return route.fulfill({json:[{currency:'USD/JPY',bid:99.995,ask:100.005,
+      timestamp:Date.parse('2026-11-22T12:00:00Z')}]});
     if(u.hostname==='api.frankfurter.dev')return route.fulfill({json:{
       base:'USD',quote:'JPY',date:'2026-11-20',rate:100}});
     if(u.hostname==='finnhub.io'){
       if(u.pathname.endsWith('/quote')){
-        const prices={PLTR:100,APP:50,GOOGL:200,NVDA:10};
+        const prices={PLTR:100,APP:50,GOOGL:200,NVDA:10,AVGO:30,SOFI:5,CRDO:8,RKLB:6};
         return route.fulfill({json:{c:prices[u.searchParams.get('symbol')]??0,t:close}});
       }
       if(u.pathname.endsWith('/profile2'))return route.fulfill({json:{}});
@@ -55,8 +59,8 @@ test('PC: rebalance shortcut opens the buy/sell deltas with USD/JPY and optional
   await expect(table).toContainText('買（理論）');
   await expect(table).toContainText('売（理論）');
   await expect(page.locator('#ideal-totals')).toContainText('¥160,000');
-  await expect(page.locator('#ideal-totals')).toContainText('¥140,000');
-  await expect(page.locator('#ideal-totals')).toContainText('¥30,000');
+  // With the fixed 8-ticker spec, SPCX has no verified price, so totals that depend on it stay undetermined.
+  await expect(page.locator('#ideal-totals')).toContainText('合計購入額・売買後現金は未確定です');
   await expect(page.locator('#ideal-totals')).toContainText('¥27,500');
   await expect(page.locator('#ideal-background')).not.toHaveAttribute('open','');
   await expect(page.locator('#execution-breakdown')).not.toHaveAttribute('open','');

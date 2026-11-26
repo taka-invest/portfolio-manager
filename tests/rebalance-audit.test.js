@@ -21,24 +21,35 @@ function calc(options, prices, rate = 100) {
     ...options });
   const market = { quotes: Object.fromEntries(Object.entries(prices).map(
     ([ticker, usd]) => [ticker, { usd, at: quotedAt }])),
-    fx: { rate, date: '2026-11-20' } };
+    fx: { rate, date: '2026-11-20', kind: 'hourly', at: now } };
   return { state, out: R.simulate(state, market, now) };
 }
 const audit = ({state, out}) => A.assess(out, state);
 const issue = (report, code, ticker) => report.issues.find(
   i => i.code === code && i.ticker === ticker);
 
-test('attained allocation: integer shares, cash >= minimum, no out-of-target positions', () => {
+test('commissions are reserved: cash that only covers 90 shares before fees buys 89 and stays above 10%', () => {
   const result = calc({
     targets: [tgt('NVDA', 90)], cashTarget: 10,
     cash: { jpy: 100000, usd: 0, extraJpy: 0, extraIncluded: true }
+  }, { NVDA: 10 });
+  assert.equal(result.out.rows[0].order, 89);
+  assert.ok(result.out.fees > 0);
+  assert.ok(result.out.cashAfter >= result.out.reserve);
+});
+
+test('attained allocation: integer shares, cash >= minimum, no out-of-target positions', () => {
+  const result = calc({
+    // ¥500 above ¥100,000 covers the ¥445.50 commission on 90 shares.
+    targets: [tgt('NVDA', 90)], cashTarget: 10,
+    cash: { jpy: 100500, usd: 0, extraJpy: 0, extraIncluded: true }
   }, { NVDA: 10 });
   assert.deepEqual(result.out.errors, []);
   assert.equal(result.out.rows[0].order, 90);
   const report = audit(result);
   assert.equal(report.status, 'achieved');
   assert.equal(report.issues.length, 0);
-  assert.equal(report.maxGapPct, 0);
+  assert.ok(report.maxGapPct < 0.1);
   assert.ok(V.audit(report).includes('達成可能（試算）'));
 });
 

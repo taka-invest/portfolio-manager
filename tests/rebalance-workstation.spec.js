@@ -19,7 +19,8 @@ test('PC: ideal portfolio, trade tickets and before/after donuts are linked', as
       shares: 10, currency: 'USD', unitCost: 10, costJpy: 20000,
       referenceJpy: null, note: ''
     }],
-    targets: [row('PLTR', 20, { sellCap: 6 }), row('NVDA', 70)],
+    // Fixed specification; PLTR may be sold (cap 6) but never below 30%.
+    targets: D.fixedTargets(D.blank().targets.map(t => t.ticker === 'PLTR' ? { ...t, sellCap: 6 } : t)),
     cashTarget: 10,
     cash: { jpy: 100000, usd: 0, extraJpy: 0, extraIncluded: true }
   };
@@ -30,6 +31,10 @@ test('PC: ideal portfolio, trade tickets and before/after donuts are linked', as
   await page.route('**/*', route => {
     const req = new URL(route.request().url());
     if (req.hostname === '127.0.0.1') return route.continue();
+    // Order-grade spot USD/JPY (③ refuses the daily ECB reference).
+    if (req.hostname === 'www.live-rates.com') {
+      return route.fulfill({ json: [{ currency: 'USD/JPY', bid: 100 - 0.005, ask: 100 + 0.005, timestamp: Date.parse('2026-11-22T12:00:00Z') }] });
+    }
     if (req.hostname === 'api.frankfurter.dev') {
       return route.fulfill({ json: { base: 'USD', quote: 'JPY', date: '2026-11-20', rate: 100 } });
     }
@@ -63,8 +68,9 @@ test('PC: ideal portfolio, trade tickets and before/after donuts are linked', as
 
   await page.goto('/portfolio_manager.html#allocation');
   await expect(page.locator('#target-preview')).toContainText('合計100%');
-  await page.locator('#cash-target').fill('11');
-  await expect(page.locator('#target-preview')).toContainText('101%');
+  await expect(page.locator('#cash-target')).toHaveAttribute('readonly', '');
+  await expect(page.locator('#target-rows [data-field="pct"]').first()).toHaveAttribute('readonly', '');
+  await page.locator('#target-rows [data-field="group"]').first().selectOption('satellite');
   await expect(page.locator('#rebalance-state')).toContainText('変更を保存');
   await expect(page.locator('#csv-export')).toBeDisabled();
   expect(failures).toEqual([]);

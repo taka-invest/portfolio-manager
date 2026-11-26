@@ -14,7 +14,8 @@ const lot = (ticker, id = ticker, fields = {}) => ({
 });
 const target = (ticker, pct, fields = {}) => ({ ticker, pct, group: 'core', wait: false, sellCap: null, ...fields });
 const quote = (usd, at = CLOSE) => ({ usd, at });
-const fx = (rate = 100, date = '2026-11-20') => ({ rate, date });
+// Order-grade (timestamped hourly) USD/JPY; an older date means an old quote.
+const fx = (rate = 100, date = '2026-11-20') => ({ rate, date, kind: 'hourly', at: date === '2026-11-20' ? NOW : Date.parse(date) });
 const cash = (jpy = 0, usd = 0, extraJpy = 0, extraIncluded = true) => ({ jpy, usd, extraJpy, extraIncluded });
 const build = (fields = {}) => ({ ...D.blank(), confirmed: true, ...fields });
 const old = (ticker, shares, buyPrice) => ({ id: ticker, ticker, layer: 1, shares, buyPrice, curPrice: 11111, note: 'legacy' });
@@ -170,8 +171,9 @@ test('estimated taxes, eligible offsets, currency balances and post-trade positi
   near(out.rows.reduce((s, r) => s + r.afterValue, out.cashAfter), out.postTotal);
   near(out.rows.reduce((s, r) => s + r.afterPct, out.cashAfterPct), 100);
   near(out.cashAfterJpy + out.cashAfterUsd * out.fx.rate, out.cashAfter);
-  near(out.cash + out.sales.reduce((s, sale) => s + sale.jpy, 0) - out.tax -
+  near(out.cash + out.sales.reduce((s, sale) => s + sale.jpy, 0) - out.tax - out.fees -
     out.rows.filter(r => r.order > 0).reduce((s, row) => s + row.tradeJpy, 0), out.cashAfter);
+  assert.ok(out.fees > 0);   // broker commissions are now part of the cash plan
   assert.ok(out.cashAfter >= out.reserve);
 });
 

@@ -41,7 +41,10 @@
 
   function result() {
     const computed = R.simulate(state, market);
-    if (storageError || updating || dirty.size) {
+    // The owner's fixed specification (weights, cash 10%) gates every order view.
+    const spec = D.specIssues(state);
+    if (spec.length) computed.errors.unshift(...spec.map(s => s + '①の「固定仕様に戻す」を押してください。'));
+    if (storageError || updating || dirty.size || spec.length) {
       if (storageError) computed.errors.unshift(storageError);
       if (updating) computed.errors.unshift('株価と為替を更新中です。');
       if (dirty.size) computed.errors.unshift([...dirty].map(key => formLabels[key]).join('・') + 'の変更を保存してください。');
@@ -168,15 +171,19 @@
   }
 
   function drawTargets(targets) {
+    const fixed = t => Object.hasOwn(D.FIXED_WEIGHTS, t.ticker);
     $('target-rows').innerHTML = targets.map(t => `<tr>
-      <td><input aria-label="ティッカー" data-field="ticker" maxlength="20" required value="${escape(t.ticker)}"></td>
+      <td><input aria-label="ティッカー" data-field="ticker" maxlength="20" required value="${escape(t.ticker)}"${fixed(t) ? ' readonly' : ''}></td>
       <td><select aria-label="区分" data-field="group">${options({ core: 'コア', satellite: 'サテライト' }, t.group)}</select></td>
-      <td><input aria-label="目標比率（%）" data-field="pct" type="number" min="0" max="100" step="any" required value="${t.pct}"></td>
+      <td><input aria-label="目標比率（%・固定仕様）" data-field="pct" type="number" readonly value="${t.pct}"></td>
       <td class="pm-target-advanced"><input aria-label="売却上限株数" data-field="cap" type="number" min="0" step="1" placeholder="上限なし" value="${t.sellCap ?? ''}"></td>
       <td class="pm-target-advanced"><input aria-label="サテライト購入待機" data-field="wait" type="checkbox"${t.wait ? ' checked' : ''}></td>
       <td><span data-price></span></td>
-      <td><button type="button" class="btn btn-ghost btn-sm" data-remove>削除</button></td></tr>`).join('');
+      <td>${fixed(t) ? '<span class="pm-muted pm-small">固定</span>' : '<button type="button" class="btn btn-ghost btn-sm" data-remove>削除</button>'}</td></tr>`).join('');
     updateDraftTargets();
+    const issues = D.specIssues(state);
+    $('target-spec').hidden = !issues.length;
+    $('target-spec-text').textContent = issues.join(' ');
   }
 
   function updateDraftTargets() {
@@ -212,7 +219,9 @@
   function collectTargets() {
     return [...$('target-rows').rows].map(row => {
       const field = name => row.querySelector(`[data-field="${name}"]`);
-      return { ticker: field('ticker').value.trim().toUpperCase(), pct: Number(field('pct').value), group: field('group').value,
+      const ticker = field('ticker').value.trim().toUpperCase();
+      // Weights are never taken from the form: the fixed spec, or 0% for extra rows.
+      return { ticker, pct: Object.hasOwn(D.FIXED_WEIGHTS, ticker) ? D.FIXED_WEIGHTS[ticker] : 0, group: field('group').value,
         wait: field('group').value === 'satellite' && field('wait').checked, sellCap: field('cap').value === '' ? null : Number(field('cap').value) };
     });
   }
@@ -445,8 +454,17 @@
       if (form.elements.namedItem(k)) form.elements.namedItem(k).value = v ?? '';
     }
     syncLotTypeFields(form);
+    const kept = lot?.kind === 'stock' && ['nisa', 'general'].includes(lot.accountType);
+    $('lot-stock-type').querySelector('input').value = kept ? D.TYPES[lot.accountType] + '（登録済み・保持）' : '特定（固定）';
     $('lot-title').textContent = lot ? '保有ロットを編集' : '保有ロットを登録';
     $('lot-dialog').showModal();
+  }
+
+  // US stocks are registered in 特定口座; an existing lot explicitly tagged NISA/一般
+  // keeps its account type so editing a note never changes how it is taxed.
+  function stockAccountType(lotId) {
+    const old = state.positions.find(p => p.id === lotId);
+    return old?.kind === 'stock' && ['nisa', 'general'].includes(old.accountType) ? old.accountType : 'specific';
   }
 
   function saveLot(form) {
@@ -457,7 +475,7 @@
     const costJpy = fields.costJpy !== '' ? Number(fields.costJpy) : fields.currency === 'JPY' && unitCost != null ? unitCost * shares : null;
     const lot = { ...fields, id: fields.id || id(), ticker, shares, unitCost, costJpy, layer: Number(fields.layer),
       broker: fields.broker.trim(), account: fields.account?.trim() ?? '',
-      accountType: fields.kind === 'stock' ? 'specific' : fields.accountType,
+      accountType: fields.kind === 'stock' ? stockAccountType(fields.id) : fields.accountType,
       referenceJpy: fields.referenceJpy === '' ? null : Number(fields.referenceJpy) };
     if (lot.kind === 'stock' && !lot.broker) {
       return showNotice('米国個別株の証券会社を入力してください。口座区分は特定で固定です。', true);
@@ -584,7 +602,9 @@
     $('targets-form').onsubmit = e => {
       e.preventDefault();
       const targets = collectTargets();
-      const cashTarget = Number($('cash-target').value);
+      const cashTarget = D.FIXED_CASH;
+      if (Object.keys(D.FIXED_WEIGHTS).some(t => !targets.some(x => x.ticker === t)))
+        return alert('固定仕様の銘柄は削除できません。「固定仕様に戻す」を押してください。');
       if (Math.abs(targets.reduce((sum, t) => sum + t.pct, cashTarget) - 100) > 1e-6) return alert('目標配分の合計を100%にしてください。');
       if (saveForm('targets-form', { ...state, targets, cashTarget })) {
         drawTargets(state.targets);
@@ -598,6 +618,16 @@
       $('target-detail-toggle').setAttribute('aria-expanded', String(expanded));
       $('target-detail-toggle').textContent = expanded
         ? '売却上限・購入待機を閉じる' : '売却上限・購入待機を表示する';
+    };
+    $('target-spec-fix').onclick = () => {
+      const issues = D.specIssues(state);
+      if (!issues.length) return;
+      if (!confirm('目標配分を固定仕様（NVDA15・AVGO10・PLTR30・APP20・SOFI5・CRDO3・RKLB4・SPCX3、現金10%）に戻します。\n\n' +
+        issues.join('\n') + '\n\n売却上限・購入待機の設定は保持します。よろしいですか？')) return;
+      if (commit({ ...state, targets: D.fixedTargets(state.targets), cashTarget: D.FIXED_CASH }, true)) {
+        dirty.delete('targets-form');
+        drawTargets(state.targets);
+      }
     };
     $('target-add').onclick = () => {
       drawTargets([...collectTargets(), { ticker: '', pct: 0, group: 'satellite', wait: true, sellCap: 0 }]);

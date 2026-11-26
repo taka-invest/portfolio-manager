@@ -8,25 +8,53 @@
     ? require('./market.js') : root.PMMarket;
   const Rebalance = typeof module === 'object' && module.exports
     ? require('./rebalance.js') : root.PMRebalance;
+  const Data = typeof module === 'object' && module.exports
+    ? require('./data.js') : root.PMData;
   const TICKERS = Object.freeze(['NVDA', 'AVGO', 'CRDO']);
   const DEFAULT_TARGETS = Object.freeze({ NVDA: 15, AVGO: 10, CRDO: 3 });
   const TRANCHE = Object.freeze([0.5, 0.8, 1]);
-  const FLOOR = 30;
+  const FLOOR = Data.PLTR_FLOOR;
   const EPS = 0.001;
   const sum = (rows, f) => rows.reduce((acc, row) => acc + f(row), 0);
   const feeUsd = amount => amount <= 0 ? 0 : Math.min(22, amount * 0.00495);
   const same = (a, b) => Math.abs(a - b) < 0.005;
 
+  const heldShares = state => Object.fromEntries(TICKERS.map(ticker => [
+    ticker, sum((state.positions || []).filter(p => p.kind === 'stock' && p.ticker === ticker), p => p.shares)
+  ]));
+
   function snapshot(state, now = Date.now()) {
-    const baselineShares = Object.fromEntries(TICKERS.map(ticker => [
-      ticker, sum((state.positions || []).filter(p => p.kind === 'stock' && p.ticker === ticker), p => p.shares)
-    ]));
-    return { startedAt: new Date(now).toISOString(), baselineShares };
+    return { startedAt: new Date(now).toISOString(), baselineShares: heldShares(state), stage: 1, stageLog: [] };
   }
 
-  function calc(state, market, stage = 1, now = Date.now()) {
+  /**
+   * Move the synced plan to the next stage. The cumulative targets assume the
+   * fills of the current stage are registered as lots; if the holdings of all
+   * three tickers are unchanged since the stage began, the caller must get an
+   * explicit "not bought" confirmation (recorded as skipped) — otherwise the
+   * next stage would repeat this stage's purchase.
+   */
+  function advance(state, now = Date.now()) {
+    const plan = state && state.stagedFunding;
+    if (!plan) return { error: '買付計画が開始されていません。' };
+    const stage = plan.stage || 1;
+    if (stage >= 3) return { error: 'C日（累積100%）が最終段階です。' };
+    if (!state.confirmed)
+      return { error: '約定株数を保有ロットに登録し、「実保有・現金を確認」を押してから次の段階へ進んでください。' };
+    const log = plan.stageLog || [];
+    const from = stage === 1 ? plan.baselineShares : log[stage - 2].shares;
+    const shares = heldShares(state);
+    if (TICKERS.some(t => !Number.isSafeInteger(shares[t])))
+      return { error: 'NVDA・AVGO・CRDOの保有数量が整数株ではありません。' };
+    const unchanged = TICKERS.every(t => shares[t] === from[t]);
+    return { unchanged, from, shares, stagedFunding: { ...plan, stage: stage + 1,
+      stageLog: [...log, { stage, at: new Date(now).toISOString(), shares, skipped: unchanged }] } };
+  }
+
+  function calc(state, market, stage = (state && state.stagedFunding && state.stagedFunding.stage) || 1, now = Date.now()) {
     const errors = [], alerts = [];
     if (![1, 2, 3].includes(stage)) errors.push('購入段階が不正です。');
+    for (const issue of Data.specIssues(state)) errors.push(issue + '①で固定仕様に戻してください。');
     if (!state || !state.confirmed) errors.push('保有ロット・現金残高を口座と照合して確定してください。');
     const plan = state && state.stagedFunding;
     if (!plan || !plan.baselineShares)
@@ -47,8 +75,9 @@
       shares.set(p.ticker, (shares.get(p.ticker) || 0) + p.shares);
     }
     const targetMap = new Map((state && state.targets || []).map(t => [t.ticker, t]));
+    // No silent fallback: a missing target is reported by specIssues above.
     const weights = Object.fromEntries(TICKERS.map(ticker =>
-      [ticker, targetMap.has(ticker) ? targetMap.get(ticker).pct : DEFAULT_TARGETS[ticker]]));
+      [ticker, targetMap.has(ticker) ? targetMap.get(ticker).pct : NaN]));
     if (TICKERS.some(t => !Number.isFinite(weights[t]) || weights[t] < 0 || weights[t] > 100) ||
         sum(TICKERS, t => weights[t]) > 100)
       errors.push('3銘柄の目標比率が正しくありません。');
@@ -230,7 +259,7 @@
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const cell = (label, value) => '<div><small>' + safe(label) +
     '</small><strong>' + safe(value) + '</strong></div>';
-  let stage = 1;
+  const STAGE_NAMES = ['A日：累積50%', 'B日：累積80%', 'C日：累積100%'];
   function render(state, market) {
     if (typeof document === 'undefined') return;
     const host = document.getElementById('pm-staged-funding-result');
@@ -240,12 +269,20 @@
     const reset = document.getElementById('pm-staged-reset');
     if (start) { start.hidden = started; start.disabled = !state.confirmed; }
     if (reset) reset.hidden = !started;
-    const select = document.getElementById('pm-staged-funding-stage');
-    if (select) select.value = String(stage);
+    const stage = started ? state.stagedFunding.stage : 1;
+    const stageLabel = document.getElementById('pm-staged-funding-stage');
+    if (stageLabel) stageLabel.textContent = started ? STAGE_NAMES[stage - 1] : '未開始';
+    const next = document.getElementById('pm-staged-advance');
+    if (next) {
+      next.hidden = !started || stage >= 3;
+      if (stage < 3) next.textContent = 'ABC'[stage - 1] + '日の約定を登録済み → ' + 'ABC'[stage] + '日へ';
+    }
     const label = document.getElementById('pm-staged-funding-status');
     if (label) label.textContent = started ?
       'A日開始時の保有株数を保存済み（' + new Date(state.stagedFunding.startedAt).toLocaleString('ja-JP') +
-      '）。各日に時価再計算。累積購入率50% → 80% → 100%。PLTRは売却後30%を維持。' :
+      '）。各日に時価再計算。累積購入率50% → 80% → 100%。PLTRは売却後30%を維持。' +
+      (state.stagedFunding.stageLog || []).map(e => ' ' + 'ABC'[e.stage - 1] + '日：' +
+        (e.skipped ? '購入なしで次へ' : '約定登録済み') + '（' + new Date(e.at).toLocaleString('ja-JP') + '）').join('') :
       'A日購入前に初期保有を保存してください。500万・300万・200万円などの固定予算は使いません。';
     const out = calc(state, market, stage);
     if (out.errors.length) {
@@ -292,17 +329,37 @@
       '<p class="pm-muted pm-small">売買は実行しません。株価・為替は参考値であり、実際の適用レート、源泉徴収、売買手数料、約定価格との照合が必要です。発注時点で再計算してください。</p>';
   }
 
+  // One-time migration: the stage used to live only in this browser's storage.
+  // It is NOT copied into the plan (it may be stale or from an earlier plan);
+  // the owner advances explicitly after registering fills.
+  function migrateLocalStage() {
+    let prev = null;
+    try {
+      prev = Number(localStorage.getItem('pm-staged-funding-stage'));
+      localStorage.removeItem('pm-staged-funding-stage');
+    } catch (_) { return; }
+    const plan = root.PMApp.state().stagedFunding;
+    if (!plan || plan.stage !== 1 || (plan.stageLog || []).length || ![2, 3].includes(prev)) return;
+    root.PMApp.showNotice('このブラウザーで選んでいた段階（' + STAGE_NAMES[prev - 1] +
+      '）は使わず、計画の段階（A日）から表示します。A日の約定を登録済みなら「次へ」で進めてください。', true);
+  }
+
   function init() {
     if (typeof document === 'undefined') return;
-    const select = document.getElementById('pm-staged-funding-stage');
-    if (!select) return;
-    const prev = Number(localStorage.getItem('pm-staged-funding-stage'));
-    if ([1, 2, 3].includes(prev)) stage = prev;
-    select.value = String(stage);
-    select.addEventListener('change', e => {
-      stage = Number(e.target.value);
-      localStorage.setItem('pm-staged-funding-stage', String(stage));
-      root.PMApp.render();
+    if (!document.getElementById('pm-staged-funding-result')) return;
+    migrateLocalStage();
+    document.getElementById('pm-staged-advance').addEventListener('click', () => {
+      const state = root.PMApp.state();
+      const out = advance(state);
+      if (out.error) return root.PMApp.showNotice(out.error, true);
+      const cur = 'ABC'[state.stagedFunding.stage - 1];
+      if (out.unchanged) {
+        if (!confirm(cur + '日の開始時からNVDA・AVGO・CRDOの保有株数が変わっていません。\n\n' +
+          '購入した場合は「キャンセル」を押し、約定株数を保有ロットに登録してください。登録しないまま進むと、次の段階で同じ分を再び買う計算になります。\n\n' +
+          cur + '日に購入しなかった場合だけ「OK」を押してください。')) return;
+      } else if (!confirm(cur + '日の約定を登録済みとして次の段階へ進みます（' +
+          TICKERS.map(t => t + ' ' + out.from[t] + '→' + out.shares[t] + '株').join('、') + '）。よろしいですか？')) return;
+      root.PMApp.commit({ ...state, stagedFunding: out.stagedFunding }, true);
     });
     document.getElementById('pm-staged-funding-refresh').addEventListener('click', () =>
       root.PMApp.refreshPrices({ indicators: false }));
@@ -311,21 +368,17 @@
       if (!state.confirmed) return root.PMApp.showNotice('証券口座の保有を確認してください。', true);
       if (state.stagedFunding) return;
       if (!confirm('買付前のNVDA・AVGO・CRDO保有株数を開始基準として保存します。よろしいですか？')) return;
-      stage = 1;
-      localStorage.setItem('pm-staged-funding-stage', '1');
       root.PMApp.commit({ ...state, stagedFunding: snapshot(state) }, true);
     });
     document.getElementById('pm-staged-reset').addEventListener('click', () => {
       const state = root.PMApp.state();
-      if (!confirm('開始時の保有株数をリセットしますか？ 途中の段階計算が変わります。')) return;
-      stage = 1;
-      localStorage.setItem('pm-staged-funding-stage', '1');
+      if (!confirm('開始時の保有株数と段階の記録をリセットしますか？ 途中の段階計算が変わります。')) return;
       root.PMApp.commit({ ...state, stagedFunding: null }, true);
     });
     render(root.PMApp.state(), root.PMApp.market());
   }
 
-  const api = { calc, snapshot, render, init, TRANCHE, TICKERS, DEFAULT_TARGETS, FLOOR };
+  const api = { calc, snapshot, advance, render, init, TRANCHE, TICKERS, DEFAULT_TARGETS, FLOOR };
   if (typeof module === 'object' && module.exports) module.exports = api;
   else root.PMStagedFunding = api;
 })(globalThis);

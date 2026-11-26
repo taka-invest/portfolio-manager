@@ -33,7 +33,7 @@ test('clearing account name does not block taxation; stock sale produces taxable
  });
  const data = {
    quotes: { PLTR: { usd: 100, at: close }, NVDA: { usd: 50, at: close } },
-   fx: { rate: 150, date: '2026-11-20' }
+   fx: { rate: 150, date: '2026-11-20', kind: 'hourly', at: time }
  };
  const out = R.simulate(state, data, time);
  assert.deepEqual(out.errors, []);

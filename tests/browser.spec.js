@@ -16,6 +16,10 @@ async function mockMarket(page) {
     const request = new URL(route.request().url());
     if (request.hostname === '127.0.0.1') return route.continue();
     external.push({ host: request.hostname, path: request.pathname });
+    // Order-grade spot USD/JPY (③ refuses the daily ECB reference).
+    if (request.hostname === 'www.live-rates.com' && !settings.failFx) {
+      return route.fulfill({ json: [{ currency: 'USD/JPY', bid: settings.rate - 0.005, ask: settings.rate + 0.005, timestamp: Date.parse('2026-11-22T12:00:00Z') }] });
+    }
     if (request.hostname === 'api.frankfurter.dev' && !settings.failFx) {
       return route.fulfill({ json: { base: 'USD', quote: 'JPY', date: '2026-11-20', rate: settings.rate } });
     }
