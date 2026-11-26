@@ -64,12 +64,36 @@
     return true;
   }
 
+  function showNoticeHost() {
+    // The original notice area is inside the dashboard; when another view is open,
+    // mirror the message into a fixed toast so errors are never invisible.
+    let toast = document.getElementById('pm-toast');
+    if (!toast) {
+      toast = document.createElement('div');
+      toast.id = 'pm-toast';
+      toast.setAttribute('role', 'status');
+      toast.setAttribute('aria-live', 'polite');
+      toast.className = 'pm-toast';
+      toast.hidden = true;
+      document.body.appendChild(toast);
+    }
+    return toast;
+  }
+
   function showNotice(message, error = false) {
     const dialog = document.querySelector('dialog[open]');
     const region = (error && dialog?.querySelector('[role=alert]')) || $('data-notice');
     region.textContent = message;
     region.dataset.warn = error;
     region.hidden = false;
+    if (region.id === 'data-notice' && !region.offsetParent) {
+      const toast = showNoticeHost();
+      toast.textContent = message;
+      toast.dataset.warn = error;
+      toast.hidden = false;
+      clearTimeout(showNotice.timer);
+      showNotice.timer = setTimeout(() => { toast.hidden = true; }, error ? 12000 : 6000);
+    }
     return false;
   }
 
@@ -742,6 +766,9 @@
     }, 60 * 1000);
   }
 
-  root.PMApp = { init, state: () => state, market: () => market, commit, render, renderCompany, result, freshPrice, fxRate, refreshPrices, escape, id, showNotice, previewImport: preview,
+  // Valuation for reference cards (performance, rule panels): reference FX is fine
+  // here; order-grade FX is required only for ③ share counts.
+  const valuation = () => R.ideal(state, market);
+  root.PMApp = { init, state: () => state, market: () => market, commit, render, renderCompany, result, valuation, freshPrice, fxRate, refreshPrices, escape, id, showNotice, previewImport: preview,
     backupJson: backup, storageError: () => storageError, diffText: (current, next, source) => diff(current, next, 0, source) };
 })(globalThis);

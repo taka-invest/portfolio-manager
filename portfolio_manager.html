@@ -297,7 +297,7 @@
 <aside class="pm-side-nav" id="pm-side-nav" aria-label="Portfolio Managerのナビゲーション">
   <div class="pm-side-brand">
     <span class="pm-side-mark" aria-hidden="true">PM</span>
-    <span class="pm-side-brand-name"><strong>Portfolio Manager</strong><small>V2.6</small></span>
+    <span class="pm-side-brand-name"><strong>Portfolio Manager</strong><small>V2.7</small></span>
     <button type="button" id="pm-nav-close" class="pm-nav-close" aria-label="メニューを閉じる">×</button>
   </div>
   <nav class="pm-side-links" aria-label="主要機能">
@@ -1066,8 +1066,16 @@ let positions = [], plans = [], tradeLog = [], watchlist = [];
 function uid() { return PMApp.id(); }
 
 function calcPortfolio() {
-  const out = PMApp.result();
+  const out = PMApp.valuation();
   return { total: out.errors.length ? null : out.total, cash: out.errors.length ? null : out.cash };
+}
+
+// Market indicator cache: a value is used only while fresh (default 1 hour).
+// Stale values never drive signals or the trade-log snapshot.
+function freshCache(key, ttl = 3600000) {
+  let c = null;
+  try { c = JSON.parse(localStorage.getItem(key) || 'null'); } catch (_) { return null; }
+  return c && Number.isFinite(c.t) && Date.now() - c.t < ttl ? c : null;
 }
 
 function render() { PMApp.render(); }
@@ -1284,9 +1292,14 @@ async function fetchSentiment() {
         document.getElementById('fg-label').textContent = fgText(fg);
         document.getElementById('fg-label').style.color = '';
         localStorage.setItem('pm_fg', JSON.stringify({ v: fg, t: Date.now() }));
-      }
+      } else throw new Error('no score');
     }
-  } catch (e) {}
+  } catch (e) {
+    if (!freshCache('pm_fg')) {
+      document.getElementById('fg-value').textContent = '—';
+      document.getElementById('fg-label').textContent = '取得失敗' + (PMMarketData.lastError ? '（' + PMMarketData.lastError + '）' : '');
+    }
+  }
 
   // VIX / VXN — PMMarketData 経由（自前API優先）
   const [vixResult, vxnResult] = await Promise.allSettled([
@@ -1303,7 +1316,7 @@ async function fetchSentiment() {
     updateMarketSignal(null, vix);
   } else {
     document.getElementById('vix-value').textContent = '—';
-    document.getElementById('vix-label').textContent = vixResult.reason?.message === 'APIキー未設定' ? 'APIキー未設定' : '取得失敗';
+    document.getElementById('vix-label').textContent = '取得失敗' + (PMMarketData.lastError ? '（' + PMMarketData.lastError + '）' : '');
     console.warn('VIX fetch error:', vixResult.reason);
   }
 
@@ -1314,7 +1327,7 @@ async function fetchSentiment() {
     document.getElementById('vxn-label').style.color = '';
     localStorage.setItem('pm_vxn', JSON.stringify({ v: vxn, t: Date.now() }));
     // VXN/VIX比率を表示
-    const vixNow = JSON.parse(localStorage.getItem('pm_vix') || 'null')?.v;
+    const vixNow = freshCache('pm_vix')?.v;
     if (vixNow) {
       const ratio = (vxn / vixNow).toFixed(2);
       document.getElementById('vxn-ratio').textContent = ratio + 'x';
@@ -1322,14 +1335,12 @@ async function fetchSentiment() {
     }
   } else {
     document.getElementById('vxn-value').textContent = '—';
-    document.getElementById('vxn-label').textContent = vxnResult.reason?.message === 'APIキー未設定' ? 'APIキー未設定' : '取得失敗';
+    document.getElementById('vxn-label').textContent = '取得失敗' + (PMMarketData.lastError ? '（' + PMMarketData.lastError + '）' : '');
     console.warn('VXN fetch error:', vxnResult.reason);
   }
 
-  // キャッシュからF&Gを再読してシグナル更新
-  const fgCache = JSON.parse(localStorage.getItem('pm_fg') || 'null');
-  const vixCache = JSON.parse(localStorage.getItem('pm_vix') || 'null');
-  if (fgCache && vixCache) updateMarketSignal(fgCache.v, vixCache.v);
+  // 新しい値（1時間以内）だけでシグナル更新
+  updateMarketSignal(freshCache('pm_fg')?.v ?? null, freshCache('pm_vix')?.v ?? null);
 
   // 最終更新時刻を表示
   const sentUpdEl = document.getElementById('sentiment-updated');
@@ -1337,10 +1348,14 @@ async function fetchSentiment() {
 }
 
 function updateMarketSignal(fg, vix) {
-  const fgVal  = fg  ?? JSON.parse(localStorage.getItem('pm_fg')  || '{}')?.v;
-  const vixVal = vix ?? JSON.parse(localStorage.getItem('pm_vix') || '{}')?.v;
+  const fgVal  = fg  ?? freshCache('pm_fg')?.v;
+  const vixVal = vix ?? freshCache('pm_vix')?.v;
   const el = document.getElementById('market-signal');
-  if (!fgVal) return; // F&Gだけでも動作させる
+  if (!fgVal) { // F&Gだけでも動作させるが、F&Gが無い（または古い）ときは判定しない
+    el.className = 'signal-box signal-wait';
+    el.textContent = '— F&G未取得のため判定なし —';
+    return;
+  }
 
   const hasVix = !!vixVal;
 
@@ -1387,7 +1402,8 @@ function restoreSentimentCache() {
       document.getElementById('vxn-ratio-wrap').style.display = 'block';
     }
   }
-  if (fgCache && vixCache) updateMarketSignal(fgCache.v, vixCache.v);
+  updateMarketSignal(fgCache && Date.now() - fgCache.t < ttl ? fgCache.v : null,
+    vixCache && Date.now() - vixCache.t < ttl ? vixCache.v : null);
 }
 
 // ── 市場インデックス追跡（SPY / QQQ） ────────────────
@@ -1448,14 +1464,14 @@ function calcConfidence(symbol, signalType, absDrawdown) {
   }
 
   // VIX確認
-  const vixCache = JSON.parse(localStorage.getItem('pm_vix') || 'null');
+  const vixCache = freshCache('pm_vix');
   if (vixCache?.v) {
     if (signalType === 'buy'  && vixCache.v >= 30) { bonus += 5; factors.push('VIX≥30'); }
     if (signalType === 'trim' && vixCache.v <= 15) { bonus += 5; factors.push('VIX≤15'); }
   }
 
   // F&G確認
-  const fgCache = JSON.parse(localStorage.getItem('pm_fg') || 'null');
+  const fgCache = freshCache('pm_fg');
   if (fgCache?.v) {
     if (signalType === 'buy'  && fgCache.v <= 25) { bonus += 5; factors.push('F&G≤25'); }
     if (signalType === 'trim' && fgCache.v >= 65) { bonus += 5; factors.push('F&G≥65'); }
@@ -1586,8 +1602,12 @@ function applyIndexUI(symbol, drawdownPct, curPrice) {
 
 async function fetchMarketIndex(symbol) {
   const apiKey = localStorage.getItem('pm_api_key') || '';
-  if (!apiKey) return;
   const prefix = symbol.toLowerCase();
+  if (!apiKey) {
+    const sigEl = document.getElementById(`${prefix}-signal`);
+    if (sigEl) { sigEl.className = 'idx-signal signal-box signal-wait'; sigEl.textContent = 'Finnhub APIキー未設定（設定・データ管理）'; }
+    return;
+  }
   try {
     const [quoteData, metricData] = await Promise.all([
       PMMarket.finnhub('quote', { symbol }, apiKey),
@@ -1616,6 +1636,16 @@ async function fetchBothIndexes() {
 }
 
 function restoreIndexCache() {
+  if (!localStorage.getItem('pm_api_key')) {
+    // Without a Finnhub key the indexes are never fetched: say so instead of "取得中".
+    ['spy', 'qqq'].forEach(p => {
+      const el = document.getElementById(p + '-signal');
+      if (el) { el.className = 'idx-signal signal-box signal-wait'; el.textContent = 'Finnhub APIキー未設定（設定・データ管理）'; }
+    });
+    const comp = document.getElementById('composite-signal');
+    if (comp) { comp.className = 'composite-signal signal-box signal-wait'; comp.textContent = '— SPY・QQQ未取得のため判定なし —'; }
+    return;
+  }
   ['SPY', 'QQQ'].forEach(symbol => {
     const prefix = symbol.toLowerCase();
     const cache = JSON.parse(localStorage.getItem(`pm_${prefix}`) || 'null');
@@ -1981,9 +2011,9 @@ function renderPlans() {
 
 // 記録時点の市場スナップショットをlocalStorageキャッシュから取得
 function captureMarketSnapshot() {
-  const vix = JSON.parse(localStorage.getItem('pm_vix') || 'null')?.v ?? null;
-  const fg  = JSON.parse(localStorage.getItem('pm_fg')  || 'null')?.v ?? null;
-  const spy = JSON.parse(localStorage.getItem('pm_spy') || 'null');
+  const vix = freshCache('pm_vix')?.v ?? null;
+  const fg  = freshCache('pm_fg')?.v ?? null;
+  const spy = freshCache('pm_spy', 86400000);
   return { vix, fg, spyDrawdown: spy?.drawdown ?? null };
 }
 
@@ -2174,23 +2204,35 @@ async function updatePerformance() {
 function renderPerformance(spyReturnPct) {
   const el = document.getElementById('perf-section');
   if (!el) return;
-  const out = PMApp.result();
-  const costBasis = out.assets.every(a => a.costJpy != null) ? out.assets.reduce((s, a) => s + a.costJpy, 0) : 0;
+  const out = PMApp.valuation();
+  // Missing cost is never treated as zero: the card names the lots instead.
+  const missingCost = out.assets.filter(a => a.costJpy == null).map(a => a.ticker);
+  const costBasis = out.assets.length && !missingCost.length ? out.assets.reduce((s, a) => s + a.costJpy, 0) : null;
   const unrealized = !out.errors.length && out.equity != null && costBasis > 0 ? (out.equity - costBasis) / costBasis * 100 : null;
   const startDate  = PMApp.state().preferences.perf_start || '';
+  // The two returns cover different periods (since purchase vs. since the base date),
+  // so the difference is shown only as a labelled reference, not as "alpha".
   const alpha      = (unrealized != null && spyReturnPct != null) ? unrealized - spyReturnPct : null;
+  const costNote = !out.assets.length ? 'ポジションなし'
+    : missingCost.length ? '取得原価が未入力：' + missingCost.join('・')
+    : out.errors.length ? '株価・為替の確認待ち'
+    : `取得原価 ${currencySymbol()}${fmt(toDisplay(costBasis))} 対比`;
+  const alphaNote = !startDate ? '基準日を設定してください'
+    : spyReturnPct == null ? 'S&P500の取得に失敗（時間をおいて再表示）'
+    : unrealized == null ? '保有側の含み益率が未確定'
+    : '期間が異なる参考値（取得来 − 基準日来）';
 
   function colorOf(v) { return v == null ? 'var(--muted)' : v >= 0 ? 'var(--green)' : 'var(--red)'; }
   function fmtPct(v) { return v == null ? '—' : (v >= 0 ? '+' : '') + v.toFixed(1) + '%'; }
 
   el.innerHTML = `<div class="perf-row" style="margin-bottom:20px;">
     <div class="summary-card">
-      <div class="label">含み益率（コスト比）</div>
+      <div class="label">含み益率（取得来・コスト比）</div>
       <div class="value" style="color:${colorOf(unrealized)}">${fmtPct(unrealized)}</div>
-      <div class="sub">${costBasis > 0 ? `コスト ${currencySymbol()}${fmt(toDisplay(costBasis))} 対比` : 'ポジションなし'}</div>
+      <div class="sub">${costNote}</div>
     </div>
     <div class="summary-card">
-      <div class="label">S&P500 リターン <span style="font-size:10px;color:var(--muted);">(同期間)</span></div>
+      <div class="label">S&P500 リターン <span style="font-size:10px;color:var(--muted);">(基準日〜今日)</span></div>
       <div class="value" style="color:${colorOf(spyReturnPct)}">${fmtPct(spyReturnPct)}</div>
       <div class="sub" style="display:flex;align-items:center;gap:4px;">
         <span style="font-size:10px;color:var(--muted);">基準日:</span>
@@ -2200,9 +2242,9 @@ function renderPerformance(spyReturnPct) {
       </div>
     </div>
     <div class="summary-card">
-      <div class="label">アルファ（超過リターン）</div>
+      <div class="label">参考：含み益率 − S&P500</div>
       <div class="value" style="color:${colorOf(alpha)}">${fmtPct(alpha)}</div>
-      <div class="sub">${alpha == null ? '基準日を設定してください' : alpha >= 0 ? '✅ S&P500超過中' : '⚠️ S&P500に未達'}</div>
+      <div class="sub">${alphaNote}</div>
     </div>
   </div>`;
 }

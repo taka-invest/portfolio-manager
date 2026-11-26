@@ -50,6 +50,7 @@
     if (out.data) { note('api'); return out.data; }
     const fallback = out.code === 'not-deployed' || (out.code === 'login' && !sensitive);
     if (fallback) return viaProxies(upstreamUrl);
+    root.PMMarketData.lastError = out.code === 'login' ? 'ログインが必要' : out.code === 'network' ? '通信エラー' : '取得元エラー';
     throw new Error(out.error || 'market data unavailable');
   }
 
