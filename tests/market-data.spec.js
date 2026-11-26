@@ -1,6 +1,6 @@
 'use strict';
-// 市場分析: own /api/market is preferred; third-party proxies are used only while the
-// API is not deployed, and never for holdings tickers when signed out.
+// 市場分析: own /api/market only. The public CORS proxies were removed, so no ticker
+// (index or holding) is ever sent to a third party, signed in or not.
 const { test, expect } = require('@playwright/test');
 
 async function setup(page, { token, api }) {
@@ -31,18 +31,15 @@ test('signed in + API deployed: VIX/F&G via own API only, no proxy traffic', asy
   expect(hits.api.some(s => s.includes('symbol=%5EVIX'))).toBe(true);
 });
 
-test('API not deployed: legacy proxies are used and the screen says so', async ({ page }) => {
-  const hits = await setup(page, { token: true, api: route => route.fulfill({ status: 404, contentType: 'text/html', body: 'nf' }) });
+test('API failure: the value is reported as failed and no proxy is tried', async ({ page }) => {
+  const hits = await setup(page, { token: true, api: route => route.fulfill({ status: 502, json: { error: 'upstream' } }) });
   await page.goto('/portfolio_manager.html#market');
-  await expect(page.locator('#vix-value')).toHaveText('22.5');
-  await expect(page.locator('#pm-market-source')).toContainText('第三者の中継サービス');
-  expect(hits.proxy.length).toBeGreaterThan(0);
-  // Signed in but API not deployed: the legacy path still works for technicals too.
+  await expect(page.locator('#vix-label')).toContainText('取得失敗');
   await page.evaluate(() => fetchTechnicals('ZZTOP'));
-  expect(hits.proxy.some(u => u.includes('ZZTOP'))).toBe(true);
+  expect(hits.proxy).toEqual([]);
 });
 
-test('signed out: index data may use proxies, but holdings technicals are never sent to them', async ({ page }) => {
+test('signed out: nothing is sent to third-party proxies (index or holdings)', async ({ page }) => {
   const hits = await setup(page, { token: false, api: route => route.fulfill({ status: 401, json: {} }) });
   await page.addInitScript(() => {
     localStorage.setItem('pm_workspace_v3', JSON.stringify({ version: 3, positions: [{ id: 'l1', ticker: 'ZZTOP', kind: 'stock', broker: 'X', account: '', accountType: 'specific', shares: 1, currency: 'USD', unitCost: 1, costJpy: null, referenceJpy: null, layer: 1, note: '' }],
@@ -50,8 +47,8 @@ test('signed out: index data may use proxies, but holdings technicals are never 
       stagedFunding: null, plans: [], trades: [], watchlist: [], company: [], preferences: {} }));
   });
   await page.goto('/portfolio_manager.html#market');
-  await expect(page.locator('#vix-value')).toHaveText('22.5');
+  await expect(page.locator('#vix-label')).toContainText('ログインが必要');
   const result = await page.evaluate(() => fetchTechnicals('ZZTOP'));
   expect(result).toBeNull();
-  expect(hits.proxy.some(u => u.includes('ZZTOP'))).toBe(false);
+  expect(hits.proxy).toEqual([]);
 });

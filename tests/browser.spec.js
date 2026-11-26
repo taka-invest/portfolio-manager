@@ -141,32 +141,26 @@ test('fresh start, market updates, verified lots, exports and responsive layout'
   expect(errors).toEqual([]);
 });
 
-test('old browser and cloud data require explicit preview, and replacement can be restored', async ({ page }) => {
+test('an old-format JSON backup needs explicit preview, and a replacement can be restored', async ({ page }) => {
   const { external } = await mockMarket(page);
   const actual = { ...legacy, id: 'fixture-nvda', ticker: 'NVDA', shares: 4, note: '<h1>メモ</h1>' };
-  await page.addInitScript(({ actual, legacy }) => {
-    localStorage.setItem('pm_positions', JSON.stringify([actual, legacy]));
-    localStorage.setItem('pm_jb_bin', '000000000000000000000000');
-    localStorage.setItem('pm_jb_key', 'fixture-only');
-  }, { actual, legacy });
   await page.goto(url);
   await page.locator('#data-settings summary').first().click();
-  await page.locator('#data-local').click();
+  // Removed with the old sites: same-origin legacy readers and the JSONBin client.
+  await expect(page.locator('#data-local, #data-old-file, #cloud-load, #s-fmp-key')).toHaveCount(0);
+  const oldFile = { name: 'old.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify([actual, legacy])) };
+  await page.locator('#data-upload').setInputFiles(oldFile);
   await expect(page.locator('#data-diff')).toContainText('旧サンプル 1 件');
   await expect(page.locator('#data-diff')).toContainText('NVDA');
   await expect(page.locator('#data-diff')).not.toContainText('PLTR /');
   expect(await page.evaluate(key => localStorage.getItem(key), D.KEY)).toBeNull();
   await page.locator('#data-review').getByRole('button', { name: 'キャンセル' }).click();
   await expect(page.locator('#holdings-lots')).not.toContainText('NVDA');
-  await page.locator('#data-local').click();
+  await page.locator('#data-upload').setInputFiles(oldFile);
   await page.locator('#data-accept').click();
   await expect(page.locator('#holdings-lots')).toContainText('<h1>メモ</h1>');
   await expect(page.locator('#holdings-lots h1')).toHaveCount(0);
   await expect(page.locator('#confirm-holdings')).toBeDisabled();
-
-  await page.locator('#data-settings details summary').click();
-  await page.locator('#cloud-load').click();
-  await expect(page.locator('#data-notice')).toContainText('接続を許可');
   expect(external.some(request => request.host === 'api.jsonbin.io')).toBe(false);
 
   await page.locator('#data-upload').setInputFiles({ name: 'valid.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(D.blank())) });
@@ -176,7 +170,6 @@ test('old browser and cloud data require explicit preview, and replacement can b
   await page.locator('#data-previous').click();
   await page.locator('#data-accept').click();
   await expect(page.locator('#holdings-lots')).toContainText('NVDA');
-  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('pm_positions')).length)).toBe(2);
 });
 
 test('valuation scenarios and typed observations persist across reload', async ({ page }) => {

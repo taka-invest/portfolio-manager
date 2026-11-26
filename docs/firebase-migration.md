@@ -70,7 +70,7 @@ Phase 1は**自動リアルタイム同期ではない**。2台で同時編集�
 
 この制限は**各ユーザーを自分のデータに閉じ込めるルール**であり、アプリ全体を一人しか使えないようにするルールとは異なる。本人専用のプロジェクトにするなら、ログインUIDの固定ホワイトリストやApp Checkの追加も検討する。
 
-## Phase 2: Netlify Functionsの移行（ソース移植済み、実機検証・公開待ち）
+## Phase 2: Netlify Functionsの移行（2026-11-24 本番公開済み。運用は docs/DEPLOYMENT.md）
 
 - 受領したNetlify関数を `functions/src/legacy/` にコピーし、SEC取得処理は `functions/src/sec-gateway.js` に共通化した。
 - `functions/src/index.js` にCloud Functions v2の `analyzeApi`, `screenerApi`, `chartApi` を実装。Bearer Firebase ID tokenを検証し、Google認証以外は拒否する。各関数は最大1インスタンス、同時1リクエストとしてSECへの過剰アクセスを抑える。

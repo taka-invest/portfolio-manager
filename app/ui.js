@@ -162,16 +162,6 @@
     } catch (e) { showNotice(e.message, true); }
   }
 
-  function previewLegacy() {
-    try {
-      const legacy = S.legacyData();
-      if (!['positions', 'plans', 'trades', 'watchlist'].some(k => Object.hasOwn(legacy, k))) {
-        return showNotice('このブラウザーに旧保存データは見つかりませんでした。');
-      }
-      preview(legacy, '旧ブラウザー保存');
-    } catch (e) { showNotice(e.message, true); }
-  }
-
   function acceptPreview() {
     if (!pending || pending.before !== state) {
       $('data-review').close();
@@ -691,11 +681,6 @@
       download('portfolio-rebalance.csv', R.csv(out), 'text/csv;charset=utf-8');
     };
     $('data-export').onclick = backup;
-    $('data-local').onclick = previewLegacy;
-    $('data-old-file').onclick = async () => {
-      try { preview(await S.legacyFile(), '旧ローカルファイル'); }
-      catch (e) { showNotice(e.message, true); }
-    };
     $('data-previous').onclick = () => {
       const old = S.read(D.BACKUP);
       if (old) preview(old, '上書き直前の自動バックアップ');
@@ -709,22 +694,6 @@
     };
     $('data-accept').onclick = acceptPreview;
     $('data-review').onclose = () => { pending = null; };
-    $('cloud-load').onclick = async () => {
-      if (!$('cloud-consent').checked) return showNotice('JSONBinへの接続を許可してください。', true);
-      try { preview(await S.jsonbin($('s-jb-key').value.trim(), $('s-jb-bin').value.trim()), 'JSONBinのバックアップ'); }
-      catch (e) { showNotice(e.message, true); }
-    };
-    $('cloud-save').onclick = async () => {
-      if (!$('cloud-consent').checked) return showNotice('JSONBinへの接続を許可してください。', true);
-      if (storageError || !confirm('現在の資産・履歴のバックアップをJSONBinの新規プライベートBinに送信しますか？')) return;
-      const button = $('cloud-save');
-      button.disabled = true;
-      try {
-        $('s-jb-bin').value = await S.jsonbin($('s-jb-key').value.trim(), null, D.validate(state));
-        showNotice('新規プライベートBinを作成しました。Bin IDを保存してください。');
-      } catch (e) { showNotice(e.message, true); }
-      finally { button.disabled = false; }
-    };
     $('company-ticker').onchange = renderCompany;
     $('company-edit').onclick = () => {
       const c = companyRecord($('company-ticker').value);

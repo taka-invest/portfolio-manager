@@ -143,7 +143,7 @@ npm run build:firebase    # dist/firebase に公開用ファイルのみを集�
 
 ### 中
 4. デプロイ用サービスアカウントが未設定。`firebase init hosting:github`は1回目がIAMの反映遅れで失敗し、2回目はOAuthの待ち受けが途中で終了した。未使用のサービスアカウント`github-action-1261182527@finance-base-edcc7.iam.gserviceaccount.com`（鍵なし）が残っているので、削除候補。**Claude Code環境では、IAM変更とサービスアカウント鍵の作成はガードレールでブロックされた。** オーナー自身が操作する前提で進めること。
-5. 市場データ（Fear & Greed、VIX、^GSPC、テクニカル指標）を第三者のCORSプロキシ（allorigins / corsproxy.io / codetabs）経由で取得している。保有ティッカーが第三者に渡るうえ、本番ではCORSエラーも出ている。自前のFunctions（`/api/market`）に置き換える。
+5. ~~市場データを第三者のCORSプロキシ経由で取得~~ → 自前API化済み、プロキシ経路は2026-11-26に削除。（当時の記録）市場データ（Fear & Greed、VIX、^GSPC、テクニカル指標）を第三者のCORSプロキシ（allorigins / corsproxy.io / codetabs）経由で取得している。保有ティッカーが第三者に渡るうえ、本番ではCORSエラーも出ている。自前のFunctions（`/api/market`）に置き換える。
 6. `validate()`は未知のキーを捨てる。スキーマを拡張するときはversionを上げ、移行処理を書く。
 7. `research/library.html`は旧53KB版。最新は84KB版。
 8. GitHubの公開履歴に、オーナーの個人メールアドレスが含まれたコミットが残っている（`docs/MIGRATION_PROGRESS.md`の過去版。現行版では削除済み）。履歴の書き換え（force push）は**オーナーの承認なしに行わないこと。**

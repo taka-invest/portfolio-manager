@@ -373,8 +373,6 @@
           <div class="pm-actions">
             <button id="data-export" class="btn btn-ghost">JSONを書き出す</button>
             <label class="btn btn-ghost" for="data-upload">JSONを選択</label><input type="file" id="data-upload" accept=".json,application/json" hidden>
-            <button id="data-local" class="btn btn-ghost">旧ブラウザーデータを確認</button>
-            <button id="data-old-file" class="btn btn-ghost">旧ファイル保存先を確認</button>
             <button id="data-previous" class="btn btn-ghost">上書き直前のバックアップを確認</button>
           </div>
           <p class="pm-muted pm-small">JSONには資産と取引履歴が含まれます。自分だけがアクセスできる場所に保存してください。</p>
@@ -383,28 +381,14 @@
           <h3>価格・表示設定</h3>
           <div class="pm-form">
             <label>Finnhub APIキー<input type="password" id="s-api-key" autocomplete="off"></label>
-            <label>FMP APIキー（VIX・VXN用）<input type="password" id="s-fmp-key" autocomplete="off"></label>
           </div>
           <div class="pm-actions pm-spaced">
             <button class="btn btn-ghost" onclick="PMApp.refreshPrices()">Finnhubキーを保存して更新</button>
-            <button class="btn btn-ghost" onclick="saveFmpKey()">FMPキーを保存</button>
             <button class="btn btn-ghost" id="btn-jpy" onclick="setCurrency('jpy')">¥</button>
             <button class="btn btn-ghost" id="btn-usd" onclick="setCurrency('usd')">$</button>
           </div>
         </div>
       </div>
-      <details class="pm-card">
-        <summary>JSONBin バックアップ</summary>
-        <div class="pm-form">
-          <label>Master Key<input type="password" id="s-jb-key" autocomplete="off"></label>
-          <label>Bin ID（読み込み用）<input type="text" id="s-jb-bin" autocomplete="off"></label>
-          <label class="pm-check"><input type="checkbox" id="cloud-consent"> APIキーと資産データのJSONBinとの送受信を許可</label>
-        </div>
-        <div class="pm-actions pm-spaced">
-          <button id="cloud-load" class="btn btn-ghost">Binを読み込み差分を確認</button>
-          <button id="cloud-save" class="btn btn-ghost">新規プライベートBinに保存</button>
-        </div>
-      </details>
     </details>
     <p id="data-notice" class="pm-callout" role="status" hidden></p>
   </section>
@@ -1059,7 +1043,6 @@
 <script src="app/staged-funding.js"></script>
 <script src="app/today-guide.js"></script>
 <script src="app/navigation.js"></script>
-<script src="app/legacy-notice.js"></script>
 <script src="app/api.js"></script>
 <script src="app/market-data.js"></script>
 <script src="app/price-chart.js"></script>
@@ -1167,7 +1150,7 @@ async function fetchTechnicals(ticker) {
   let closes = null;
   try {
     // Holdings ticker: own API only once deployed; never via third-party proxies when signed out.
-    const json = await PMMarketData.chart(url, { sensitive: true });
+    const json = await PMMarketData.chart(url);
     closes = json?.chart?.result?.[0]?.indicators?.quote?.[0]?.close?.filter(v => v != null);
   } catch(e) {}
   if (!closes || closes.length < 20) return null;
@@ -2280,14 +2263,6 @@ function toggleTheme() {
   const theme = document.body.classList.contains('light') ? 'dark' : 'light';
   PMApp.commit({ ...state, preferences: { ...state.preferences, theme } });
 }
-// ── FMP APIキー保存 ────────────────────────────────
-function saveFmpKey() {
-  const key = document.getElementById('s-fmp-key').value.trim();
-  if (!key) { alert('FMP APIキーを入力してください'); return; }
-  localStorage.setItem('pm_fmp_key', key);
-  fetchSentiment();
-}
-
 // ── VIX/VXN 手動入力 ───────────────────────────────
 function applyManualVix() {
   const vix = parseFloat(document.getElementById('s-vix-manual').value);
@@ -2317,9 +2292,6 @@ function applyManualVix() {
 
 // ── Init ───────────────────────────────────────────
 document.getElementById('s-api-key').value = localStorage.getItem('pm_api_key') || '';
-document.getElementById('s-fmp-key').value = localStorage.getItem('pm_fmp_key') || '';
-document.getElementById('s-jb-key').value = localStorage.getItem('pm_jb_key') || '';
-document.getElementById('s-jb-bin').value = localStorage.getItem('pm_jb_bin') || '';
 document.getElementById('exec-form').onsubmit = confirmExec;
 document.getElementById('trade-form').onsubmit = event => {
   event.preventDefault();
