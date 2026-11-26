@@ -43,3 +43,29 @@ for (const file of ['firebase.json', 'firebase.emulator.json']) {
     }
   });
 }
+
+for (const file of ['firebase.json', 'firebase.emulator.json']) {
+  const cfg = JSON.parse(readFileSync(join(__dirname, '..', file), 'utf8'));
+  const directives = csp => Object.fromEntries(csp.split(';').map(s => s.trim().split(/\s+/)).map(([k, ...v]) => [k, v]));
+  test(`${file}: Content-Security-Policy restricts where scripts load and data can go`, () => {
+    for (const p of ['/', '/portfolio_manager.html', '/research/index.html', '/research/screener.html', '/research/library.html']) {
+      const h = headersFor(cfg, p);
+      const d = directives(h['content-security-policy']);
+      assert.deepEqual(d['default-src'], ["'self'"], p);
+      assert.deepEqual(d['object-src'], ["'none'"], p);
+      assert.deepEqual(d['base-uri'], ["'self'"], p);
+      assert.ok(!d['script-src'].includes("'unsafe-eval'"), p);
+      assert.ok(!d['script-src'].some(s => s === '*' || s === 'https:'), p + ': no wildcard script source');
+      assert.ok(!d['connect-src'].some(s => s === '*' || s === 'https:'), p + ': no wildcard connect source');
+      assert.ok(!d['script-src'].includes('https://unpkg.com'), p + ': chart library is self-hosted');
+      assert.match(h['permissions-policy'], /camera=\(\)/, p);
+    }
+    const main = directives(headersFor(cfg, '/')['content-security-policy']);
+    assert.deepEqual(main['frame-ancestors'], ["'none'"]);
+    for (const host of ['https://finnhub.io', 'https://www.live-rates.com', 'https://firestore.googleapis.com', 'https://securetoken.googleapis.com'])
+      assert.ok(main['connect-src'].includes(host), host);
+    const research = directives(headersFor(cfg, '/research/index.html')['content-security-policy']);
+    assert.deepEqual(research['frame-ancestors'], ["'self'"]);
+    assert.ok(!research['connect-src'].includes('https://finnhub.io'), 'research pages only talk to the own API');
+  });
+}
