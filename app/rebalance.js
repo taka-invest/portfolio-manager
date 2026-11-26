@@ -101,24 +101,43 @@
       if (taxable && lots.some(p => p.costJpy == null)) continue;
       const perShareBasis = taxable ? totalOf(lots, p => p.costJpy) / available : 0;
       let fromAccount = Math.min(Math.floor(available + EPS), remaining);
+      const order = [];
       for (const lot of lots) {
         const shares = Math.min(Math.floor(lot.shares + EPS), fromAccount);
         if (shares <= EPS) break;
-        sales.push({ lotId: lot.id, ticker: row.ticker, account, broker: lot.broker, name: lot.account,
+        order.push({ lotId: lot.id, ticker: row.ticker, account, broker: lot.broker, name: lot.account,
           accountType: lot.accountType, taxable, shares, usd: shares * row.usd, jpy: shares * row.jpy,
           gain: taxable ? shares * (row.jpy - perShareBasis) : null, tax: 0 });
         fromAccount -= shares;
         remaining -= shares;
       }
+      // One sell order per ticker and account: its commission is a transfer cost
+      // and is deducted from the taxable gain (same rule as the staged plan).
+      const orderUsd = totalOf(order, s => s.usd);
+      const fee = feeUsd(orderUsd) * (row.usd > 0 ? row.jpy / row.usd : 0);
+      for (const s of order) {
+        s.fee = orderUsd > 0 ? fee * s.usd / orderUsd : 0;
+        if (s.taxable) s.gain -= s.fee;
+      }
+      sales.push(...order);
       if (remaining <= EPS) break;
     }
     return { sales, limited: remaining > EPS || (cap != null && cap < Math.floor(required + EPS)) };
   }
 
-  function taxEstimate(sales, rate, mode) {
+  /**
+   * Estimated Japanese capital-gains tax, shared by ③ and the staged PLTR plan.
+   * Each sale: { account, ticker, taxable, gain } with gain already net of its
+   * commission (譲渡費用). Netting:
+   *   none     – each sell order (ticker × account) on its own; losses offset nothing
+   *   account  – gains and losses net within the same taxable account
+   *   eligible – everything sold nets (same year, eligible accounts assumed)
+   * Tax is rounded up per netting group and allocated to the profitable sales.
+   */
+  function capitalGainsTax(sales, rate, mode) {
     const groups = new Map();
     for (const sale of sales.filter(s => s.taxable)) {
-      const key = mode === 'eligible' ? 'eligible' : mode === 'account' ? sale.account : sale;
+      const key = mode === 'eligible' ? 'eligible' : mode === 'account' ? sale.account : sale.ticker + '\u0000' + sale.account;
       if (!groups.has(key)) groups.set(key, []);
       groups.get(key).push(sale);
     }
@@ -250,14 +269,14 @@
         row.sales = liquidation.sales;
       }
       sales = rows.flatMap(row => row.sales);
-      tax = taxEstimate(sales, state.tax.rate, state.tax.offset);
+      tax = capitalGainsTax(sales, state.tax.rate, state.tax.offset);
       const nextTotal = total - tax;
       if (Math.abs(nextTotal - postTotal) <= 1) { postTotal = nextTotal; break; }
       postTotal = nextTotal;
       for (const row of rows) row.targetAfterTax = postTotal * (row.t?.pct ?? 0) / 100;
     }
     postTotal = total - tax;
-    const withoutOffset = taxEstimate(sales.map(sale => ({ ...sale, tax: 0 })), state.tax.rate, 'none');
+    const withoutOffset = capitalGainsTax(sales.map(sale => ({ ...sale, tax: 0 })), state.tax.rate, 'none');
     const proceeds = totalOf(sales, s => s.jpy);
     const saleUsd = totalOf(sales, s => s.usd);
     // Commission per order (one order per ticker and account).
@@ -344,7 +363,7 @@
     return '\uFEFF' + [header, ...rows].map(row => row.map(v => '"' + String(v).replaceAll('"', '""') + '"').join(',')).join('\r\n');
   }
 
-  const api = { cashValue, aggregate, ideal, simulate, csv, statusText, feeUsd, ORDER_FX };
+  const api = { cashValue, aggregate, ideal, simulate, csv, statusText, feeUsd, capitalGainsTax, ORDER_FX };
   if (typeof module === 'object' && module.exports) module.exports = api;
   else root.PMRebalance = api;
 })(globalThis);

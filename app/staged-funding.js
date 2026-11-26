@@ -108,20 +108,22 @@
       entry.basis += p.costJpy;
     }
     const taxRate = state.tax && state.tax.rate != null ? state.tax.rate : 20.315;
+    const offset = state.tax && state.tax.offset || 'none';
     function sale(q) {
-      let left = q, grossGain = 0, positiveGain = 0;
-      for (const acc of accounts.values()) {
+      // One sell order per account, each with its own commission (as in ③), and the
+      // same tax rule as ③ (Rebalance.capitalGainsTax): commissions reduce the gain.
+      let left = q, commission = 0;
+      const orders = [];
+      for (const [key, acc] of accounts) {
         const used = Math.min(left, acc.shares);
         if (!used) continue;
-        const profit = used * (pltrPrice - acc.basis / acc.shares);
-        grossGain += profit;
-        positiveGain += Math.max(0, profit);
+        const fee = feeUsd(used * pUsd) * rate;
+        commission += fee;
+        orders.push({ account: key, ticker: 'PLTR', taxable: true, gain: used * (pltrPrice - acc.basis / acc.shares) - fee, tax: 0 });
         left -= used;
       }
       const grossUsd = q * pUsd, gross = q * pltrPrice;
-      const commission = feeUsd(grossUsd) * rate;
-      const taxable = state.tax && state.tax.offset === 'eligible' ? grossGain : positiveGain;
-      const tax = Math.ceil(Math.max(0, taxable - commission) * taxRate / 100);
+      const tax = Rebalance.capitalGainsTax(orders, taxRate, offset);
       const postTotal = total - tax - commission;
       return { shares: q, gross, grossUsd, fee: commission,
         tax, net: gross - tax - commission, postTotal,
