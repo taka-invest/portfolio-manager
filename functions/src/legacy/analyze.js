@@ -10,6 +10,7 @@
 import { getJson } from '../sec-gateway.js';
 import { legacyBase } from '../sec/legacy-adapter.js';
 import { earningsOutlook } from '../sec/estimates.js';
+import { latestGuidance } from '../sec/guidance.js';
 const fetchJson = url => getJson(url);
 
 // ── 1. CIK取得 ───────────────────────────────────
@@ -907,7 +908,8 @@ export const handler = async (event) => {
   try {
     const [{ cik, name }, mkt, analyst, outlook] = await Promise.all([getCik(ticker), getMarketData(ticker), getAnalystData(ticker),
       earningsOutlook(ticker).catch(() => ({ error: 'アナリスト予想を取得できませんでした' }))]);
-    const [filings, fin]                = await Promise.all([getLatestFilings(cik), getFinancials(cik)]);
+    const [filings, fin, guidance]      = await Promise.all([getLatestFilings(cik), getFinancials(cik),
+      latestGuidance(cik).catch(() => ({ error: '会社ガイダンスを取得できませんでした' }))]);
 
     if (!mkt.marketCap && fin.sharesLatest && mkt.currentPrice) {
       mkt.marketCap         = fin.sharesLatest * mkt.currentPrice;
@@ -992,7 +994,7 @@ export const handler = async (event) => {
         isFinancial, companyPhase, psRatio, psgScore, isPostIpoNoPeak,
         analyst, judgment, exitSignal,
         // Reference only (next-quarter consensus, EPS surprises); not used by judgment.
-        outlook: outlook ?? { unavailable: 'サーバーにFinnhubキーが未設定です' },
+        outlook: { ...(outlook ?? { unavailable: 'サーバーにFinnhubキーが未設定です' }), guidance },
         financials: {
           revA: fin.revA?.slice(0,3), cogsA: fin.cogsA?.slice(0,3), opA: fin.opA?.slice(0,3),
           cashA: fin.cashA?.slice(0,2), debtA: fin.debtA?.slice(0,2), eqA: fin.eqA?.slice(0,2),
