@@ -183,6 +183,27 @@
     };
   }
 
+  /**
+   * Fields that validate() would silently drop (written by a newer app version).
+   * Values it normalises are not reported; only data that would be lost on re-save.
+   */
+  function droppedKeys(raw) {
+    const out = validate(raw);
+    const paths = [];
+    const walk = (r, o, path) => {
+      if (Array.isArray(r) && Array.isArray(o)) return r.forEach((x, i) => walk(x, o[i], path + '[' + i + ']'));
+      if (!record(r) || !record(o)) return;
+      for (const k of Object.keys(r)) {
+        if (r[k] == null) continue;
+        const at = path ? path + '.' + k : k;
+        if (!Object.hasOwn(o, k)) paths.push(at);
+        else walk(r[k], o[k], at);
+      }
+    };
+    walk(raw, out, '');
+    return paths;
+  }
+
   // The old application assigned random IDs and refreshed prices on the seeded rows.
   const seeds = { PLTR: [1021, 1500], APP: [15, 6000], SOFI: [300, 1200], RKLB: [200, 750], CRWV: [50, 6000] };
   function isSample(p) {
@@ -219,7 +240,7 @@
   }
 
   const api = { KEY, BACKUP, TYPES, KINDS, METRICS, FIXED_WEIGHTS, FIXED_CASH, PLTR_FLOOR, STAGED, ticker, date, blank,
-    validate, prepare, copy, readyLot, specIssues, fixedTargets };
+    validate, droppedKeys, prepare, copy, readyLot, specIssues, fixedTargets };
   if (typeof module === 'object' && module.exports) module.exports = api;
   else root.PMData = api;
 })(globalThis);

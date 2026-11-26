@@ -9,7 +9,7 @@ import {
 } from '@firebase/rules-unit-testing';
 import {
   doc, getDoc, setDoc, updateDoc, deleteDoc, collection, getDocs,
-  serverTimestamp, runTransaction, Timestamp
+  serverTimestamp, runTransaction, Timestamp, query, where
 } from 'firebase/firestore';
 
 const OWNER = 'owner-uid';
@@ -145,4 +145,14 @@ test('transactional overwrite with backup snapshot succeeds; concurrent writer i
       { payload: snap.data().payload, revision: rev, createdAt: serverTimestamp(), reason: 'before-overwrite' });
     tx.set(wsRef(a), { payload: payload(), revision: rev + 1, updatedAt: serverTimestamp() });
   }));
+});
+
+test('owner can look up the backup of a given revision (lost-update diff); others cannot', async () => {
+  const a = workspace(OWNER);
+  await setDoc(doc(a, 'users', OWNER, 'backups', 'rev-1-1'),
+    { payload: payload(), revision: 1, createdAt: serverTimestamp(), reason: 'before-overwrite' });
+  const q = db => query(collection(db, 'users', OWNER, 'backups'), where('revision', '==', 1));
+  const snap = await assertSucceeds(getDocs(q(a)));
+  if (snap.size !== 1) throw new Error('expected one backup, got ' + snap.size);
+  await assertFails(getDocs(q(workspace(OTHER))));
 });

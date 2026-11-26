@@ -12,6 +12,10 @@
 //   8. re-read from the server and verify the stored data equals the local data
 // Download (cloud → this PC) goes through the existing reviewed import dialog,
 // which keeps the previous local data as a backup before replacing it.
+// Lost-update guard (app/cloud-sync.js): this PC records the cloud revision its data
+// is based on. Uploading stale data over another PC's newer save is refused, and when
+// both sides changed, the other PC's changes are shown and need an explicit override.
+// Cloud data written by a newer app version (fields this page cannot keep) is refused.
 'use strict';
 
 const el = id => document.getElementById(id);
@@ -24,7 +28,8 @@ const CLOUD_SOURCE = 'Firebase同期';
 const PROJECT_SDK = '12.11.0';
 const base = 'https://www.gstatic.com/firebasejs/' + PROJECT_SDK + '/';
 let auth, db, firebase, store, currentUser, remoteRevision = null, remoteData = null;
-let busy = false, allowed = false;
+let busy = false, allowed = false, pendingImport = null;
+const sync = () => window.PMCloudSync;
 
 const setEnabled = () => {
   const signedIn = Boolean(currentUser);
@@ -38,13 +43,7 @@ const bytes = value => new TextEncoder().encode(JSON.stringify(value)).length;
 // Firestore rejects `undefined`; JSON round-trip drops it exactly like localStorage does.
 const plain = value => JSON.parse(JSON.stringify(value));
 // Key-order independent comparison (Firestore does not preserve map key order).
-export function canonical(value) {
-  if (Array.isArray(value)) return '[' + value.map(canonical).join(',') + ']';
-  if (value && typeof value === 'object') {
-    return '{' + Object.keys(value).sort().map(k => JSON.stringify(k) + ':' + canonical(value[k])).join(',') + '}';
-  }
-  return JSON.stringify(value ?? null);
-}
+export function canonical(value) { return window.PMCloudSync.canonical(value); }
 
 function summary(data) {
   if (!data) return 'クラウド上には保存データがありません。';
@@ -59,12 +58,41 @@ function showDiff(text) {
   box.hidden = !text;
   el('pm-cloud-diff-text').textContent = text || '';
 }
+function relationNow() {
+  const base = sync().readBase(localStorage, currentUser.uid);
+  let local = null;
+  try { local = plain(window.PMData.validate(window.PMApp.state())); } catch { /* storage problem: shown elsewhere */ }
+  return { base, local, rel: sync().relation({ base, remoteRevision, local }) };
+}
+function showStatus() {
+  if (!currentUser || remoteRevision === null) return;
+  const { base, rel } = relationNow();
+  const line = sync().describe(rel, base, remoteRevision);
+  status(summary(remoteData) + (line.text ? '\n' + line.text : ''), line.warn);
+}
 async function inspectRemote() {
   const snap = await store.getDocFromServer(ref()); // No cached values for financial data.
   remoteData = snap.exists() ? snap.data() : null;
   remoteRevision = remoteData?.revision ?? 0;
-  status(summary(remoteData));
+  showStatus();
   setEnabled();
+}
+// Fields the cloud copy holds that this page version would drop on re-save.
+function refuseNewerData(action) {
+  const lost = remoteData ? window.PMData.droppedKeys(remoteData.payload) : [];
+  if (!lost.length) return;
+  throw Error('クラウドのデータには、このページの版では保持できない項目（' + lost.slice(0, 5).join('、')
+    + (lost.length > 5 ? ' ほか' + (lost.length - 5) + '件' : '') + '）があります。新しい版で保存されたデータです。'
+    + 'ページを再読み込みしてから' + action + 'してください。データは変更していません。');
+}
+// The cloud content this PC's data was based on (kept in the pre-overwrite backups).
+async function basePayload(revision) {
+  try {
+    const q = store.query(store.collection(db, 'users', currentUser.uid, 'backups'), store.where('revision', '==', revision));
+    const snap = await store.getDocsFromServer(q);
+    const doc = snap.docs.find(d => d.data().reason === 'before-overwrite') || snap.docs[0];
+    return doc ? window.PMData.validate(doc.data().payload) : null;
+  } catch { return null; }
 }
 async function checkAllowlist(user) {
   try {
@@ -99,18 +127,45 @@ async function upload() {
     // (3) fresh server read
     await inspectRemote();
     const old = remoteRevision;
+    refuseNewerData('保存');
     if (remoteData && canonical(window.PMData.validate(remoteData.payload)) === canonical(local)) {
+      sync().writeBase(localStorage, currentUser.uid, old, local);
       showDiff('');
       status('クラウドとこのPCの内容は一致しています（リビジョン ' + old + '）。保存の必要はありません。');
       return;
+    }
+    const { base, rel } = relationNow();
+    if (rel.kind === 'behind') {
+      throw Error('クラウドは別端末で更新されています（リビジョン ' + base.revision + ' → ' + old + '）。'
+        + 'このPCには未保存の変更がないため、保存すると別端末の変更を古い内容に戻してしまいます。'
+        + '「クラウド → このPC」で取り込んでください。上書きは中止しました。');
     }
     if (remoteData && !local.positions.length && remoteData.payload?.positions?.length)
       throw Error('クラウドには保有株がありますが、このPCの保有株は0件です。先に「クラウド → このPC」で確認してください。');
     // (4) diff
     const cloudPayload = remoteData ? window.PMData.validate(remoteData.payload) : window.PMData.blank();
-    showDiff(app.diffText(cloudPayload, local, remoteData
+    let lost = '';
+    if (rel.kind === 'conflict') {
+      const before = await basePayload(base.revision);
+      lost = before
+        ? app.diffText(before, cloudPayload, '【別端末での変更（リビジョン ' + base.revision + ' → ' + old + '）】保存するとこれらの変更は失われます。')
+        : '【別端末での変更】リビジョン ' + base.revision + ' の内容がクラウドのバックアップに見つからないため、変更点を特定できません。下の差分で「→」の左側（クラウド側）が失われます。';
+      lost += '\n\n';
+    } else if (rel.kind === 'unknown' && remoteData) {
+      lost = '【注意】このPCがクラウドのどのリビジョンを元に編集したかの記録がありません。別端末で保存した変更がないか、下の差分の「→」左側（クラウド側）を確認してください。\n\n';
+    } else if (rel.kind === 'mismatch') {
+      lost = '【注意】クラウドのリビジョンがこのPCの記録より古くなっています。下の差分を確認してください。\n\n';
+    }
+    showDiff(lost + app.diffText(cloudPayload, local, remoteData
       ? 'クラウド（リビジョン ' + old + '）→ このPC の差分。保存するとクラウドがこの内容になります。'
       : 'クラウドは空です。このPCの内容を初回保存します。'));
+    if (rel.kind === 'conflict' && !window.confirm('⚠ このPCとクラウドの両方が変更されています。\n\n'
+      + 'このまま保存すると、別端末で保存された変更（画面の「別端末での変更」）が失われます。\n'
+      + '通常は「キャンセル」し、このPCのJSONバックアップを取ってから「クラウド → このPC」で取り込み、このPCでの変更を入れ直してください。\n\n'
+      + 'それでも別端末の変更を破棄して上書きしますか？')) {
+      status('保存を中止しました。データは変更していません。別端末の変更を先に取り込んでください。', true);
+      return;
+    }
     // (5) explicit choice
     const message = (remoteData
       ? 'クラウドの既存データ（リビジョン ' + old + '、' + remoteData.payload.positions.length + 'ロット）を、このPCの内容（'
@@ -136,6 +191,7 @@ async function upload() {
       }
       transaction.set(ref(), { payload: local, revision: old + 1, updatedAt: store.serverTimestamp() });
     });
+    sync().writeBase(localStorage, currentUser.uid, old + 1, local);
     // (8) verify
     await inspectRemote();
     const same = remoteData && canonical(window.PMData.validate(remoteData.payload)) === canonical(local);
@@ -149,8 +205,19 @@ async function download() {
   return guarded(async () => {
     await inspectRemote();
     if (!remoteData) throw Error('クラウドに復元可能なデータがありません。');
+    refuseNewerData('取り込み');
     const payload = window.PMData.validate(remoteData.payload);
     if (bytes(payload) > MAX_BYTES) throw Error('クラウドデータが想定サイズを超えています。');
+    const { rel } = relationNow();
+    if (rel.kind === 'ahead' || rel.kind === 'conflict') {
+      if (!window.confirm('このPCにはクラウド未保存の変更があります。取り込むと、このPCでの変更は失われます。\n'
+        + '取り込み前に、このPCのJSONバックアップを自動でダウンロードします。続行しますか？')) {
+        status('取り込みを中止しました。データは変更していません。');
+        return;
+      }
+      window.PMApp.backupJson();
+    }
+    pendingImport = { uid: currentUser.uid, revision: remoteData.revision };
     // Existing diff-review dialog confirms and backs up prior local data.
     window.PMApp.previewImport(payload, CLOUD_SOURCE + '（クラウド リビジョン ' + remoteData.revision + ' の差分を確認）');
     status('差分確認ダイアログを開きました。承認した場合のみこのPCのデータが変更されます。');
@@ -214,7 +281,16 @@ export async function init() {
     el('pm-cloud-download').addEventListener('click', download);
     window.addEventListener('pm:import-accepted', e => {
       if (!String(e.detail?.source || '').startsWith(CLOUD_SOURCE)) return;
+      if (pendingImport && currentUser?.uid === pendingImport.uid) {
+        sync().writeBase(localStorage, pendingImport.uid, pendingImport.revision, plain(window.PMData.validate(window.PMApp.state())));
+      }
+      pendingImport = null;
       status('クラウド（リビジョン ' + (remoteData?.revision ?? '?') + '）の内容をこのPCに取り込みました。保有ロットと現金を確認してください。');
+    });
+    // Keep the sync state honest: local edits and returning to the tab refresh it.
+    window.addEventListener('pm:state-saved', () => { if (!busy) showStatus(); });
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible' && currentUser && allowed && !busy) guarded(inspectRemote);
     });
     f.onAuthStateChanged(auth, async user => {
       currentUser = user;
