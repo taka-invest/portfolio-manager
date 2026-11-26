@@ -1,5 +1,5 @@
-// Firebase 2nd generation HTTP functions; no Netlify dependency.
-// Never deploy this until official EDGAR data, costs, and API responses are verified.
+// Firebase 2nd generation HTTP functions (production since 2026-11-24; see docs/DEPLOYMENT.md
+// for deploy, cost limits and the emergency stop).
 import { onRequest } from 'firebase-functions/v2/https';
 import { setGlobalOptions } from 'firebase-functions/v2';
 import { initializeApp } from 'firebase-admin/app';
