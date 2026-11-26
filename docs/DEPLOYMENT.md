@@ -76,6 +76,17 @@ npx firebase deploy --only functions --project finance-base-edcc7
 - スクリーナーは1リクエスト90秒で新しい銘柄の取得を打ち切り、残りは「時間切れ」行で返す（関数の180秒強制終了で全件失うのを防ぐ）
 - 取得キャッシュは件数40かつ応答サイズ合計40MBまで（companyfactsは1社数MB。全件スキャンで512MiBを超えないため）
 
+## Firestoreのバックアップと復元
+
+- 日次バックアップ・7日保持（2026-11-26設定、スケジュールID `ac6cf8ea-…`）。削除保護は有効。PITRは無効
+- 一覧：`npx firebase firestore:backups:list --project finance-base-edcc7`
+- 復元は**新しいデータベースへ**行う（本番の `(default)` は上書きしない）。中身を確認してから、必要な分だけアプリの「JSONを選択」または差分確認付きの取り込みで戻す
+  ```powershell
+  npx firebase firestore:databases:restore --database restored-YYYYMMDD --backup <バックアップ名> --project finance-base-edcc7
+  ```
+  確認後、復元用データベースは不要になったら削除する（保存料がかかるため。削除は要承認）
+- アプリ側の保護も併用：上書き前のクラウド上バックアップ（`users/{uid}/backups`）、保存前のJSON自動ダウンロード、別端末の変更を消さない同期
+
 ## 緊急停止・費用の上限
 
 費用が想定外に増えた、または不審なアクセスがある場合の止め方（上から順に影響が小さい）。
