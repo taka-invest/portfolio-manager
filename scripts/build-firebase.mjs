@@ -4,7 +4,7 @@ import { join, resolve } from 'node:path';
 
 const root = resolve(import.meta.dirname, '..');
 const out = join(root, 'dist', 'firebase');
-const files = ['portfolio_manager.html'];
+const files = ['portfolio_manager.html', 'favicon.ico'];
 const dirs = ['app', 'research'];
 rmSync(out, { recursive: true, force: true });
 mkdirSync(out, { recursive: true });
