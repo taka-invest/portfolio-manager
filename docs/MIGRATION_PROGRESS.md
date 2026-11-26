@@ -293,6 +293,18 @@ etlifyunctions` 2026-09-17版）→ `functions/src/legacy/`: analyze / screener
 - **Firestore日次バックアップ（7日保持）を設定**（2026-11-26、オーナー承認「設定してよい」）。復元手順は `docs/DEPLOYMENT.md`。初回バックアップは24時間以内に作成される（作成の確認は未実施）。削除保護は有効、PITRは無効のまま
 - 障害通知は未実施（通知先メールの決定待ち）
 
+## 個別企業分析：次の四半期の予想・第1段階（2026-11-26、オーナー承認「追記した・反映してよい」）
+- PR #41（main `83e34ac`）：四半期トレンド表の実績の上に「（予）」行（コンセンサス／自分の想定）を点線・斜体で追加。前年同期の実績と日付で照合してYoY等を計算。シグナル判定は旧エンジンを `research/forecast.js` に移植（実データ16四半期でサーバーと一致をテスト）。次回決算日・コンセンサス・EPSサプライズのパネル。自分の想定は銘柄別にブラウザー保存。「投資判断」スコアには使わない
+- サーバー：`functions/src/sec/estimates.js`（Finnhub `calendar/earnings`・`stock/earnings`）を `/api/analyze` の `outlook` に追加。キーは `functions/.env` の `FINNHUB_API_KEY`（オーナーが追記、gitignore）
+- 実データ確認：Finnhub無料枠で次回決算の売上予想・EPS予想・EPSサプライズ4回分が取得できる（APP・PLTR・NVDAで確認）
+- テスト：単体5件・ブラウザー3件（PC・スマホ）を追加。単体144、ブラウザー94成功・12スキップ、Functionsエミュレーター5/5。CI合格
+- Functions（5関数）とHostingを本番公開 → 本番スモーク 50/50、`forecast.js` の配信を確認、分析APIのログにエラーなし。**オーナーが本番でPLTRの予想行（2026 Q4（予）コンセンサス $2.71B・+92.5%）を確認** ✅
+- 第2段階（8-Kの会社ガイダンス読み取り）は未着手
+
+## ファビコン（2026-11-26、オーナー承認「反映してよい」）
+- PR #43（main `5e23daa`）：SVGファビコン、`/favicon.ico`（16・32・48px）、Apple touch icon（180px）、`icon-192/512.png`、`site.webmanifest`、`theme-color`。4ページすべてに設定、ビルドで `favicon.ico` も公開
+- テスト：`tests/favicon.test.js` 2件。単体146。CI合格。Hostingのみ本番公開 → 本番スモーク 50/50、アイコン4ファイルの配信（200・正しいContent-Type）を確認
+
 ## ユーザー対応待ち（ブロッカー）
 
 1. ~~CLI再認証~~ ✅ ／ ~~Webアプリ構成値~~ ✅
