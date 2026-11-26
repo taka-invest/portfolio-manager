@@ -8,8 +8,8 @@ const { join } = require('node:path');
 
 const root = join(__dirname, '..');
 const read = p => readFileSync(join(root, p), 'utf8');
-const appFiles = ['portfolio_manager.html', ...readdirSync(join(root, 'app')).map(f => 'app/' + f),
-  ...readdirSync(join(root, 'research')).map(f => 'research/' + f)];
+const files = dir => readdirSync(join(root, dir), { withFileTypes: true }).filter(e => e.isFile()).map(e => dir + '/' + e.name);
+const appFiles = ['portfolio_manager.html', ...files('app'), ...files('research')];
 
 test('no third-party CORS proxy, JSONBin or FMP code is shipped', () => {
   for (const f of appFiles) {
