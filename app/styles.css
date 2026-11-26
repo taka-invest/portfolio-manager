@@ -301,3 +301,18 @@ body.light { color-scheme: light; }
   box-shadow: 0 8px 24px rgba(0,0,0,.35); font-size: 13px; line-height: 1.6; }
 .pm-toast[data-warn="true"] { border-color: var(--red); }
 #pm-cloud-status { white-space: pre-line; }
+
+/* 今日やること */
+.pm-today-checks, .pm-today-orders, .pm-today-after { margin: 0 0 12px; padding-left: 1.4em; }
+.pm-today-checks li, .pm-today-orders li, .pm-today-after li { margin: 4px 0; }
+.pm-today-check[data-ok="true"] { color: var(--text2, inherit); }
+.pm-today-check[data-ok="false"] { font-weight: 700; }
+.pm-today-check span { display: inline-block; width: 1.2em; }
+.pm-today-check[data-ok="true"] span { color: var(--green, #059669); }
+.pm-today-check[data-ok="false"] span { color: var(--red, #dc2626); }
+.pm-today-title { margin: 8px 0; }
+.pm-today-sub { margin: 12px 0 4px; }
+.pm-today-side[data-side="sell"] { color: var(--red, #dc2626); }
+.pm-today-side[data-side="buy"] { color: var(--green, #059669); }
+.pm-today-notes { margin: 8px 0 0; padding-left: 1.2em; }
+.pm-today-orders li { font-size: 1.05em; }

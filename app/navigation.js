@@ -3,7 +3,7 @@
   const groups = {
     overview: ['overview'],
     holdings: ['holdings'],
-    rebalance: ['allocation', 'rebalance', 'after'],
+    rebalance: ['today', 'allocation', 'rebalance', 'after'],
     analysis: ['analysis'],
     screener: ['screener'],
     chart: ['chart'],

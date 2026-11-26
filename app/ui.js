@@ -362,6 +362,11 @@
     renderHoldings(out.assets);
     renderOrders(out, R.ideal(state, market));
     root.PMStagedFunding?.render(state, market);
+    // Unsaved edits / storage problems / an update in progress block every order view.
+    const blockers = [storageError, updating && '株価と為替を更新中です。',
+      dirty.size && [...dirty].map(key => formLabels[key]).join('・') + 'の変更を保存してください。'].filter(Boolean);
+    root.PMTodayGuide?.render({ state, market, result: out, blockers,
+      staged: state.stagedFunding && root.PMStagedFunding ? root.PMStagedFunding.calc(state, market) : null });
     root.renderPerformance(S.read('pm_spy_return')?.pct ?? null);
   }
 

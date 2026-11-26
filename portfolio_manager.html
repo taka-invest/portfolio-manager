@@ -304,7 +304,7 @@
     <p class="pm-nav-caption">PORTFOLIO</p>
     <a href="#overview" data-pm-view="overview" title="ダッシュボード"><span class="pm-nav-symbol" aria-hidden="true">▦</span><span class="pm-nav-label">ダッシュボード</span></a>
     <a href="#holdings" data-pm-view="holdings" title="ポートフォリオ"><span class="pm-nav-symbol" aria-hidden="true">▤</span><span class="pm-nav-label">ポートフォリオ</span></a>
-    <a href="#rebalance" data-pm-view="rebalance" title="売買・リバランス"><span class="pm-nav-symbol" aria-hidden="true">⇄</span><span class="pm-nav-label">売買・リバランス</span></a>
+    <a href="#today" data-pm-view="rebalance" title="売買・リバランス"><span class="pm-nav-symbol" aria-hidden="true">⇄</span><span class="pm-nav-label">売買・リバランス</span></a>
     <p class="pm-nav-caption">RESEARCH</p>
     <a href="#analysis" data-pm-view="analysis" title="個別企業分析"><span class="pm-nav-symbol" aria-hidden="true">◎</span><span class="pm-nav-label">個別企業分析</span></a>
     <a href="#companies" data-pm-view="companies" title="投資仮説・企業評価"><span class="pm-nav-symbol" aria-hidden="true">◈</span><span class="pm-nav-label">投資仮説・企業評価</span></a>
@@ -336,6 +336,7 @@
       <button class="btn btn-primary" id="price-update">株価・為替を更新</button></div>
     <div id="summary-row" class="summary-row"></div>
     <p id="trust-status" class="pm-callout" role="status"></p>
+    <p id="today-mini" class="pm-callout pm-today-mini" role="status"></p>
     <div class="pm-actions"><button id="confirm-holdings" class="btn btn-primary">実保有・現金を確認</button>
       <span id="market-status" class="pm-muted pm-small" role="status"></span></div>
     <form id="cash-form" class="pm-card">
@@ -418,10 +419,16 @@
 
   <nav class="pm-rebalance-subnav" id="pm-rebalance-subnav" aria-label="リバランス内の移動" hidden>
     <span class="pm-muted pm-small">売買の流れ</span>
+    <a href="#today">今日やること</a>
     <a href="#allocation">① 目標配分</a>
     <a href="#rebalance">② 何株売買する？</a>
     <a href="#after">③ 税引後の実行・売買後構成</a>
   </nav>
+  <section id="today" aria-labelledby="today-title">
+    <div class="pm-heading"><h2 id="today-title">今日やること</h2></div>
+    <p class="pm-muted pm-small">今日従う計算（段階買付か③か）と、発注する順番、約定後の登録をまとめています。数値は②の段階買付・③の売買案と同じ計算結果です。</p>
+    <div class="pm-card pm-today" id="today-guide" aria-live="polite"><p class="pm-muted">計算条件を確認中です。</p></div>
+  </section>
   <section id="allocation" aria-labelledby="allocation-title">
     <div class="pm-heading"><h2 id="allocation-title">① 目標ポートフォリオ配分</h2></div>
     <p class="pm-muted pm-small">目標比率と現金10%は固定仕様です（NVDA15・AVGO10・PLTR30・APP20・SOFI5・CRDO3・RKLB4・SPCX3）。区分・売却上限・購入待機だけ変更できます。PLTRは売却後30%未満にはなりません。</p>
@@ -1050,6 +1057,7 @@
 <script src="app/storage.js"></script>
 <script src="app/ui.js"></script>
 <script src="app/staged-funding.js"></script>
+<script src="app/today-guide.js"></script>
 <script src="app/navigation.js"></script>
 <script src="app/legacy-notice.js"></script>
 <script src="app/api.js"></script>

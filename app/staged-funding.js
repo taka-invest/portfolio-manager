@@ -304,7 +304,7 @@
       '<div class="pm-stage-grid">' +
       cell('現時点の対象資産', yen(out.total)) +
       cell('USD/JPY（' + (out.fx.kind === 'spot' ? 'スポット' : out.fx.kind === 'manual' ? '証券会社・手入力' : '時間更新') + '）', out.rate.toFixed(4)) +
-      cell('第' + stage + '弾・累積到達率', pct(out.stagePct)) +
+      cell(STAGE_NAMES[stage - 1].split('：')[0] + '・累積到達率', pct(out.stagePct)) +
       cell('今回の購入必要額・概算手数料込', yen(out.idealBudget)) +
       cell('PLTR売却する株数', out.sale.shares + '株') +
       cell('PLTR税引後の売却代金', yen(out.sale.net)) +
