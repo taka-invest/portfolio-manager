@@ -42,13 +42,16 @@
   /** Corrected screener row -> legacy screener row (fields read by the legacy UI). */
   function legacyRow(r) {
     if (r.error) return { ticker: r.ticker, error: r.error, signalScore: 0, phase: 'unknown' };
+    // The legacy table checks `!== null` before formatting, so a missing value must be
+    // null (never undefined) or one row without e.g. gross margin breaks the whole table.
+    const n = v => (typeof v === 'number' && Number.isFinite(v) ? v : null);
     return {
-      ticker: r.ticker, name: r.name, latestQ: quarterLabel(r.latestQ), revM: r.revenueM,
-      revYoY: r.revenueYoYPct, yoyAccel: r.yoyAccelPts, opMargin: r.operatingMarginPct,
-      grossMargin: r.grossMarginPct, rof40: r.ruleOf40Legacy, signalScore: r.signalScore,
+      ticker: r.ticker, name: r.name ?? null, latestQ: quarterLabel(r.latestQ), revM: n(r.revenueM),
+      revYoY: n(r.revenueYoYPct), yoyAccel: n(r.yoyAccelPts), opMargin: n(r.operatingMarginPct),
+      grossMargin: n(r.grossMarginPct), rof40: n(r.ruleOf40Legacy), signalScore: n(r.signalScore) ?? 0,
       signalQ: quarterLabel(r.signalQ), signalFlags: r.signalFlags || {}, phase: r.phase,
-      isFinancial: r.phase === 'financial', gmImproveStreak: r.gmImproveStreak,
-      price: r.price, mktcap: null, chg1d: null
+      isFinancial: r.phase === 'financial', gmImproveStreak: n(r.gmImproveStreak) ?? 0,
+      price: n(r.price), mktcap: null, chg1d: null
     };
   }
 

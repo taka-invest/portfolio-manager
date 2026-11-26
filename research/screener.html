@@ -342,29 +342,50 @@ async function startScan() {
 
   let done = 0, errors = 0;
 
-  // バッチを最大6並列で実行（ブラウザ接続数制限を考慮）
-  const MAX_CONCURRENT = 6;
+  // Firebase版：サーバーは1インスタンス・同時1件で、SECへの問い合わせも毎秒2件に制限している。
+  // 並列に送っても速くならず、待ち行列があふれて失敗するだけなので、1バッチずつ順に送る。
+  const MAX_CONCURRENT = 1;
+  const RETRY_WAIT_MS = 3000;
+  let lastError = '';
   const batchQueue = [...batches];
   const running = [];
 
+  async function postBatch(batch) {
+    const res = await fetch('/.netlify/functions/screener', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tickers: batch }),
+    });
+    const data = await res.json().catch(() => null);
+    return { status: res.status, data };
+  }
+
   async function runBatch(batch) {
     try {
-      const res = await fetch('/.netlify/functions/screener', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tickers: batch }),
-      });
-      const data = await res.json();
-      if (Array.isArray(data)) {
-        for (const item of data) {
-          if (item.error) errors++;
+      let r = await postBatch(batch);
+      // 混雑（429）・一時的な取得失敗（5xx）は1回だけ待って再試行する。
+      if (!Array.isArray(r.data) && (r.status === 429 || r.status >= 500)) {
+        await new Promise(ok => setTimeout(ok, RETRY_WAIT_MS));
+        r = await postBatch(batch);
+      }
+      if (Array.isArray(r.data)) {
+        for (const item of r.data) {
+          if (item.error) { errors++; lastError = item.error; }
           else { allResults.push(item); }
           done++;
         }
+      } else {
+        // 失敗したバッチも件数に数える（以前は数えずに進捗が止まって見えた）。
+        errors += batch.length;
+        done   += batch.length;
+        lastError = r.status === 401 ? 'Googleログインが必要です'
+          : r.status === 403 ? 'このアカウントには利用許可がありません'
+          : 'サーバーの取得に失敗しました（HTTP ' + r.status + '）';
       }
     } catch(e) {
       errors += batch.length;
       done   += batch.length;
+      lastError = 'ネットワークに接続できません';
     }
     updateProgress(done, tickers.length, errors);
     updateStats();
@@ -392,7 +413,8 @@ async function startScan() {
   scanning = false;
   document.getElementById('scanBtn').disabled = false;
   document.getElementById('scanBtn').textContent = '🔍 スキャン開始';
-  document.getElementById('progressLabel').textContent = `スキャン完了 — ${done}銘柄分析`;
+  document.getElementById('progressLabel').textContent = `スキャン完了 — ${done}銘柄分析`
+    + (errors ? `（取得できなかった銘柄 ${errors}件：${lastError}）` : '');
   document.getElementById('summaryCards').classList.remove('hidden');
   document.getElementById('resultsSection').classList.remove('hidden');
   updateStats();
