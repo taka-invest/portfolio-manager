@@ -12,6 +12,7 @@
 <title>伝説の会計学 自動株価推定システム</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="vendor/lightweight-charts-4.2.0.standalone.production.js"></script>
+<script src="forecast.js"></script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700;900&display=swap');
   body { font-family: 'Noto Sans JP', sans-serif; }
@@ -48,7 +49,7 @@
     box-sizing: border-box;
     padding: 0 12px;
   }
-  @media (max-width: 768px) { .chart-side-by-side { flex-direction: column; } .chart-pane { height: 320px; } .chart-breakout { margin-left: 0; margin-right: 0; width: 100%; padding: 0; } }
+  @media (max-width: 768px) { .trend-pane { flex: none !important; max-height: none !important; overflow-y: visible !important; } .chart-side-by-side { flex-direction: column; } .chart-pane { height: 320px; } .chart-breakout { margin-left: 0; margin-right: 0; width: 100%; padding: 0; } }
 </style>
 </head>
 <body class="gradient-bg min-h-screen text-white">
@@ -394,10 +395,123 @@ function rowBg(q, isLatest) {
 }
 
 // ── トレンドセクション描画 ────────────────────────
-function renderTrendSection(trend) {
+// ── 予想四半期（コンセンサス・自分の想定）─────────────
+// 実績とは混ぜない。判定ルールは実績と同じ（research/forecast.js の enrich）。
+let pmTrendData = null;
+const pmEsc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+const pmMoney = m => m == null ? '—' : (Math.abs(m) >= 1000 ? '$' + (m / 1000).toFixed(2) + 'B' : '$' + m.toFixed(0) + 'M');
+function pmStorage() { try { return window.localStorage; } catch { return null; } }
+
+function pmForecastRows(trend, d) {
+  const F = window.PMForecast, rows = [];
+  if (!F || !trend?.length) return rows;
+  const next = d?.outlook?.next;
+  if (next?.revenueEstimateM != null) {
+    const end = F.consensusQuarter(trend, next);
+    if (end) rows.push(F.forecastRow(trend, { end, revM: next.revenueEstimateM, epsQ: next.epsEstimate, kind: 'consensus', source: 'コンセンサス' }));
+  }
+  const st = pmStorage();
+  const own = st && d?.ticker ? F.readOwn(st, d.ticker) : null;
+  const ownRev = own ? F.ownRevenue(trend, own) : null;
+  if (ownRev != null) rows.push(F.forecastRow(trend, { revM: ownRev, opMargin: own.opMargin, kind: 'own', source: '自分の想定' }));
+  return rows.filter(Boolean);
+}
+
+function pmForecastRowHtml(q, trend) {
+  const ago = window.PMForecast.yearAgo(trend, q.end);
+  const opmYoY = q.opMargin != null && ago?.opMargin != null ? q.opMargin - ago.opMargin : null;
+  const badge = q.kind === 'own'
+    ? '<span class="text-[10px] rounded px-1 py-0.5 bg-sky-500/20 text-sky-300 border border-sky-500/30">自分の想定</span>'
+    : '<span class="text-[10px] rounded px-1 py-0.5 bg-violet-500/20 text-violet-300 border border-violet-500/30">コンセンサス</span>';
+  const dash = '<span class="text-white/20">—</span>';
+  return `
+    <tr class="pm-forecast-row border-b border-dashed border-white/15 bg-white/[0.03] italic" data-kind="${q.kind}">
+      <td class="px-2 py-2 text-xs whitespace-nowrap min-w-[110px]">
+        <div class="font-bold text-white/60">${q.label}（予）</div>
+        <div class="mt-0.5">${badge}</div>
+        ${signalBadge(q)}
+      </td>
+      <td class="px-2 py-2 text-xs text-right text-white/60 whitespace-nowrap">${pmMoney(q.revM)}</td>
+      <td class="px-2 py-2 text-xs text-right whitespace-nowrap">${q.revYoY != null ? fmtPct(q.revYoY) + yoyArrow(q.yoyAccel) : dash}</td>
+      <td class="px-2 py-2 text-xs text-right">${q.revQoQ != null ? fmtPct(q.revQoQ) : dash}</td>
+      <td class="px-2 py-2 text-xs text-right">${dash}</td>
+      <td class="px-2 py-2 text-xs text-right whitespace-nowrap">${q.opMargin != null ? fmtOpMargin(q.opMargin) : dash}</td>
+      <td class="px-2 py-2 text-xs text-right whitespace-nowrap">${opmYoY != null ? `<span class="text-white/50">${opmYoY > 0 ? '+' : ''}${opmYoY.toFixed(1)}pp</span>` : dash}</td>
+      <td class="px-2 py-2 text-xs text-right">${q.opLeverage != null ? fmtOpLev(q.opLeverage) : dash}</td>
+      <td class="px-2 py-2 text-xs text-right">${q.rof40 != null ? fmtRoF40(q.rof40) : dash}</td>
+      <td class="px-2 py-2 text-xs text-right whitespace-nowrap text-white/60">${q.opM != null ? pmMoney(q.opM) : dash}</td>
+      <td class="px-2 py-2 text-xs text-right whitespace-nowrap">${q.epsQ != null ? `<span class="text-white/60 font-mono">${q.epsQ >= 0 ? '+' : ''}${q.epsQ.toFixed(2)}</span>` : dash}</td>
+      <td class="px-2 py-2 text-xs text-right whitespace-nowrap"><span class="text-white/50" title="予想値で計算した試算">${q.opMargin != null ? q.signalScore : dash}</span></td>
+    </tr>`;
+}
+
+function pmForecastPanel(trend, d, rows) {
+  const F = window.PMForecast;
+  const o = d?.outlook || {};
+  const n = o.next;
+  const hour = { bmo: '寄り前', amc: '引け後', dmh: '取引時間中' }[n?.hour] || '';
+  const fmtTime = iso => { try { return new Date(iso).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }); } catch { return ''; } };
+  let head;
+  if (!d?.outlook) head = `<p class="text-xs text-white/40">アナリスト予想：サーバーが未対応のため未取得です（自分の想定は入力できます）</p>`;
+  else if (o.unavailable) head = `<p class="text-xs text-white/40">アナリスト予想：${pmEsc(o.unavailable)}（自分の想定は入力できます）</p>`;
+  else if (!n) head = `<p class="text-xs text-white/40">次回決算の予定が見つかりません${o.error ? '（' + pmEsc(o.error) + '）' : ''}。</p>`;
+  else {
+    const matched = n.revenueEstimateM != null && F.consensusQuarter(trend, n);
+    head = `<p class="text-xs text-white/70">次回決算 <span class="font-bold text-white">${pmEsc(n.date)}</span>${hour ? '（' + hour + '）' : ''}${n.fiscalYear && n.fiscalQuarter ? `・会社の会計年度 FY${n.fiscalYear} Q${n.fiscalQuarter}` : ''}
+      ／コンセンサス 売上 <span class="font-bold">${pmMoney(n.revenueEstimateM)}</span>・EPS <span class="font-bold">${n.epsEstimate != null ? '$' + n.epsEstimate.toFixed(2) : '—'}</span></p>
+      <p class="text-[11px] text-white/30">${pmEsc(o.source?.provider || '')}・取得 ${o.source?.retrievedAt ? fmtTime(o.source.retrievedAt) : ''}${matched ? '' : '。対象四半期を実績の次の四半期と確認できないため、予想行には入れていません'}${o.error ? '（' + pmEsc(o.error) + '）' : ''}</p>`;
+  }
+  const hist = (o.epsHistory || []).map(h => `<span class="mr-3">${pmEsc(window.PMForecast.quarterLabel(h.period))} ${h.surprisePct != null ? `<span class="${h.surprisePct >= 0 ? 'text-emerald-400' : 'text-red-400'}">${h.surprisePct >= 0 ? '+' : ''}${h.surprisePct.toFixed(1)}%</span>` : '—'}</span>`).join('');
+  const st = pmStorage();
+  const own = st && d?.ticker ? F.readOwn(st, d.ticker) : null;
+  const latestOpM = trend[0]?.opMargin;
+  const ownRow = rows.find(r => r.kind === 'own');
+  const flags = ownRow ? Object.entries({ redToBlack: '黒字化', opMInflection: 'OpM急拡大', rof40Cross40: 'RoF40突破', rof40Cross60: 'RoF60突破', rof40Cross80: 'RoF80突破', opLevHigh: '高レバ', yoyAccelStrong: 'YoY加速' }).filter(([k]) => ownRow.signals?.[k]).map(([, v]) => v) : [];
+  return `
+  <div class="mt-4 rounded-xl border border-white/10 bg-white/[0.03] p-3" id="pm-forecast-panel">
+    <div class="text-xs font-bold text-white/60 mb-1">🔮 次の四半期の予想（参考）</div>
+    ${head}
+    ${hist ? `<p class="text-[11px] text-white/40 mt-1">EPSサプライズ（実績÷予想）：${hist}</p>` : ''}
+    <div class="mt-3 flex flex-wrap items-end gap-2 text-xs">
+      <label class="text-white/50">売上（$M）<input id="pm-own-rev" type="number" step="any" class="block w-24 mt-0.5 rounded bg-white/10 px-2 py-1 text-white" value="${own?.revM ?? ''}"></label>
+      <span class="text-white/30 pb-1">または</span>
+      <label class="text-white/50">前年比（%）<input id="pm-own-yoy" type="number" step="any" class="block w-20 mt-0.5 rounded bg-white/10 px-2 py-1 text-white" value="${own?.revYoY ?? ''}"></label>
+      <label class="text-white/50">営業利益率（%）<input id="pm-own-opm" type="number" step="any" class="block w-20 mt-0.5 rounded bg-white/10 px-2 py-1 text-white" value="${own?.opMargin ?? ''}"></label>
+      <button type="button" class="rounded bg-sky-500/20 border border-sky-500/40 text-sky-200 px-3 py-1.5" onclick="pmOwnSave()">自分の想定を反映</button>
+      ${latestOpM != null ? `<button type="button" class="rounded bg-white/5 border border-white/15 text-white/60 px-2 py-1.5" onclick="document.getElementById('pm-own-opm').value='${latestOpM.toFixed(1)}'">直近の利益率（${latestOpM.toFixed(1)}%）</button>` : ''}
+      ${own ? '<button type="button" class="rounded bg-white/5 border border-white/15 text-white/50 px-2 py-1.5" onclick="pmOwnClear()">消去</button>' : ''}
+    </div>
+    ${ownRow ? `<p class="text-xs mt-2 text-white/70" id="pm-own-result">この想定どおりなら：前年比 ${ownRow.revYoY != null ? ownRow.revYoY.toFixed(1) + '%' : '—'}・RoF40 ${ownRow.rof40 != null ? ownRow.rof40.toFixed(0) : '—（営業利益率が必要）'}・シグナル ${ownRow.opMargin != null ? (flags.length ? flags.join('・') + `（スコア試算 ${ownRow.signalScore}）` : 'なし') : '—（営業利益率が必要）'}</p>` : ''}
+    <p class="text-[11px] text-white/30 mt-1">予想は実績と分けて点線・斜体で表示します。コンセンサスは売上・EPSのみのため、利益率・RoF40・スコアは自分の想定でのみ試算します。自分の想定はこのブラウザーにだけ保存されます。</p>
+  </div>`;
+}
+
+function pmRerenderTrend() {
+  const wrap = document.getElementById('pm-trend-wrap');
+  if (wrap && pmTrendData) wrap.innerHTML = renderTrendSection(pmTrendData.trend, pmTrendData);
+}
+function pmOwnSave() {
+  const val = id => { const v = document.getElementById(id).value.trim(); return v === '' ? null : Number(v); };
+  const own = { revM: val('pm-own-rev'), revYoY: val('pm-own-yoy'), opMargin: val('pm-own-opm') };
+  const bad = Object.values(own).some(v => v !== null && !Number.isFinite(v));
+  if (bad || (own.revM == null && own.revYoY == null)) { alert('売上（$M）か前年比（%）を数値で入力してください。'); return; }
+  if (own.revM != null && own.revM <= 0) { alert('売上は正の数で入力してください。'); return; }
+  const st = pmStorage();
+  if (st && pmTrendData?.ticker) window.PMForecast.saveOwn(st, pmTrendData.ticker, own);
+  pmRerenderTrend();
+}
+function pmOwnClear() {
+  const st = pmStorage();
+  if (st && pmTrendData?.ticker) window.PMForecast.saveOwn(st, pmTrendData.ticker, null);
+  pmRerenderTrend();
+}
+
+function renderTrendSection(trend, d) {
   if (!trend || trend.length < 2) {
     return `<div class="card rounded-2xl p-5 text-center text-white/30 text-sm">四半期データが不足しています</div>`;
   }
+  if (d) pmTrendData = d;
+  const forecastRows = pmForecastRows(trend, d);
 
   const dispTrend = trend.slice(0, 12); // 最大12四半期表示
   const revData  = trend.map(q => q.revM);
@@ -504,9 +618,10 @@ function renderTrendSection(trend) {
           <th class="px-2 py-1.5 text-right text-xs text-white/40 font-normal" title="シグナルスコア: 売上加速・営業レバレッジ・RoF40などを総合評価。70以上が高確度入場基準">Score</th>
         </tr>
       </thead>
-      <tbody>${rows}</tbody>
+      <tbody>${forecastRows.map(q => pmForecastRowHtml(q, trend)).join('')}${rows}</tbody>
     </table>
   </div>
+  ${pmForecastPanel(trend, d, forecastRows)}
 
   ${trendInsight(trend)}
 </div>`;
@@ -1894,8 +2009,8 @@ function renderResult(d, isNew = false) {
       </div>
 
       <!-- 四半期トレンド (右45%) — 縦スクロールのみ、横スクロールなし -->
-      <div style="flex:0 0 45%;min-width:0;overflow-x:hidden;overflow-y:auto;max-height:580px" class="rounded-2xl">
-        ${renderTrendSection(d.trend)}
+      <div style="flex:0 0 45%;min-width:0;overflow-x:hidden;overflow-y:auto;max-height:580px" class="rounded-2xl trend-pane">
+        <div id="pm-trend-wrap">${renderTrendSection(d.trend, d)}</div>
       </div>
 
     </div>

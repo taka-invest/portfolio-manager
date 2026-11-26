@@ -69,6 +69,7 @@ npx firebase deploy --only functions --project finance-base-edcc7
 ```
 
 - `functions/.env`（gitignore）の`SEC_USER_AGENT`がデプロイ時に環境変数として設定される。リポジトリには書かない
+- 同じく `FINNHUB_API_KEY`（個別企業分析の次回決算・コンセンサス用、任意）。未設定なら分析画面は「サーバーにFinnhubキーが未設定です」と表示し、自分の想定だけ使える。本人が `functions/.env` に1行追加してから Functions をデプロイする
 - 全関数 `maxInstances: 1` / `concurrency: 1` / 512MiB / 180秒（費用の上限を抑えるため）。変更時は費用見込みを再確認
 - 古いコンテナイメージは3日で自動削除（`firebase functions:artifacts:setpolicy --location asia-northeast1 --days 3`）
 - Hostingの`/api/*`転送は`firebase.json`に記載。Functionsを削除する場合は転送も外すこと
