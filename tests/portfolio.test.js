@@ -162,10 +162,12 @@ test('estimated taxes, eligible offsets, currency balances and post-trade positi
   const run = offset => R.simulate(build({ ...fields, tax: { rate: 20, offset } }), market, NOW);
   const out = run('eligible');
   assert.equal(out.errors.length, 0);
-  assert.equal(out.tax, 2400);
-  assert.equal(out.withoutOffset, 3200);
-  assert.equal(run('none').tax, 3200);
-  assert.equal(run('account').tax, 3200);
+  // Commissions are transfer costs and reduce the gain (same rule as the staged plan):
+  // GAIN 16,000 − fee 99 (0.495% of $200 × 100) = 15,901; LOSS −4,000 − fee 49.5 = −4,049.5.
+  assert.equal(out.tax, 2371);            // eligible: ceil((15,901 − 4,049.5) × 20%)
+  assert.equal(out.withoutOffset, 3181);  // ceil(15,901 × 20%)
+  assert.equal(run('none').tax, 3181);
+  assert.equal(run('account').tax, 3181); // different accounts: no netting
   assert.equal(out.sales.filter(s => s.ticker === 'GAIN').length, 2);
   assert.equal(out.sales.find(s => s.ticker === 'NISA').tax, 0);
   near(out.rows.reduce((s, r) => s + r.afterValue, out.cashAfter), out.postTotal);
