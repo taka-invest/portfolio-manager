@@ -346,7 +346,9 @@ async function startScan() {
   // 並列に送っても速くならず、待ち行列があふれて失敗するだけなので、1バッチずつ順に送る。
   const MAX_CONCURRENT = 1;
   const RETRY_WAIT_MS = 3000;
-  let lastError = '';
+  // 取得できなかった銘柄を理由ごとに集める（完了表示で銘柄名を出し、リストの見直しに使う）。
+  const failed = new Map();   // 理由 -> [ticker]
+  const fail = (tickerList, reason) => { if (!failed.has(reason)) failed.set(reason, []); failed.get(reason).push(...tickerList); };
   const batchQueue = [...batches];
   const running = [];
 
@@ -370,7 +372,7 @@ async function startScan() {
       }
       if (Array.isArray(r.data)) {
         for (const item of r.data) {
-          if (item.error) { errors++; lastError = item.error; }
+          if (item.error) { errors++; fail([item.ticker], item.error); }
           else { allResults.push(item); }
           done++;
         }
@@ -378,14 +380,14 @@ async function startScan() {
         // 失敗したバッチも件数に数える（以前は数えずに進捗が止まって見えた）。
         errors += batch.length;
         done   += batch.length;
-        lastError = r.status === 401 ? 'Googleログインが必要です'
+        fail(batch, r.status === 401 ? 'Googleログインが必要です'
           : r.status === 403 ? 'このアカウントには利用許可がありません'
-          : 'サーバーの取得に失敗しました（HTTP ' + r.status + '）';
+          : 'サーバーの取得に失敗しました（HTTP ' + r.status + '）');
       }
     } catch(e) {
       errors += batch.length;
       done   += batch.length;
-      lastError = 'ネットワークに接続できません';
+      fail(batch, 'ネットワークに接続できません');
     }
     updateProgress(done, tickers.length, errors);
     updateStats();
@@ -414,7 +416,8 @@ async function startScan() {
   document.getElementById('scanBtn').disabled = false;
   document.getElementById('scanBtn').textContent = '🔍 スキャン開始';
   document.getElementById('progressLabel').textContent = `スキャン完了 — ${done}銘柄分析`
-    + (errors ? `（取得できなかった銘柄 ${errors}件：${lastError}）` : '');
+    + (errors ? `（取得できなかった銘柄 ${errors}件 — ` + [...failed].map(([reason, list]) =>
+      `${reason}：${list.slice(0, 12).join('、')}${list.length > 12 ? ` ほか${list.length - 12}件` : ''}`).join(' ／ ') + '）' : '');
   document.getElementById('summaryCards').classList.remove('hidden');
   document.getElementById('resultsSection').classList.remove('hidden');
   updateStats();
