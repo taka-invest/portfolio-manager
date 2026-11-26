@@ -87,6 +87,8 @@ test('company guidance: candidates with source, adopt the quarterly figure as a 
   await expect(box).toContainText('8-K 2026-11-03 提出');
   await expect(box.locator('a[href^="https://www.sec.gov/"]')).toHaveAttribute('target', '_blank');
   await expect(box.locator('li[data-guidance="0"]')).toContainText('四半期［Q4 2026］');
+  await expect(box.locator('li[data-guidance="0"]')).toContainText('$2.649B 〜 $2.653B（中央 $2.651B）');   // narrow range stays readable
+  await expect(box.locator('li[data-guidance="1"]')).toContainText('$8.530B 〜 $8.534B');
   await expect(box.locator('li[data-guidance="0"]')).toContainText('コンセンサスは中央値比 -7.6%');   // 2450 vs 2651
   await expect(box.locator('li[data-guidance="1"]')).toContainText('通期（参考）');
   await expect(box.locator('li[data-guidance="1"] button')).toHaveCount(0);                     // full year cannot be a quarter row
