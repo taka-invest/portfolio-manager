@@ -8,7 +8,12 @@
   const KINDS = { stock: '米国個別株', fund: '積立NISA投信', excluded: 'その他・対象外', review: '要確認' };
   const METRICS = ['売上成長率', 'GAAP EPS', '調整後EPS', '営業利益率', 'フリーキャッシュフロー',
     '会社ガイダンス', 'アナリスト予想', 'Forward P/E', '2028年の想定EPS'];
-  const DEFAULT_TARGETS = Object.entries({ NVDA: 15, AVGO: 10, PLTR: 30, APP: 20, SOFI: 5, CRDO: 3, RKLB: 4, SPCX: 3 })
+  // Owner's fixed specification (not user-editable): stock weights and cash target.
+  const FIXED_WEIGHTS = Object.freeze({ NVDA: 15, AVGO: 10, PLTR: 30, APP: 20, SOFI: 5, CRDO: 3, RKLB: 4, SPCX: 3 });
+  const FIXED_CASH = 10;
+  const PLTR_FLOOR = 30;
+  const STAGED = ['NVDA', 'AVGO', 'CRDO'];
+  const DEFAULT_TARGETS = Object.entries(FIXED_WEIGHTS)
     .map(([ticker, pct], i) => ({
       ticker, pct, group: i < 5 ? 'core' : 'satellite', wait: i >= 5, sellCap: ticker === 'PLTR' ? 0 : null
     }));
@@ -77,14 +82,47 @@
     return { ...pick(v, ['id', 'ticker', 'layer', 'targetPct', 'note', 'createdAt', 'completed']), tranches };
   }
 
+  const shareMap = v => record(v) && Object.keys(v).length === STAGED.length &&
+    STAGED.every(k => Number.isSafeInteger(v[k]) && v[k] >= 0);
+
   function stagedFunding(v) {
     if (v == null) return null; // Existing V2.6 workspaces remain compatible.
     assert(record(v) && when(v.startedAt) && record(v.baselineShares), '段階買付計画');
-    const expected = ['NVDA', 'AVGO', 'CRDO'];
-    assert(Object.keys(v.baselineShares).length === expected.length &&
-      expected.every(k => Number.isSafeInteger(v.baselineShares[k]) && v.baselineShares[k] >= 0),
-      '開始時の保有株数');
-    return { startedAt: v.startedAt, baselineShares: pick(v.baselineShares, expected) };
+    assert(shareMap(v.baselineShares), '開始時の保有株数');
+    // The current stage is part of the synced plan (not per-browser), so every PC
+    // computes the same tranche. Older workspaces without it start at stage 1.
+    const stage = v.stage ?? 1;
+    assert([1, 2, 3].includes(stage), '段階買付の現在の段階');
+    const log = v.stageLog ?? [];
+    assert(Array.isArray(log) && log.length <= stage - 1, '段階買付の実行記録');
+    const stageLog = log.map((e, i) => {
+      assert(record(e) && e.stage === i + 1 && when(e.at) && shareMap(e.shares) && typeof e.skipped === 'boolean',
+        '段階買付の実行記録');
+      return { stage: e.stage, at: e.at, shares: pick(e.shares, STAGED), skipped: e.skipped };
+    });
+    return { startedAt: v.startedAt, baselineShares: pick(v.baselineShares, STAGED), stage, stageLog };
+  }
+
+  /** Differences between the saved targets and the owner's fixed specification. */
+  function specIssues(state) {
+    const issues = [];
+    const targets = new Map((state?.targets ?? []).map(t => [t.ticker, t]));
+    for (const [ticker, pct] of Object.entries(FIXED_WEIGHTS)) {
+      const t = targets.get(ticker);
+      if (!t || Math.abs(t.pct - pct) > 1e-9) issues.push(`${ticker}の目標比率は${pct}%（固定仕様）です。`);
+    }
+    for (const t of targets.values())
+      if (!Object.hasOwn(FIXED_WEIGHTS, t.ticker) && t.pct > 0) issues.push(`${t.ticker}は固定配分外のため目標比率0%です。`);
+    if (Math.abs((state?.cashTarget ?? NaN) - FIXED_CASH) > 1e-9) issues.push(`現金目標は${FIXED_CASH}%（固定仕様）です。`);
+    return issues;
+  }
+
+  /** Targets restored to the fixed specification; per-ticker operating settings are kept. */
+  function fixedTargets(targets = []) {
+    const by = new Map(targets.map(t => [t.ticker, t]));
+    const fixed = DEFAULT_TARGETS.map(d => ({ ...d, ...(by.has(d.ticker) ? pick(by.get(d.ticker), ['group', 'wait', 'sellCap']) : {}), pct: d.pct }));
+    const extra = targets.filter(t => !Object.hasOwn(FIXED_WEIGHTS, t.ticker)).map(t => ({ ...t, pct: 0 }));
+    return [...fixed, ...extra];
   }
 
   function trade(v) {
@@ -180,7 +218,8 @@
     };
   }
 
-  const api = { KEY, BACKUP, TYPES, KINDS, METRICS, ticker, date, blank, validate, prepare, copy, readyLot };
+  const api = { KEY, BACKUP, TYPES, KINDS, METRICS, FIXED_WEIGHTS, FIXED_CASH, PLTR_FLOOR, STAGED, ticker, date, blank,
+    validate, prepare, copy, readyLot, specIssues, fixedTargets };
   if (typeof module === 'object' && module.exports) module.exports = api;
   else root.PMData = api;
 })(globalThis);

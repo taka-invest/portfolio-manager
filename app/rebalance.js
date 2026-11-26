@@ -2,7 +2,13 @@
 
 ((root) => {
   const Market = typeof module === 'object' && module.exports ? require('./market.js') : root.PMMarket;
+  const Data = typeof module === 'object' && module.exports ? require('./data.js') : root.PMData;
   const EPS = 1e-8;
+  // Order-grade USD/JPY: a timestamped spot/hourly quote or a broker rate typed in
+  // within 10 minutes. Daily ECB / unverified hourly references are for ② only.
+  const ORDER_FX = ['spot', 'hourly', 'manual'];
+  // Broker commission on US equities (same model as staged funding): 0.495%, max $22 per order.
+  const feeUsd = amount => amount <= 0 ? 0 : Math.min(22, amount * 0.00495);
   const totalOf = (rows, get) => rows.reduce((sum, row) => sum + get(row), 0);
   const stockLots = positions => positions.filter(p => p.kind === 'stock');
   const accountKey = lot => JSON.stringify([lot.broker, lot.account, lot.accountType]);
@@ -195,6 +201,8 @@
     const assetMap = new Map(assets.map(p => [p.ticker, p]));
     const watch = new Set();
     if (fxState !== 'ready') errors.push('USD/JPYの有効な参考レートがありません。');
+    else if (!ORDER_FX.includes(fx?.kind))
+      errors.push('売買株数の計算には、更新時刻の確認できるUSD/JPY、または10分以内に証券会社で確認した手入力レートが必要です（日次ECB参考値では計算しません）。');
     for (const ticker of tickers) {
       const hasPosition = assetMap.has(ticker);
       const needed = hasPosition || targets.get(ticker)?.pct > 0;
@@ -232,7 +240,13 @@
         row.sales = [];
         if (row.jpy == null || row.value <= row.targetAfterTax + EPS) continue;
         const neededShares = (row.value - row.targetAfterTax) / row.jpy;
-        const liquidation = liquidate(row, neededShares, row.t ? row.t.sellCap : 0);
+        let cap = row.t ? row.t.sellCap : 0;
+        if (row.ticker === 'PLTR') {
+          // Fixed rule: a PLTR sale may never take PLTR below 30%, whatever the cap says.
+          const floorCap = Math.max(0, Math.floor((row.value - postTotal * Data.PLTR_FLOOR / 100) / row.jpy + EPS));
+          cap = cap == null ? floorCap : Math.min(cap, floorCap);
+        }
+        const liquidation = liquidate(row, neededShares, cap);
         row.sales = liquidation.sales;
       }
       sales = rows.flatMap(row => row.sales);
@@ -246,9 +260,16 @@
     const withoutOffset = taxEstimate(sales.map(sale => ({ ...sale, tax: 0 })), state.tax.rate, 'none');
     const proceeds = totalOf(sales, s => s.jpy);
     const saleUsd = totalOf(sales, s => s.usd);
+    // Commission per order (one order per ticker and account).
+    const saleOrders = new Map();
+    for (const s of sales) saleOrders.set(s.ticker + s.account, (saleOrders.get(s.ticker + s.account) ?? 0) + s.usd);
+    const saleFeeUsd = totalOf([...saleOrders.values()], feeUsd);
+    const saleFee = saleFeeUsd * fx.rate;
+    postTotal -= saleFee;
     const reserve = postTotal * state.cashTarget / 100;
-    const cashAfterSales = cash + proceeds - tax;
-    const buyBudget = Math.max(0, cashAfterSales - reserve);
+    const cashAfterSales = cash + proceeds - tax - saleFee;
+    // Leave room for buy commissions: at most 0.495% of the amount bought.
+    const buyBudget = Math.max(0, (cashAfterSales - reserve) / 1.00495);
     for (const row of rows) {
       const soldShares = totalOf(row.sales, sale => sale.shares);
       row.order = soldShares > 0 ? -soldShares : 0;
@@ -261,7 +282,10 @@
     allocateBuys(purchaseRows, buyBudget);
 
     const purchased = totalOf(rows.filter(row => row.order > 0), row => row.order * row.jpy);
-    const cashAfter = cashAfterSales - purchased;
+    const buyFeeUsd = totalOf(rows.filter(row => row.order > 0), row => feeUsd(row.order * row.usd));
+    const buyFee = buyFeeUsd * fx.rate;
+    const cashAfter = cashAfterSales - purchased - buyFee;
+    postTotal -= buyFee; // post-trade wealth: after tax and all commissions
     for (const row of rows) {
       const sold = totalOf(row.sales, sale => sale.shares);
       if (sold) {
@@ -283,7 +307,7 @@
     // Currency settlement is indicative: US equity buys/sells occur in USD.
     // Estimated JPY tax is paid first from JPY cash, then converted at the indicative rate.
     const startJpy = state.cash.jpy + (state.cash.extraIncluded ? 0 : state.cash.extraJpy);
-    let cashAfterUsd = state.cash.usd + saleUsd -
+    let cashAfterUsd = state.cash.usd + saleUsd - saleFeeUsd - buyFeeUsd -
       totalOf(rows.filter(row => row.order > 0), row => row.order * row.usd);
     let cashAfterJpy = startJpy - tax;
     if (cashAfterJpy < 0) { cashAfterUsd += cashAfterJpy / fx.rate; cashAfterJpy = 0; }
@@ -292,7 +316,12 @@
     cashAfterJpy = Math.max(0, cashAfterJpy);
     const allocationGap = totalOf(rows, row => Math.abs(row.gapPct)) +
       Math.abs(cashAfter / postTotal * 100 - state.cashTarget);
+    // Guard: never return an order set that breaks the PLTR floor.
+    const pltr = rows.find(r => r.ticker === 'PLTR');
+    if (pltr && pltr.order < 0 && pltr.afterPct + 1e-8 < Data.PLTR_FLOOR)
+      return { errors: ['PLTRの売却後比率が30%を下回るため、売買株数を表示しません。'], assets, equity, cash, total, rows: [], sales: [], pctSum };
     return { errors, assets, equity, cash, total, rows, sales, pctSum, tax, withoutOffset,
+      saleFee, buyFee, fees: saleFee + buyFee,
       reserve, postTotal, cashAfter, cashAfterJpy, cashAfterUsd, cashAfterPct: cashAfter / postTotal * 100,
       saleJpy: proceeds, saleUsd, purchaseJpy: purchased, purchaseUsd: purchased / fx.rate,
       buyBudget, allocationGap, fx };
@@ -315,7 +344,7 @@
     return '\uFEFF' + [header, ...rows].map(row => row.map(v => '"' + String(v).replaceAll('"', '""') + '"').join(',')).join('\r\n');
   }
 
-  const api = { cashValue, aggregate, ideal, simulate, csv, statusText };
+  const api = { cashValue, aggregate, ideal, simulate, csv, statusText, feeUsd, ORDER_FX };
   if (typeof module === 'object' && module.exports) module.exports = api;
   else root.PMRebalance = api;
 })(globalThis);

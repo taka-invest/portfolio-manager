@@ -20,7 +20,7 @@ const lot = (ticker, shares, props = {}) => ({
 function run(fields, values, fx = 100) {
   return R.simulate(base(fields), {
     quotes: Object.fromEntries(Object.entries(values).map(([ticker, price]) => [ticker, quote(price)])),
-    fx: { rate: fx, date: '2026-11-20' }
+    fx: { rate: fx, date: '2026-11-20', kind: 'hourly', at: now }
   }, now);
 }
 function almost(a, b, tolerance = 1e-5) {
@@ -62,8 +62,8 @@ test('funded sell/buy case: tax, reserve, integer lot cap, share orders and JPY/
   assert.equal(Number.isInteger(app.order), true);
   assert.ok(out.cashAfter >= out.reserve - 1e-6);
   almost(out.cashAfter, out.cashAfterJpy + out.cashAfterUsd * out.fx.rate);
-  almost(out.total - out.tax, out.postTotal);
-  almost(out.cash + out.saleJpy - out.tax - out.purchaseJpy, out.cashAfter);
+  almost(out.total - out.tax - out.fees, out.postTotal);
+  almost(out.cash + out.saleJpy - out.tax - out.fees - out.purchaseJpy, out.cashAfter);
   almost(out.rows.reduce((sum, row) => sum + row.afterPct, out.cashAfterPct), 100);
   assert.ok(out.allocationGap > 0, 'cap creates unavoidable tracking error');
 });
@@ -75,7 +75,7 @@ test('no price for waiting SPCX keeps the result safe and shows unknown ideal sh
   });
   const out = R.simulate(state, {
     quotes: { SPCX: { error: 'unverified' }, NVDA: quote(50) },
-    fx: { rate: 100, date: '2026-11-20' }
+    fx: { rate: 100, date: '2026-11-20', kind: 'hourly', at: now }
   }, now);
   assert.deepEqual(out.errors, []);
   const waiting = out.rows.find(x => x.ticker === 'SPCX');
@@ -109,7 +109,7 @@ test('the two before/after donut charts and execution panels render with the sam
 
 test('empty or stale data never produces buy/sell recommendations', () => {
   const blocked = R.simulate(base({ targets: [tgt('NVDA', 90)] }),
-    { quotes: { NVDA: { usd: 50, at: 0 } }, fx: { rate: 100, date: '2026-11-20' } }, now);
+    { quotes: { NVDA: { usd: 50, at: 0 } }, fx: { rate: 100, date: '2026-11-20', kind: 'hourly', at: now } }, now);
   assert.ok(blocked.errors.length);
   assert.deepEqual(blocked.rows, []);
   assert.equal(V.ideal(blocked), '');

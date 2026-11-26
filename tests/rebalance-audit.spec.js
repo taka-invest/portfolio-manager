@@ -11,10 +11,8 @@ function state(confirmed) {
       shares: 20, currency: 'USD', unitCost: 10, costJpy: 20000,
       referenceJpy: null, layer: 1, note: ''
     }],
-    targets: [
-      { ticker: 'PLTR', pct: 30, group: 'core', sellCap: 0, wait: false },
-      { ticker: 'NVDA', pct: 60, group: 'core', sellCap: null, wait: false }
-    ],
+    // Fixed specification (PLTR sell cap 0 by default).
+    targets: D.blank().targets,
     cashTarget: 10,
     cash: { jpy: 10000, usd: 0, extraJpy: 0, extraIncluded: true } };
 }
@@ -27,6 +25,10 @@ async function prepare(page, saved) {
   await page.route('**/*', route => {
     const url = new URL(route.request().url());
     if (url.hostname === '127.0.0.1') return route.continue();
+    // Order-grade spot USD/JPY (③ refuses the daily ECB reference).
+    if (url.hostname === 'www.live-rates.com') {
+      return route.fulfill({ json: [{ currency: 'USD/JPY', bid: 100 - 0.005, ask: 100 + 0.005, timestamp: Date.parse('2026-11-22T12:00:00Z') }] });
+    }
     if (url.hostname === 'api.frankfurter.dev') {
       return route.fulfill({ json: { base: 'USD', quote: 'JPY', date: '2026-11-20', rate: 100 } });
     }
@@ -77,7 +79,8 @@ test('PC: changing allocation without saving pauses stale result until saved', a
   await prepare(page, state(true));
   await page.goto('/portfolio_manager.html#allocation');
   await expect(page.locator('#rebalance-audit [data-audit-status]')).toHaveAttribute('data-audit-status', 'blocked');
-  await page.locator('#target-rows [data-field="pct"]').first().fill('31');
+  // Weights are fixed; any unsaved allocation change (here: the group) still pauses ③.
+  await page.locator('#target-rows [data-field="group"]').first().selectOption('satellite');
   await expect(page.locator('#rebalance-audit [data-audit-status]')).toHaveAttribute('data-audit-status', 'pending');
   await expect(page.locator('#trade-board')).toBeEmpty();
   await expect(page.locator('#csv-export')).toBeDisabled();

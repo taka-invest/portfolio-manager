@@ -24,7 +24,7 @@ const unconfirmed = {
   cashTarget: 10
 };
 const market = { quotes: { PLTR: quote(100), NVDA: quote(50) },
-  fx: { rate: 150, date: '2026-11-20' } };
+  fx: { rate: 150, date: '2026-11-20', kind: 'hourly', at: now } };
 
 test('unconfirmed stock and cash create ideal USD/JPY targets and share counts, not trades', () => {
   const ideal = R.ideal(unconfirmed, market, now);

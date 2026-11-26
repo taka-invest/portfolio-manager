@@ -279,7 +279,7 @@
   .pm-stage-heading { display:flex; align-items:flex-start; justify-content:space-between; flex-wrap:wrap; gap:14px; margin-bottom:12px; }
   .pm-stage-heading h3 { font-size:16px; margin-bottom:6px; }
   .pm-stage-heading label { display:flex; flex-direction:column; gap:4px; }
-  #pm-staged-funding-stage { background:var(--bg3);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:7px 10px; }
+  #pm-staged-funding-stage { color:var(--accent); }
   .pm-stage-grid { display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:12px 0; }
   .pm-stage-grid>div { padding:12px;border:1px solid var(--border);border-radius:8px;background:var(--bg3);min-width:0; }
   .pm-stage-grid small { display:block;color:var(--muted);font-size:11px;margin-bottom:6px; }
@@ -424,7 +424,11 @@
   </nav>
   <section id="allocation" aria-labelledby="allocation-title">
     <div class="pm-heading"><h2 id="allocation-title">① 目標ポートフォリオ配分</h2></div>
-    <p class="pm-muted pm-small">コア・サテライト・現金目標を設定します。下の理想保有額と必要売買に自動反映されます。</p>
+    <p class="pm-muted pm-small">目標比率と現金10%は固定仕様です（NVDA15・AVGO10・PLTR30・APP20・SOFI5・CRDO3・RKLB4・SPCX3）。区分・売却上限・購入待機だけ変更できます。PLTRは売却後30%未満にはなりません。</p>
+    <div class="pm-callout" id="target-spec" data-warn="true" role="alert" hidden>
+      <p id="target-spec-text" style="margin:0 0 8px"></p>
+      <button type="button" id="target-spec-fix" class="btn btn-primary btn-sm">固定仕様に戻す</button>
+    </div>
     <div class="pm-target-preview" id="target-preview" aria-live="polite"></div>
     <form id="targets-form" class="pm-card pm-targets-simple">
       <button type="button" class="btn btn-ghost btn-sm pm-advanced-toggle" id="target-detail-toggle" aria-expanded="false">売却上限・購入待機を表示する</button>
@@ -435,12 +439,12 @@
         </tr></thead><tbody id="target-rows"></tbody></table>
       </div>
       <div class="pm-form pm-spaced">
-        <label>現金目標（%）<input type="number" id="cash-target" min="0" max="100" step="any" required></label>
+        <label>現金目標（%・固定）<input type="number" id="cash-target" readonly></label>
         <div class="pm-actions"><button type="button" id="target-add" class="btn btn-ghost">＋ 銘柄</button>
           <button class="btn btn-primary">配分を保存</button></div>
       </div>
       <p id="target-sum" class="pm-callout" role="status"></p>
-      <p class="pm-muted pm-small pm-target-help">売却上限0株は売却不可です。配分外の保有株を③で売る場合は、①に目標0%で追加し、売却上限を空欄にします。設定を変更しても自動発注はしません。</p>
+      <p class="pm-muted pm-small pm-target-help">売却上限0株は売却不可です。配分外の保有株を③で売る場合は、①に銘柄を追加（目標0%）し、売却上限を空欄にします。設定を変更しても自動発注はしません。</p>
     </form>
   </section>
 
@@ -452,13 +456,8 @@
         <div><h3>PLTR売却資金で動的3段階購入</h3>
           <p class="pm-muted pm-small">各日の目標不足額を時価・為替・保有実績で再計算。累積50% → 80% → 100%で買い付けます。</p></div>
         <div class="pm-actions">
-          <label class="pm-small">今回の段階
-            <select id="pm-staged-funding-stage" aria-label="購入する段階">
-              <option value="1">A日：累積50%</option>
-              <option value="2">B日：累積80%</option>
-              <option value="3">C日：累積100%</option>
-            </select>
-          </label>
+          <p class="pm-small" style="margin:0">今回の段階：<strong id="pm-staged-funding-stage" role="status">未開始</strong></p>
+          <button type="button" id="pm-staged-advance" class="btn btn-ghost" hidden>A日の約定を登録済み → B日へ</button>
           <button type="button" id="pm-staged-start" class="btn btn-primary">買付計画を開始・初期保有を保存</button>
           <button type="button" id="pm-staged-reset" class="btn btn-ghost" hidden>初期保有の記録をリセット</button>
           <button type="button" id="pm-staged-funding-refresh" class="btn btn-primary">最新の株価・為替で再計算</button>
