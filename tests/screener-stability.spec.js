@@ -19,7 +19,7 @@ test('scan sends one batch at a time, retries 429 once and reports failed batche
       inFlight--;
       if (key === 'T10' && attempts.get(key) === 1) return route.fulfill({ status: 429, json: { error: 'busy' } });
       if (key === 'T20') return route.fulfill({ status: 502, json: { error: 'Market data unavailable' } });
-      return route.fulfill({ status: 200, json: { rows: tickers.map(t => ({ ticker: t, name: t, latestQ: '2026-09-30', signalScore: 10, phase: 'phase2', signalFlags: {} })) } });
+      return route.fulfill({ status: 200, json: { rows: tickers.map(t => t === 'T3' ? { ticker: t, error: 'SECの企業一覧に見つかりません' } : ({ ticker: t, name: t, latestQ: '2026-09-30', signalScore: 10, phase: 'phase2', signalFlags: {} })) } });
     }
     if (url.hostname === '127.0.0.1') return route.continue();
     if (url.hostname === 'cdn.tailwindcss.com') return route.continue().catch(() => route.fulfill({ status: 200, contentType: 'text/javascript', body: '' }));
@@ -31,9 +31,11 @@ test('scan sends one batch at a time, retries 429 once and reports failed batche
     return startScan();
   });
   await expect(page.locator('#progressLabel')).toContainText('スキャン完了 — 25銘柄分析');
-  await expect(page.locator('#progressLabel')).toContainText('取得できなかった銘柄 5件');
-  await expect(page.locator('#progressLabel')).toContainText('HTTP 502');
-  await expect(page.locator('#statError')).toHaveText('5');
+  // Failed tickers are named, grouped by reason, so delisted symbols can be removed from the lists.
+  await expect(page.locator('#progressLabel')).toContainText('取得できなかった銘柄 6件');
+  await expect(page.locator('#progressLabel')).toContainText('SECの企業一覧に見つかりません：T3');
+  await expect(page.locator('#progressLabel')).toContainText('（HTTP 502）：T20、T21、T22、T23、T24');
+  await expect(page.locator('#statError')).toHaveText('6');
   expect(maxInFlight).toBe(1);
   expect(attempts.get('T10')).toBe(2);               // 429 → waited and retried once → success
   expect(attempts.get('T20')).toBe(2);               // 502 → retried once → still failing → counted
