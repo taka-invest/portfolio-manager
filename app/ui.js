@@ -61,6 +61,7 @@
     recovering = false;
     afterChange();
     render();
+    root.dispatchEvent(new CustomEvent('pm:state-saved'));
     return true;
   }
 
@@ -150,8 +151,13 @@
     try {
       const { next, samples } = D.prepare(payload, state);
       pending = { next, before: state, source };
+      // A backup from a newer app version may hold fields this page cannot keep.
+      const lost = payload && typeof payload === 'object' && Object.hasOwn(payload, 'version') ? D.droppedKeys(payload) : [];
       $('import-error').hidden = true;
-      $('data-diff').textContent = diff(state, next, samples, source);
+      $('data-diff').textContent = (lost.length ? '⚠ このページの版では保持できない項目があり、取り込むと失われます：'
+        + lost.slice(0, 5).join('、') + (lost.length > 5 ? ' ほか' + (lost.length - 5) + '件' : '')
+        + '\n新しい版で作成されたデータの可能性があります。ページを再読み込みしてから取り込んでください。\n\n' : '')
+        + diff(state, next, samples, source);
       $('data-review').showModal();
     } catch (e) { showNotice(e.message, true); }
   }
