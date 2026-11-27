@@ -3,10 +3,10 @@
 `docs/research/IMPLEMENTATION_ROADMAP.md` の P0 を手元のPCで実行する Python スクリプト群。
 アプリ本体（Firebase）とは独立しており、本番環境には触れない。
 
-## P0-A：データ取得
+## P0-A：データ取得（保存しない）
 
 ```powershell
-python research-engine/fetch_fred.py
+python research-engine/fetch_fred.py      # 各系列の確認だけ（何も保存しない）
 ```
 
 | 系列 | 内容 | 開始日（2026-11-27 確認） |
@@ -16,16 +16,11 @@ python research-engine/fetch_fred.py
 | `NASDAQCOM` | NASDAQ総合 終値 | 1971-02-05 |
 | `DEXJPUS` | USD/JPY（NY正午レート） | 1971-01-04 |
 
-- 取得元：FRED（Federal Reserve Bank of St. Louis）の CSV ダウンロード（`fredgraph.csv`）。**APIキーは不要**
-- 保存先：`data/raw/fred/{ID}.csv` と `{ID}.meta.json`（取得日時・件数・欠損数・開始/終了日・SHA-256）
-- 欠損（休場など）は空欄のまま保持し、0 で埋めない。読み込み時（`data.load`）は欠損行を除く
-- 毎回の取得で、ヘッダーが要求した系列か、日付が増加しているか、値が正の数かを検査する。異常があればその系列は保存しない
-
-## 利用条件（重要）
-
-- **個人・非商用の研究に限る**。NASDAQ系の系列は FRED で「Pre-Approval Required」。個人の非商用利用は可、それ以外は権利者の許可が必要
-- **`data/` は `.gitignore` 済みで、公開リポジトリには入れない**（再配布にあたるため）。`tests/research-engine.test.js` が、追跡されていないことを毎回確認する
-- アプリに渡すのは、集計した結果（分布の要約・件数）だけ（P0-B 以降）
+- 取得元：FRED の CSV ダウンロード（`fredgraph.csv`）。APIキーは不要
+- **FRED の規約（website 規約 (p)）は、書面の同意なく FRED のコンテンツを保存・キャッシュ・アーカイブすることを禁止している**（個人利用の例外の記載なし）。そのため、研究スクリプトは実行のたびにメモリ上へ取得して計算し、**ファイルには保存しない**（`data.py` のキャッシュはプロセスが終わると消える）。`docs/research/DATA_SOURCE_MIGRATION.md` 参照
+- 取得のたびに、ヘッダーが要求した系列か、日付が増加しているか、値が正の数かを検査する
+- 欠損（休場など）は0で埋めず、読み込み時に除く
+- 残すのは集計した結果（`data/results/`、gitignore）だけ。**FRED の値そのもの（VIXの値・指数の値）は結果に入れない**。比率・区分・リターンの統計のみ
 
 ## テスト
 
@@ -46,14 +41,14 @@ python research-engine/vix_event_study.py
 - 仕様：`docs/research/MARKET_TIMING_MODEL_DESIGN.md` §2。パラメーターは `PARAMS`（版 `p0b-1`）で**結果を見る前に固定**。変える場合は版を上げて別の結果として保存する
 - 比べる買い方：S1 翌日に全額／S2 50/30/20（翌日・+11日・+21日）／S3 VIX<20に戻った翌日（最長120営業日）／S4 安値から+5%反発かつVIXが局面最高値の75%以下になった翌日（最長120営業日）
 - 約定はシグナル翌営業日の終値。買付手数料0.495%を控除。待機中の現金は0%。円建ては取得日と評価日のUSD/JPYで換算
-- 出力：`data/results/vix_event_study_p0b-1.json`（**手元のみ・gitignore**）。戦略別・期間別（60/120/250営業日）の中央値・下位5%・最小・プラスの件数・最大逆行幅、S1との差（ブートストラップ95%信頼区間）、イベントごとの結果
+- 出力：`data/results/vix_event_study_p0b-2.json`（**手元のみ・gitignore**。p0b-2 は p0b-1 と同じ計算で、FRED の値を出力から除いた版）。戦略別・期間別（60/120/250営業日）の中央値・下位5%・最小・プラスの件数・最大逆行幅、S1との差（ブートストラップ95%信頼区間）、イベントごとの結果
 - 注意：独立イベントは約30回、比較は 3戦略×3期間×2通貨 の18通り。個々の信頼区間は多重比較を補正していない。NASDAQ-100は配当を含まない価格指数
 
 ## P0-C：相場の状態（レジーム）と過去の分布
 
 ```powershell
 python research-engine/regime_study.py
-node scripts/upload-research.mjs data/results/regime_study_p0c-1.json
+node scripts/upload-research.mjs data/results/regime_study_p0c-2.json
 ```
 
 - 毎営業日を、その日までのデータだけで分類する：トレンド（NASDAQ-100と200日線）、変動（VIX：<15 低／15〜20 通常／20〜30 高／≥30 極端）、下落幅（52週高値から：0〜−10% 浅い／−10〜−20% 調整／−20%超 弱気相場）
@@ -62,4 +57,4 @@ node scripts/upload-research.mjs data/results/regime_study_p0c-1.json
 - 局面が5回未満の比較は「少数（参考外）」とし、画面の見出しは局面が5回以上ある中で最も条件の近い比較にする
 - VIX3M（期間構造）は使わない（2009年以降のみ、Cboeの保存に関する規約）
 - アプリは同じ閾値（結果に保存された `params`）で、自前APIの現在値から今日の状態を判定する。取れなければ研究データの最終日の状態を表示する
-- 版 `p0c-1`。分類ルールとリターンの計算は結果を見る前に固定。局面のまとめ方（20営業日以内は同一局面）は、初回の出力で局面数が過大と分かったため修正した（数値を良く見せるための変更ではない）
+- 版 `p0c-2`（p0c-1 に「トレンド・下落幅」「下落幅」の比較を追加し、FRED の値を出力から除いた版。VIXが取れないときも比較できる）。p0c-1 の時点で、分類ルールとリターンの計算は結果を見る前に固定。局面のまとめ方（20営業日以内は同一局面）は、初回の出力で局面数が過大と分かったため修正した（数値を良く見せるための変更ではない）

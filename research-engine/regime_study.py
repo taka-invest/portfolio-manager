@@ -24,7 +24,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import data as D  # noqa: E402
 from vix_event_study import git_commit, median, quantile  # noqa: E402
 
-VERSION = "p0c-1"
+VERSION = "p0c-2"   # p0c-2: adds trend|depth and depth comparisons (usable without VIX); no FRED values in output
 PARAMS = {
     "ma": 200,
     "highWindow": 252,
@@ -36,7 +36,7 @@ PARAMS = {
     "bootstrap": 2000,
     "seed": 20261127,
 }
-LEVELS = ["trend|vol|depth", "vol|depth", "vol", "all"]
+LEVELS = ["trend|vol|depth", "vol|depth", "vol", "trend|depth", "depth", "all"]
 
 
 def vol_band(vix: float, p=PARAMS) -> str:
@@ -130,8 +130,8 @@ def run(vix_s: pd.Series, px_s: pd.Series, fx_s: pd.Series, p=PARAMS) -> dict:
             groups[f"{level}:{name}"] = g
 
     last = rows.iloc[-1]
-    current = {"date": last["date"].date().isoformat(), "vix": float(last["vix"]), "px": float(last["px"]),
-               "ma": float(last["ma"]), "dd": float(last["dd"]),
+    # Ratios and bands only: no raw FRED values (index level, VIX level) leave this machine.
+    current = {"date": last["date"].date().isoformat(), "pxVsMa": float(last["px"] / last["ma"] - 1), "dd": float(last["dd"]),
                "trend": last["trend"], "vol": last["vol"], "depth": last["depth"],
                "keys": {lv: f"{lv}:{key(last, lv)}" for lv in LEVELS}}
     return {"dates": [rows["date"].iloc[0].date().isoformat(), current["date"]], "groups": groups, "current": current}
@@ -152,7 +152,7 @@ def main() -> int:
     path = res_dir / f"regime_study_{VERSION}.json"
     path.write_text(json.dumps(out, ensure_ascii=False, indent=1), encoding="utf-8")
     c = out["current"]
-    print(f"period={out['dates'][0]}..{out['dates'][1]} groups={len(out['groups'])} current={c['trend']}/{c['vol']}/{c['depth']} (VIX {c['vix']}, dd {c['dd']:.1%}) -> {path}")
+    print(f"period={out['dates'][0]}..{out['dates'][1]} groups={len(out['groups'])} -> {path}")
     return 0
 
 

@@ -1,9 +1,7 @@
-"""No network: parsing, validation and storage of FRED series (P0-A)."""
+"""No network: parsing, validation, and the no-storage rule for FRED series."""
 import io
-import json
 import pathlib
 import sys
-import tempfile
 import unittest
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
@@ -25,46 +23,40 @@ class ParseTests(unittest.TestCase):
     def test_parses_and_keeps_missing_as_none(self):
         rows = F.parse_series(GOOD, "VIXCLS")
         self.assertEqual(rows[0], ("1990-01-02", 17.24))
-        self.assertEqual(rows[2], ("1990-01-04", None))   # empty -> None, not 0
-        self.assertEqual(rows[3], ("1990-01-05", None))   # '.' -> None
+        self.assertEqual(rows[2], ("1990-01-04", None))
+        self.assertEqual(rows[3], ("1990-01-05", None))
         s = F.summarize(rows)
         self.assertEqual((s["rows"], s["observations"], s["missing"]), (5, 3, 2))
-        self.assertEqual((s["first"], s["last"]), ("1990-01-02", "1990-01-08"))
 
     def test_rejects_wrong_series_and_malformed_files(self):
-        with self.assertRaises(F.SeriesError):
-            F.parse_series(GOOD, "NASDAQ100")                                    # header is another series
-        with self.assertRaises(F.SeriesError):
-            F.parse_series("observation_date,VIXCLS\n1990-01-03,1\n1990-01-02,2\n", "VIXCLS")  # not increasing
-        with self.assertRaises(F.SeriesError):
-            F.parse_series("observation_date,VIXCLS\n1990-01-02,abc\n", "VIXCLS")
-        with self.assertRaises(F.SeriesError):
-            F.parse_series("observation_date,VIXCLS\n1990-01-02,0\n", "VIXCLS")  # a price of 0 is an error, not data
-        with self.assertRaises(F.SeriesError):
-            F.parse_series("<html>error</html>", "VIXCLS")
+        for text, sid in [(GOOD, "NASDAQ100"), ("observation_date,VIXCLS\n1990-01-03,1\n1990-01-02,2\n", "VIXCLS"),
+                          ("observation_date,VIXCLS\n1990-01-02,abc\n", "VIXCLS"), ("observation_date,VIXCLS\n1990-01-02,0\n", "VIXCLS"),
+                          ("<html>error</html>", "VIXCLS")]:
+            with self.assertRaises(F.SeriesError):
+                F.parse_series(text, sid)
 
 
-class FetchTests(unittest.TestCase):
-    def test_fetch_writes_csv_and_meta_and_flags_unexpected_start(self):
+class NoStorageTests(unittest.TestCase):
+    def test_fetch_and_load_keep_data_in_memory_only(self):
         seen = []
 
         def opener(req, timeout):
             seen.append((req.full_url, req.get_header("User-agent")))
             return FakeResponse(GOOD.encode())
 
-        with tempfile.TemporaryDirectory() as tmp:
-            out = pathlib.Path(tmp)
-            m = F.fetch("VIXCLS", opener=opener, out_dir=out)
-            self.assertEqual(seen[0][0], "https://fred.stlouisfed.org/graph/fredgraph.csv?id=VIXCLS")
-            self.assertNotIn("@", seen[0][1])                       # no personal contact sent
-            self.assertTrue((out / "VIXCLS.csv").exists())
-            saved = json.loads((out / "VIXCLS.meta.json").read_text(encoding="utf-8"))
-            self.assertEqual(saved["observations"], 3)
-            self.assertTrue(saved["startsAsExpected"])
-            self.assertIn("non-commercial", saved["license"])
-            s = D.load("VIXCLS", raw_dir=out)
-            self.assertEqual(len(s), 3)                              # missing rows dropped, not zero-filled
-            self.assertAlmostEqual(float(s.iloc[-1]), 19.22)
+        before = {p for p in D.ROOT.rglob("*") if "data" in p.parts}
+        rows, meta = F.fetch("VIXCLS", opener=opener)
+        self.assertEqual(seen[0][0], "https://fred.stlouisfed.org/graph/fredgraph.csv?id=VIXCLS")
+        self.assertNotIn("@", seen[0][1])
+        self.assertEqual(meta["observations"], 3)
+        D.clear()
+        s = D.load("VIXCLS", fetcher=lambda sid: (rows, meta))
+        self.assertEqual(len(s), 3)                                   # missing rows dropped, not zero-filled
+        self.assertAlmostEqual(float(s.iloc[-1]), 19.22)
+        after = {p for p in D.ROOT.rglob("*") if "data" in p.parts}
+        self.assertEqual(after, before)                               # nothing written under data/
+        self.assertFalse(hasattr(F, "OUT"))                           # no output directory any more
+        D.clear()
 
     def test_unknown_series_is_refused(self):
         with self.assertRaises(F.SeriesError):

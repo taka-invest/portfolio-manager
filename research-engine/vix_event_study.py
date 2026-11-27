@@ -24,7 +24,7 @@ import pandas as pd
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import data as D  # noqa: E402
 
-VERSION = "p0b-1"
+VERSION = "p0b-2"   # p0b-2: same computation as p0b-1; output no longer contains FRED values
 PARAMS = {
     "threshold": 30.0,          # VIX close >= threshold starts an event
     "quiet": 20,                # ... and the previous `quiet` trading days were all below it
@@ -156,7 +156,7 @@ def run(vix_s: pd.Series, px_s: pd.Series, fx_s: pd.Series, p=PARAMS) -> dict:
 
     per_event = []
     for t0 in events:
-        row = {"t0": dates[t0], "vix": vix[t0], "strategies": {}}
+        row = {"t0": dates[t0], "strategies": {}}   # no raw FRED values (VIX level) in the output
         for k in STRATEGIES:
             fills = tranches(t0, k, vix, px, p)
             fired = signal_day(t0, vix, px, k, p)[1] if k in ("S3", "S4") else True
