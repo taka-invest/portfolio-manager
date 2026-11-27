@@ -326,3 +326,6 @@ body.light { color-scheme: light; }
 .pm-study-switch { margin: 8px 0; flex-wrap: wrap; }
 .pm-study-notes { margin-top: 8px; padding-left: 1.2em; }
 .pm-study-table td:last-child { min-width: 9em; white-space: normal; }
+.pm-regime-now { font-size: 1.05em; margin: 4px 0; }
+.pm-regime-pick th, .pm-regime-pick td { font-weight: 700; background: rgba(99,102,241,.10); }
+.pm-regime-table th[scope="row"] { text-align: left; }
