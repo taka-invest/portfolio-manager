@@ -555,6 +555,10 @@
   <section id="market" aria-labelledby="market-title">
     <div class="pm-heading"><h2 id="market-title">市場センチメント・監視指標</h2></div>
     <p id="pm-market-source" class="pm-callout pm-small" role="status" hidden></p>
+    <div class="pm-card" id="research-regime">
+      <h3>現在の相場の状態と、過去に同じ状態だった日からの値動き</h3>
+      <div id="research-regime-body" aria-live="polite"><p class="pm-muted">読み込み中…</p></div>
+    </div>
     <div class="pm-card" id="research-vix">
       <h3>研究結果：VIXが30を超えた局面での買い方の比較</h3>
       <div id="research-vix-body" aria-live="polite"><p class="pm-muted">読み込み中…</p></div>
@@ -1052,6 +1056,7 @@
 <script src="app/staged-funding.js"></script>
 <script src="app/today-guide.js"></script>
 <script src="app/research-results.js"></script>
+<script src="app/market-regime.js"></script>
 <script src="app/navigation.js"></script>
 <script src="app/api.js"></script>
 <script src="app/market-data.js"></script>

@@ -13,14 +13,25 @@ import { resolve } from 'node:path';
 
 const require = createRequire(import.meta.url);
 const PROJECT = 'finance-base-edcc7';
-const ID = 'vix-event-study';
+// Result version prefix -> document id and the fields such a result must have.
+const TYPES = {
+  p0b: { id: 'vix-event-study', keys: ['summary', 'perEvent'] },
+  p0c: { id: 'market-regime', keys: ['groups', 'current'] }
+};
 const MAX_BYTES = 900_000;
 const root = resolve(import.meta.dirname, '..');
 
+export function docId(result) {
+  const m = /^(p0[bc])-\d+$/.exec(String(result?.version));
+  if (!m) throw new Error('unexpected version ' + result?.version);
+  return TYPES[m[1]].id;
+}
+
 export function prepare(result) {
-  for (const k of ['version', 'params', 'summary', 'perEvent', 'dates', 'computedAt'])
-    if (!(k in result)) throw new Error('not a research result: missing ' + k);
-  if (!/^p0b-\d+$/.test(result.version)) throw new Error('unexpected version ' + result.version);
+  const m = /^(p0[bc])-\d+$/.exec(String(result?.version));
+  if (!m) throw new Error('unexpected version ' + result?.version);
+  for (const k of ['version', 'params', 'dates', 'computedAt', ...TYPES[m[1]].keys])
+    if (result[k] == null) throw new Error('not a research result: missing ' + k);
   const json = JSON.stringify(result);
   if (Buffer.byteLength(json) > MAX_BYTES) throw new Error('result too large for one document');
   return {
@@ -39,7 +50,9 @@ async function main() {
   const uidIdx = args.indexOf('--uid');
   const dry = args.includes('--dry-run');
   if (!file) { console.error('Usage: node scripts/upload-research.mjs <result.json> [--uid <uid>] [--dry-run]'); process.exit(2); }
-  const body = prepare(JSON.parse(readFileSync(resolve(file), 'utf8')));
+  const result = JSON.parse(readFileSync(resolve(file), 'utf8'));
+  const body = prepare(result);
+  const ID = docId(result);
 
   const auth = require('firebase-tools/lib/auth.js');
   const { requireAuth } = require('firebase-tools/lib/requireAuth.js');
