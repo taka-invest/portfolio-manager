@@ -84,3 +84,22 @@ test('summary line for the dashboard', () => {
   assert.match(s.text, /売 PLTR \d+株/);
   assert.equal(G.summary(guide(base({ confirmed: false }))).warn, true);
 });
+
+test('research reference line: regime vs baseline, VIX study only in an event or with a staged plan', () => {
+  const regime = { state: { trend: '下落', vol: '高', depth: '調整', vix: 26.8, dd: -0.166 }, horizon: '60', pickName: 'トレンド・変動・下落幅がすべて同じ',
+    pick: { c: { median: 0.026, medianCI95: [-0.077, 0.13], episodes: 17, q05: -0.363 } }, base: { median: 0.046, q05: -0.175 } };
+  const study = { params: { threshold: 30 }, summary: { 120: { events: 30,
+    S2: { jpy: { diffVsS1: { mean: -0.007, meanCI95: [-0.022, 0.008] } } }, S3: { jpy: { diffVsS1: { mean: -0.079, meanCI95: [-0.135, -0.012] } } } } } };
+  const [line] = G.researchNote(regime, study);
+  assert.match(line, /下落トレンド・変動 高（VIX 26\.8）・調整（52週高値から -16\.6%）/);
+  assert.match(line, /中央値 \+2\.6%（95%区間 -7\.7%〜\+13\.0%、局面17回）／全期間 \+4\.6% → 普段と差があるとは言えない/);
+  assert.match(line, /下位5%は -36\.3%（全期間 -17\.5%）/);
+  assert.equal(G.researchNote(regime, study).length, 1);                              // VIX 26.8 < 30, no staged plan
+  const staged = G.researchNote(regime, study, { staged: true });
+  assert.match(staged[1], /分割と翌日一括の差は平均 -0\.7%（差があるとは言えない）.*VIX<20まで待つのは平均 -7\.9%（不利（差あり））/);
+  const inEvent = G.researchNote({ ...regime, state: { ...regime.state, vix: 33.5, vol: '極端' } }, study);
+  assert.equal(inEvent.length, 2);
+  assert.deepEqual(G.researchNote(null, null), []);                                    // nothing loaded: no line
+  const higher = G.researchNote({ ...regime, pick: { c: { ...regime.pick.c, medianCI95: [0.06, 0.2] } } }, null)[0];
+  assert.match(higher, /普段より高め/);
+});

@@ -73,3 +73,21 @@ test('a staged plan replaces ③ for today and says what to press after the fill
   await expect(page.locator('#pm-staged-funding-result')).toContainText('A日・累積到達率');
   await expect(page.locator('#pm-staged-funding-result')).not.toContainText('第1弾');
 });
+
+test('research reference appears in the guide once the research loads (orders unchanged)', async ({ page }) => {
+  const regime = { version: 'p0c-1', dates: ['1990-12-28', '2026-11-24'], levels: ['trend|vol|depth', 'vol|depth', 'vol', 'all'], assumptions: [],
+    params: { ma: 200, highWindow: 252, minEpisodes: 5, vixBands: [[15, '低'], [20, '通常'], [30, '高'], [null, '極端']], depthBands: [[-0.1, '浅い'], [-0.2, '調整'], [null, '弱気相場']] },
+    current: { date: '2026-11-24', trend: '下落', vol: '高', depth: '調整', vix: 26.4, px: 93, ma: 100, dd: -0.16 },
+    groups: { 'trend|vol|depth:下落・高・調整': { days: 288, episodes: 18, horizons: { 60: { jpy: { n: 280, episodes: 17, median: 0.026, q05: -0.363, q95: 0.2, positive: 0.6, medianCI95: [-0.077, 0.13] } } } },
+      'all:全期間': { days: 9000, episodes: 1, horizons: { 60: { jpy: { n: 9000, episodes: 1, median: 0.046, q05: -0.175, q95: 0.24, positive: 0.66, medianCI95: null } } } } } };
+  await page.addInitScript(json => { window.PMCloud = { idToken: async () => 'h.p.s', readResearch: async id => id === 'market-regime' ? { json } : null }; }, JSON.stringify(regime));
+  await setUp(page);
+  await page.goto('/portfolio_manager.html#today');
+  const guide = page.locator('#today-guide');
+  await expect(guide.locator('.pm-today-title')).toHaveText('③の売買案');
+  const before = await guide.locator('.pm-today-orders').innerText();
+  await expect(guide.locator('.pm-today-research')).toContainText('相場の参考：下落トレンド');   // live API unavailable in test -> study's last date
+  await expect(guide.locator('.pm-today-research')).toContainText('普段と差があるとは言えない');
+  await expect(guide.locator('.pm-today-research a[href="#market"]')).toBeVisible();
+  expect(await guide.locator('.pm-today-orders').innerText()).toBe(before);                      // orders untouched
+});
