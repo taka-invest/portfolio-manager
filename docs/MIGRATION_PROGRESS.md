@@ -318,7 +318,7 @@ etlifyunctions` 2026-09-17版）→ `functions/src/legacy/`: analyze / screener
 - PR #47：`docs/research/` に競合比較・データ実現性・ギャップ分析・優先順位・買い場モデル仕様・ロードマップ（調査・設計のみ）。重要事項：本番の株価・VIX取得に使うYahoo非公式エンドポイントは規約で自動収集が禁止（P0-Eで移行方針を決める）
 - PR #48（P0-A）：`research-engine/fetch_fred.py` で FRED の VIXCLS・NASDAQ100・NASDAQCOM・DEXJPUS を取得（APIキー不要）。生データは `data/`（gitignore）のみ、公開リポジトリに入れない
 - PR #49（P0-B）：`research-engine/vix_event_study.py`（版 p0b-1、パラメーターは結果を見る前に固定）。1990〜2026のVIX≥30の局面31回で、翌日全額・50/30/20分割・VIX<20待ち・反発確認を比較。120営業日後・円建てで、待つ方法は平均−7.9%（95%区間 −13.5〜−1.2、良かったのは30回中6回）、分割は差なし（−0.7%、区間は0をまたぐ）
-- PR #50（P0-B2）：市場分析に研究結果カード。Firestore `users/{uid}/research/{docId}`（本人のみ読み取り・書き込み不可）のルールを本番反映、`scripts/upload-research.mjs` で結果（約55KB）を本人専用ドキュメントに保存、Hostingを本番公開 → スモーク 50/50、ルールテスト14/14。ログイン後の表示はオーナー確認待ち
+- PR #50（P0-B2）：市場分析に研究結果カード。Firestore `users/{uid}/research/{docId}`（本人のみ読み取り・書き込み不可）のルールを本番反映、`scripts/upload-research.mjs` で結果（約55KB）を本人専用ドキュメントに保存、Hostingを本番公開 → スモーク 50/50、ルールテスト14/14。**オーナーがログイン後の画面で研究結果カード（判定・進行中の局面を含む）の表示を確認** ✅
 - 次：P0-C（市場レジーム判定と過去分布）、P0-D（今日やること・段階買付への連携）、P0-E（Yahoo移行方針）
 
 ## ユーザー対応待ち（ブロッカー）
