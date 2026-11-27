@@ -12,22 +12,28 @@
   function volBand(vix, p) { for (const [upper, label] of p.vixBands) if (upper == null || vix < upper) return label; return null; }
   function depthBand(dd, p) { for (const [lower, label] of p.depthBands) if (lower == null || dd > lower) return label; return null; }
 
-  /** Classify from daily closes (oldest first) and the latest VIX, using the study's params. */
+  /** Classify from daily closes (oldest first) and the latest VIX (optional), using the study's params.
+   *  Without a VIX the volatility band is null and only trend/drawdown comparisons are used. */
   function classify(closes, vix, p) {
     const c = closes.filter(x => Number.isFinite(x) && x > 0);
-    if (c.length < Math.max(p.ma, p.highWindow) || !Number.isFinite(vix)) return null;
+    if (c.length < Math.max(p.ma, p.highWindow)) return null;
+    const hasVix = Number.isFinite(vix);
     const px = c[c.length - 1];
     const ma = c.slice(-p.ma).reduce((a, b) => a + b, 0) / p.ma;
     const high = Math.max(...c.slice(-p.highWindow));
     const dd = px / high - 1;
-    return { px, ma, dd, vix, trend: px >= ma ? '上昇' : '下落', vol: volBand(vix, p), depth: depthBand(dd, p) };
+    return { pxVsMa: px / ma - 1, dd, vix: hasVix ? vix : null, trend: px >= ma ? '上昇' : '下落', vol: hasVix ? volBand(vix, p) : null, depth: depthBand(dd, p) };
   }
 
   const keyOf = (state, level) => level === 'all' ? 'all:全期間' : level + ':' + level.split('|').map(f => state[f]).join('・');
+  /** Comparisons usable for this state: without a volatility band, skip the levels that need it. */
+  const levelsFor = (r, state) => r.levels.filter(l => state.vol || !l.split('|').includes('vol'));
+  const vsMa = s => Number.isFinite(s.pxVsMa) ? s.pxVsMa : (Number.isFinite(s.px) && Number.isFinite(s.ma) ? s.px / s.ma - 1 : null);
+  Object.assign(LEVEL_NAMES, { 'trend|depth': 'トレンド・下落幅が同じ', depth: '下落幅が同じ' });
 
   function html(r, state, source, horizon = '60', ccy = 'jpy') {
     const p = r.params;
-    const rows = r.levels.map(level => {
+    const rows = levelsFor(r, state).map(level => {
       const g = r.groups[keyOf(state, level)];
       const c = g?.horizons?.[horizon]?.[ccy];
       return { level, g, c };
@@ -42,8 +48,8 @@
         : '<td colspan="7" class="pm-muted">過去に該当する日がありません</td>'}</tr>`).join('');
     const btn = (k, v, label, cur) => `<button type="button" class="btn btn-ghost btn-sm${v === cur ? ' pm-study-active' : ''}" data-${k}="${v}" aria-pressed="${v === cur}">${label}</button>`;
     return `
-      <p class="pm-regime-now"><strong>${esc(state.trend)}トレンド</strong>（200日線比 ${pct(state.px / state.ma - 1)}）・
-        <strong>変動 ${esc(state.vol)}</strong>（VIX ${state.vix.toFixed(1)}）・<strong>${esc(state.depth)}</strong>（52週高値から ${pct(state.dd)}）</p>
+      <p class="pm-regime-now"><strong>${esc(state.trend)}トレンド</strong>（200日線比 ${pct(vsMa(state))}）・
+        ${state.vol ? `<strong>変動 ${esc(state.vol)}</strong>${Number.isFinite(state.vix) ? `（VIX ${state.vix.toFixed(1)}）` : ''}・` : '<span class="pm-muted">変動：VIXの取得元がないため判定なし</span>・'}<strong>${esc(state.depth)}</strong>（52週高値から ${pct(state.dd)}）</p>
       <p class="pm-muted pm-small">${esc(source)}</p>
       <div class="pm-actions pm-study-switch">
         ${btn('rh', '20', '20営業日後', horizon)}${btn('rh', '60', '60営業日後', horizon)}${btn('rh', '250', '250営業日後', horizon)}
@@ -82,7 +88,7 @@
       const closes = ndx?.chart?.result?.[0]?.indicators?.quote?.[0]?.close || [];
       const v = (vix?.chart?.result?.[0]?.indicators?.quote?.[0]?.close || []).filter(Number.isFinite).pop();
       const ts = (ndx?.chart?.result?.[0]?.timestamp || []).filter(Number.isFinite).pop();
-      const s = classify(closes, v, p);
+      const s = classify(closes, Number.isFinite(v) ? v : null, p);
       return s ? { state: s, at: ts ? new Date(ts * 1000) : null } : null;
     } catch { return null; }
   }
@@ -117,7 +123,7 @@
   function summary(h = '60', c = 'jpy') {
     if (!result || !state) return null;
     const p = result.params;
-    const rows = result.levels.map(level => ({ level, c: result.groups[keyOf(state, level)]?.horizons?.[h]?.[c] }));
+    const rows = levelsFor(result, state).map(level => ({ level, c: result.groups[keyOf(state, level)]?.horizons?.[h]?.[c] }));
     const pick = rows.find(x => x.c && x.c.episodes >= p.minEpisodes && x.level !== 'all');
     const base = rows.find(x => x.level === 'all')?.c || null;
     return { state, source, horizon: h, pick: pick || null, pickName: pick ? LEVEL_NAMES[pick.level] : null, base };

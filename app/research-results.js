@@ -34,7 +34,7 @@
     }).join('');
     const pending = (r.perEvent || []).filter(e => e.strategies?.S1?.[horizon] == null);
     const events = (r.perEvent || []).filter(e => e.strategies?.S1?.[horizon] != null).map(e =>
-      `<tr><td>${esc(e.t0)}</td><td>${Number(e.vix).toFixed(1)}</td>${Object.keys(NAMES).map(k => `<td>${pct(e.strategies[k][horizon]?.[ccy])}</td>`).join('')}
+      `<tr><td>${esc(e.t0)}</td>${Object.keys(NAMES).map(k => `<td>${pct(e.strategies[k][horizon]?.[ccy])}</td>`).join('')}
         <td>${esc(e.strategies.S3.firstFill || '—')}${e.strategies.S3.signalFired ? '' : '（期限）'}</td><td>${esc(e.strategies.S4.firstFill || '—')}</td></tr>`).join('');
     const btn = (key, val, label, cur) => `<button type="button" class="btn btn-ghost btn-sm${val === cur ? ' pm-study-active' : ''}" data-${key}="${val}" aria-pressed="${val === cur}">${label}</button>`;
     return `
@@ -47,9 +47,9 @@
         <thead><tr><th scope="col">買い方</th><th scope="col">中央値</th><th scope="col">プラスの回数</th><th scope="col">下位5%</th><th scope="col">最悪</th>
           <th scope="col">買った後の最大下落（中央値）</th><th scope="col">買うまで（中央値）</th><th scope="col">S1との差（平均）</th><th scope="col">S1より良かった回数</th><th scope="col">判定</th></tr></thead>
         <tbody>${rows}</tbody></table></div>
-      ${pending.length ? `<p class="pm-callout pm-small" data-warn="true">集計に入っていない進行中の局面：${pending.map(e => `${esc(e.t0)}（VIX ${Number(e.vix).toFixed(1)}）`).join('、')}</p>` : ''}
+      ${pending.length ? `<p class="pm-callout pm-small" data-warn="true">集計に入っていない進行中の局面：${pending.map(e => esc(e.t0) + (Number.isFinite(e.vix) ? `（VIX ${Number(e.vix).toFixed(1)}）` : '')).join('、')}</p>` : ''}
       <details class="pm-card pm-extra-details"><summary>局面ごとの結果（${n}回）</summary>
-        <div class="pm-wrap" tabindex="0"><table class="pos-table"><thead><tr><th>開始日</th><th>VIX</th>${Object.keys(NAMES).map(k => `<th>${k}</th>`).join('')}<th>S3の購入日</th><th>S4の購入日</th></tr></thead><tbody>${events}</tbody></table></div>
+        <div class="pm-wrap" tabindex="0"><table class="pos-table"><thead><tr><th>開始日</th>${Object.keys(NAMES).map(k => `<th>${k}</th>`).join('')}<th>S3の購入日</th><th>S4の購入日</th></tr></thead><tbody>${events}</tbody></table></div>
       </details>
       <ul class="pm-muted pm-small pm-study-notes">
         ${(r.assumptions || []).map(a => `<li>${esc(a)}</li>`).join('')}

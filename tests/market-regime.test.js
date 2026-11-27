@@ -18,7 +18,21 @@ test('classification uses the study thresholds (same boundaries as the Python te
   // Just inside each boundary (exactly -10%/-20% is decided by float rounding, identically in Python and JS).
   assert.deepEqual([100, 90.01, 89.99, 85, 79.99, 50].map(depth), ['浅い', '浅い', '調整', '調整', '弱気相場', '弱気相場']);
   assert.equal(M.classify([100, 100], 20, PARAMS), null);                 // not enough history: no guess
-  assert.equal(M.classify([100, 100, 100, 100], NaN, PARAMS), null);
+  // No VIX source: trend and drawdown are still classified, the volatility band stays empty (not guessed).
+  const noVix = M.classify([100, 110, 120, 90], null, PARAMS);
+  assert.deepEqual([noVix.trend, noVix.vol, noVix.depth, noVix.vix], ['下落', null, '弱気相場', null]);
+});
+
+test('without VIX the card uses only trend/drawdown comparisons and says why', () => {
+  const r = { ...RESULT, levels: ['trend|vol|depth', 'vol|depth', 'vol', 'trend|depth', 'depth', 'all'], groups: { ...RESULT.groups,
+    'trend|depth:下落・調整': { days: 900, episodes: 40, horizons: { 60: cell(40, 0.03, [-0.02, 0.08]) } } } };
+  const state = { trend: '下落', vol: null, vix: null, depth: '調整', pxVsMa: -0.07, dd: -0.16 };
+  const h = M.html(r, state, '自前API', '60', 'jpy');
+  assert.match(h, /VIXの取得元がないため判定なし/);
+  assert.doesNotMatch(h, /data-level="vol/);
+  assert.doesNotMatch(h, /data-level="trend\|vol/);
+  assert.match(h, /<tr data-level="trend\|depth" class="pm-regime-pick">/);
+  assert.match(h, /200日線比 -7\.0%/);
 });
 
 const cell = (episodes, median, ci) => ({ jpy: { n: 100, episodes, median, mean: median, q05: -0.3, q95: 0.25, positive: 0.6, medianCI95: ci }, usd: null });

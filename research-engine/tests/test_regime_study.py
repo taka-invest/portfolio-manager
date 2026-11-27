@@ -57,3 +57,20 @@ class RunTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class NoRawValuesTests(unittest.TestCase):
+    def test_outputs_carry_ratios_and_bands_but_no_raw_fred_values(self):
+        px = [100, 100, 100, 100, 110, 121, 133.1, 140]
+        fx = pd.Series([150.0] * 8, index=pd.bdate_range("2020-01-01", periods=8))
+        out = R.run(pd.Series([14.0] * 8, index=fx.index), pd.Series(px, index=fx.index, dtype=float), fx, P)
+        c = out["current"]
+        for k in ("vix", "px", "ma"):
+            self.assertNotIn(k, c)
+        self.assertAlmostEqual(c["pxVsMa"], 140 / ((121 + 133.1 + 140) / 3) - 1)
+        self.assertIn("trend|depth:" + c["trend"] + "・" + c["depth"], out["groups"])
+        import vix_event_study as S
+        ev = S.run(pd.Series(([15] * 25 + [35] + [15] * 40) * 2, index=pd.bdate_range("2020-01-01", periods=132), dtype=float),
+                   pd.Series([100 + i * 0.1 for i in range(132)], index=pd.bdate_range("2020-01-01", periods=132)),
+                   pd.Series([150.0] * 132, index=pd.bdate_range("2020-01-01", periods=132)), {**S.PARAMS, "horizons": [5], "bootstrap": 50})
+        self.assertTrue(all("vix" not in e for e in ev["perEvent"]))

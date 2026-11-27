@@ -1,27 +1,23 @@
-"""Download the daily series used by the market-timing research (P0-A) from FRED.
+"""Fetch the daily FRED series used by the market-timing research - IN MEMORY ONLY.
 
-Personal, non-commercial research only. Raw data is written under data/ (git-ignored):
-several of these series are "pre-approval required" on FRED (NASDAQ indices) and may
-not be redistributed, and this repository is public. Only aggregated results leave
-this machine. See docs/research/COMPETITOR_FEATURE_AUDIT.md section 5.
+FRED's terms (fred.stlouisfed.org/legal, item (p)) prohibit storing, caching or archiving
+FRED content without written consent. So nothing is written to disk: each research run
+downloads the few series it needs for personal, non-commercial use, computes, and keeps
+only aggregated statistics that do not contain FRED values. See
+docs/research/DATA_SOURCE_MIGRATION.md.
 
-Usage:  python research-engine/fetch_fred.py            (all series)
-        python research-engine/fetch_fred.py VIXCLS     (one series)
+Usage:  python research-engine/fetch_fred.py   (prints a check of each series; saves nothing)
 """
 from __future__ import annotations
 
 import datetime as dt
 import hashlib
-import json
-import pathlib
 import sys
 import time
 import urllib.request
 
-ROOT = pathlib.Path(__file__).resolve().parents[1]
-OUT = ROOT / "data" / "raw" / "fred"
 URL = "https://fred.stlouisfed.org/graph/fredgraph.csv?id={id}"
-USER_AGENT = "portfolio-research/0.1 (personal, non-commercial)"
+USER_AGENT = "portfolio-research/0.2 (personal, non-commercial)"
 
 # id -> (description, first date expected from FRED as checked on 2026-11-27)
 SERIES = {
@@ -84,45 +80,37 @@ def summarize(rows: list[tuple[str, float | None]]) -> dict:
     }
 
 
-def fetch(series_id: str, *, opener=urllib.request.urlopen, out_dir: pathlib.Path = OUT, now=None) -> dict:
-    """Download, validate and store one series; returns its metadata."""
+def fetch(series_id: str, *, opener=urllib.request.urlopen, now=None) -> tuple[list[tuple[str, float | None]], dict]:
+    """Download and validate one series in memory; returns (rows, metadata). Writes nothing."""
     if series_id not in SERIES:
         raise SeriesError(f"unknown series {series_id}")
     url = URL.format(id=series_id)
     req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
     with opener(req, timeout=60) as res:
         body = res.read()
-    text = body.decode("utf-8")
-    rows = parse_series(text, series_id)
+    rows = parse_series(body.decode("utf-8"), series_id)
     meta = {
         "id": series_id,
-        "description": SERIES[series_id][0],
         "source": "FRED, Federal Reserve Bank of St. Louis",
-        "url": url,
         "fetchedAt": (now or dt.datetime.now(dt.timezone.utc)).isoformat(timespec="seconds"),
         "sha256": hashlib.sha256(body).hexdigest(),
         **summarize(rows),
         "expectedFirst": SERIES[series_id][1],
-        "license": "Personal, non-commercial research. Do not redistribute (FRED terms; NASDAQ series are pre-approval required).",
     }
     meta["startsAsExpected"] = meta["first"] == meta["expectedFirst"]
-    out_dir.mkdir(parents=True, exist_ok=True)
-    (out_dir / f"{series_id}.csv").write_bytes(body)
-    (out_dir / f"{series_id}.meta.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
-    return meta
+    return rows, meta
 
 
 def main(argv: list[str]) -> int:
-    ids = argv or list(SERIES)
     failed = 0
-    for i, sid in enumerate(ids):
+    for i, sid in enumerate(argv or list(SERIES)):
         if i:
-            time.sleep(1.0)  # be polite: a handful of requests, one per second
+            time.sleep(1.0)
         try:
-            m = fetch(sid)
+            _, m = fetch(sid)
             flag = "" if m["startsAsExpected"] else f"  ! first date differs from expected {m['expectedFirst']}"
-            print(f"{sid:10} {m['first']} .. {m['last']}  obs={m['observations']} missing={m['missing']}{flag}")
-        except Exception as e:  # report and continue with the other series
+            print(f"{sid:10} {m['first']} .. {m['last']}  obs={m['observations']} missing={m['missing']}{flag}  (not saved)")
+        except Exception as e:
             failed += 1
             print(f"{sid:10} FAILED: {e}", file=sys.stderr)
     return 1 if failed else 0

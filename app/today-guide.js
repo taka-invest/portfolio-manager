@@ -103,7 +103,8 @@
     const lines = [];
     if (regime && regime.state) {
       const s = regime.state;
-      let line = `相場の参考：${s.trend}トレンド・変動 ${s.vol}（VIX ${Number(s.vix).toFixed(1)}）・${s.depth}（52週高値から ${pct(s.dd)}）。`;
+      const vol = s.vol ? `変動 ${s.vol}${Number.isFinite(s.vix) ? `（VIX ${Number(s.vix).toFixed(1)}）` : ''}・` : '';
+      let line = `相場の参考：${s.trend}トレンド・${vol}${s.depth}（52週高値から ${pct(s.dd)}）。`;
       const c = regime.pick?.c, b = regime.base;
       if (c && b) {
         const ci = c.medianCI95;
@@ -116,7 +117,7 @@
     }
     const sm = study?.summary?.['120'];
     const threshold = study?.params?.threshold ?? 30;
-    const inEvent = regime?.state && Number(regime.state.vix) >= threshold;
+    const inEvent = !!regime?.state && Number.isFinite(regime.state.vix) && regime.state.vix >= threshold;
     if (sm && (inEvent || staged)) {
       const d2 = sm.S2?.jpy?.diffVsS1, d3 = sm.S3?.jpy?.diffVsS1;
       const v = d => !d ? '' : d.meanCI95[1] < 0 ? '不利（差あり）' : d.meanCI95[0] > 0 ? '有利（差あり）' : '差があるとは言えない';
