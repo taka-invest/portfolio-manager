@@ -66,6 +66,14 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    // Research results (aggregated statistics computed on the owner's PC by
+    // research-engine/, uploaded with scripts/upload-research.mjs via the Firebase CLI
+    // login). Clients may only read their own; they can never write them.
+    match /users/{userId}/research/{docId} {
+      allow read: if owner(userId);
+      allow write: if false;
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }

@@ -272,7 +272,17 @@ export async function init() {
       if (!headless) status('ローカルEmulatorに接続しています（本番データには触れません）。');
     }
     // Wait until the persisted sign-in has been restored before deciding "not logged in".
-    window.PMCloud = { idToken: async () => { await auth.authStateReady(); return auth.currentUser ? auth.currentUser.getIdToken() : null; } };
+    window.PMCloud = {
+      idToken: async () => { await auth.authStateReady(); return auth.currentUser ? auth.currentUser.getIdToken() : null; },
+      // Aggregated research results written by scripts/upload-research.mjs (read-only for the client).
+      readResearch: async id => {
+        await auth.authStateReady();
+        const u = auth.currentUser;
+        if (!u || !/^[a-z0-9-]{1,60}$/.test(id)) return null;
+        const snap = await store.getDocFromServer(store.doc(db, 'users', u.uid, 'research', id));
+        return snap.exists() ? snap.data() : null;
+      }
+    };
     ready(window.PMCloud);
     if (headless) return;
     el('pm-cloud-login').addEventListener('click', login);

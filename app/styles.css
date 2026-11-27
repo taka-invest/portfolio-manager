@@ -316,3 +316,13 @@ body.light { color-scheme: light; }
 .pm-today-side[data-side="buy"] { color: var(--green, #059669); }
 .pm-today-notes { margin: 8px 0 0; padding-left: 1.2em; }
 .pm-today-orders li { font-size: 1.05em; }
+
+/* 研究結果 */
+.pm-study-table th[scope="row"] { text-align: left; white-space: nowrap; }
+.pm-study-better { color: var(--green, #059669); font-weight: 700; }
+.pm-study-worse { color: var(--red, #dc2626); font-weight: 700; }
+.pm-study-none { color: var(--muted, #888); }
+.pm-study-active { outline: 2px solid var(--accent, #6366f1); }
+.pm-study-switch { margin: 8px 0; flex-wrap: wrap; }
+.pm-study-notes { margin-top: 8px; padding-left: 1.2em; }
+.pm-study-table td:last-child { min-width: 9em; white-space: normal; }
