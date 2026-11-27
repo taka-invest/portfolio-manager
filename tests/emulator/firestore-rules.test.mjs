@@ -156,3 +156,14 @@ test('owner can look up the backup of a given revision (lost-update diff); other
   if (snap.size !== 1) throw new Error('expected one backup, got ' + snap.size);
   await assertFails(getDocs(q(workspace(OTHER))));
 });
+
+test('research results: the owner can read their own, nobody can write, others cannot read', async () => {
+  await env.withSecurityRulesDisabled(async ctx => {
+    await setDoc(doc(ctx.firestore(), 'users', OWNER, 'research', 'vix-event-study'), { version: 'p0b-1', json: '{}' });
+  });
+  const mine = doc(workspace(OWNER), 'users', OWNER, 'research', 'vix-event-study');
+  await assertSucceeds(getDoc(mine));
+  await assertFails(setDoc(mine, { version: 'forged', json: '{}' }));
+  await assertFails(getDoc(doc(workspace(OTHER), 'users', OWNER, 'research', 'vix-event-study')));
+  await assertFails(getDoc(doc(env.unauthenticatedContext().firestore(), 'users', OWNER, 'research', 'vix-event-study')));
+});
