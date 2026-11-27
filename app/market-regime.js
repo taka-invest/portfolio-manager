@@ -105,6 +105,7 @@
           source = `現在値を取得できないため、研究データの最終日（${result.current.date}、FRED）の状態を表示しています`;
         }
         draw();
+        root.dispatchEvent(new CustomEvent('pm:research-ready'));
       } catch {
         loading = null;
         status('相場の状態の研究結果を読み込めませんでした。再度この画面を開いてください。');
@@ -112,13 +113,22 @@
     })();
     return loading;
   }
+  /** Compact summary for 今日やること (60 trading days, JPY): today's state, closest comparison, baseline. */
+  function summary(h = '60', c = 'jpy') {
+    if (!result || !state) return null;
+    const p = result.params;
+    const rows = result.levels.map(level => ({ level, c: result.groups[keyOf(state, level)]?.horizons?.[h]?.[c] }));
+    const pick = rows.find(x => x.c && x.c.episodes >= p.minEpisodes && x.level !== 'all');
+    const base = rows.find(x => x.level === 'all')?.c || null;
+    return { state, source, horizon: h, pick: pick || null, pickName: pick ? LEVEL_NAMES[pick.level] : null, base };
+  }
   function init() {
-    const maybe = () => { if (decodeURIComponent(root.location.hash.slice(1)) === 'market') load(); };
+    const maybe = () => { if (['market', 'today', 'allocation', 'rebalance', 'after', 'overview'].includes(decodeURIComponent(root.location.hash.slice(1)) || 'overview')) load(); };
     root.addEventListener('hashchange', maybe);
     maybe();
   }
 
-  const api = { classify, keyOf, html, load, init };
+  const api = { classify, keyOf, html, load, init, summary };
   if (typeof module === 'object' && module.exports) module.exports = api;
   else { root.PMMarketRegime = api; if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init(); }
 })(globalThis);

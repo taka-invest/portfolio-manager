@@ -329,3 +329,5 @@ body.light { color-scheme: light; }
 .pm-regime-now { font-size: 1.05em; margin: 4px 0; }
 .pm-regime-pick th, .pm-regime-pick td { font-weight: 700; background: rgba(99,102,241,.10); }
 .pm-regime-table th[scope="row"] { text-align: left; }
+.pm-today-research { margin-top: 12px; padding: 10px 12px; border-left: 3px solid var(--accent, #6366f1); background: rgba(99,102,241,.06); border-radius: 6px; }
+.pm-today-research p { margin: 4px 0; }

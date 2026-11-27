@@ -92,7 +92,41 @@
     return { text: g.title + '：' + g.orders.map(o => (o.side === 'sell' ? '売 ' : '買 ') + o.ticker + ' ' + o.shares + '株').join('・'), warn: false };
   }
 
-  function html(g) {
+  const pct = (x, d = 1) => x == null || !Number.isFinite(x) ? '—' : (x >= 0 ? '+' : '') + (x * 100).toFixed(d) + '%';
+
+  /**
+   * Reference lines from the research (never changes orders):
+   *  - regime: today's state and what followed the closest past state (60 days, JPY)
+   *  - vix:    the VIX>=30 study, shown when VIX is >= its threshold or a staged plan is running
+   */
+  function researchNote(regime, study, { staged = false } = {}) {
+    const lines = [];
+    if (regime && regime.state) {
+      const s = regime.state;
+      let line = `相場の参考：${s.trend}トレンド・変動 ${s.vol}（VIX ${Number(s.vix).toFixed(1)}）・${s.depth}（52週高値から ${pct(s.dd)}）。`;
+      const c = regime.pick?.c, b = regime.base;
+      if (c && b) {
+        const ci = c.medianCI95;
+        const vs = !ci ? '' : ci[0] > b.median ? '普段より高め' : ci[1] < b.median ? '普段より低め' : '普段と差があるとは言えない';
+        line += `過去の近い状態（${regime.pickName}）から${regime.horizon}営業日後（円建て）：中央値 ${pct(c.median)}`
+          + (ci ? `（95%区間 ${pct(ci[0])}〜${pct(ci[1])}、局面${c.episodes}回）` : '')
+          + `／全期間 ${pct(b.median)} → ${vs}。下位5%は ${pct(c.q05)}（全期間 ${pct(b.q05)}）。`;
+      }
+      lines.push(line);
+    }
+    const sm = study?.summary?.['120'];
+    const threshold = study?.params?.threshold ?? 30;
+    const inEvent = regime?.state && Number(regime.state.vix) >= threshold;
+    if (sm && (inEvent || staged)) {
+      const d2 = sm.S2?.jpy?.diffVsS1, d3 = sm.S3?.jpy?.diffVsS1;
+      const v = d => !d ? '' : d.meanCI95[1] < 0 ? '不利（差あり）' : d.meanCI95[0] > 0 ? '有利（差あり）' : '差があるとは言えない';
+      lines.push(`VIX≥${threshold}の局面の研究（過去${sm.events}回、120営業日後・円建て）：50/30/20の分割と翌日一括の差は平均 ${pct(d2?.mean)}（${v(d2)}）。`
+        + `VIX<20まで待つのは平均 ${pct(d3?.mean)}（${v(d3)}）。`);
+    }
+    return lines;
+  }
+
+  function html(g, research = []) {
     const step = (ok, text, href) => '<li class="pm-today-check" data-ok="' + ok + '"><span aria-hidden="true">' + (ok ? '✓' : '!') + '</span> ' +
       (href && !ok ? '<a href="' + href + '">' + esc(text) + '</a>' : esc(text)) + '</li>';
     let out = '<ol class="pm-today-checks">' + g.checks.map(c => step(c.ok, c.text, c.href)).join('') + '</ol>';
@@ -106,15 +140,29 @@
       if (g.total) out += '<p class="pm-muted pm-small">売却 約' + yen(g.total.sell) + '／購入 約' + yen(g.total.buy) + '／概算譲渡税 ' + yen(g.total.tax) + '／手数料 ' + yen(g.total.fees) + '</p>';
     }
     if (g.after.length) out += '<h4 class="pm-today-sub">約定した後</h4><ol class="pm-today-after">' + g.after.map(a => '<li>' + esc(a) + '</li>').join('') + '</ol>';
+    if (research.length) out += '<div class="pm-today-research pm-small"><h4 class="pm-today-sub">相場の参考（売買の株数・順番は変わりません）</h4>'
+      + research.map(r => '<p>' + esc(r) + '</p>').join('') + '<p class="pm-muted">過去の傾向であり、売買の推奨ではありません。<a href="#market">市場分析で詳しく →</a></p></div>';
     if (g.notes.length) out += '<ul class="pm-today-notes pm-small pm-muted">' + g.notes.map(n => '<li>' + esc(n) + '</li>').join('') + '</ul>';
     return out;
   }
 
+  const researchNow = staged => researchNote(root.PMMarketRegime?.summary?.() || null, root.PMResearchResults?.summary?.() || null, { staged });
+  let lastInput = null;
+
   function render(input) {
     if (typeof document === 'undefined') return null;
+    lastInput = input;
     const g = plan(input);
+    const staged = !!input.state?.stagedFunding;
+    const research = researchNow(staged);
     const host = document.getElementById('today-guide');
-    if (host) { host.innerHTML = html(g); host.dataset.mode = g.mode; }
+    if (host) { host.innerHTML = html(g, research); host.dataset.mode = g.mode; }
+    const stagedNote = document.getElementById('pm-staged-research');
+    if (stagedNote) {
+      const lines = researchNote(null, root.PMResearchResults?.summary?.() || null, { staged: true });
+      stagedNote.textContent = lines.length ? '参考（研究結果）：' + lines.join(' ') : '';
+      stagedNote.hidden = !lines.length;
+    }
     const mini = document.getElementById('today-mini');
     if (mini) {
       const s = summary(g);
@@ -124,7 +172,11 @@
     return g;
   }
 
-  const api = { plan, summary, html, render, STAGED_TICKERS };
+  const api = { plan, summary, html, render, researchNote, STAGED_TICKERS };
   if (typeof module === 'object' && module.exports) module.exports = api;
-  else root.PMTodayGuide = api;
+  else {
+    root.PMTodayGuide = api;
+    // Research loads after the page; show it as soon as it arrives.
+    root.addEventListener('pm:research-ready', () => { if (lastInput) render(lastInput); });
+  }
 })(globalThis);

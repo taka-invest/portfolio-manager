@@ -81,6 +81,7 @@
         if (!doc) return status('ログインすると研究結果を表示します。保存済みの結果がない場合は、手元で research-engine を実行して保存してください。');
         result = JSON.parse(doc.json);
         draw();
+        root.dispatchEvent(new CustomEvent('pm:research-ready'));
       } catch {
         loading = null;
         status('研究結果を読み込めませんでした。再度この画面を開いてください。');
@@ -89,12 +90,12 @@
     return loading;
   }
   function init() {
-    const maybe = () => { if (decodeURIComponent(root.location.hash.slice(1)) === 'market') load(); };
+    const maybe = () => { if (['market', 'today', 'allocation', 'rebalance', 'after', 'overview'].includes(decodeURIComponent(root.location.hash.slice(1)) || 'overview')) load(); };
     root.addEventListener('hashchange', maybe);
     maybe();
   }
 
-  const api = { html, verdict, load, init, NAMES };
+  const api = { html, verdict, load, init, NAMES, summary: () => result };
   if (typeof module === 'object' && module.exports) module.exports = api;
   else { root.PMResearchResults = api; if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init(); }
 })(globalThis);
