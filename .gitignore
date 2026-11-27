@@ -10,3 +10,8 @@ serviceAccount*.json
 firestore-debug.log
 firebase-debug.log
 ui-debug.log
+
+# Research data (personal use only; never commit: FRED/Cboe/ICE terms, public repo)
+/data/
+__pycache__/
+*.pyc
