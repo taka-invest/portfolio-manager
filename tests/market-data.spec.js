@@ -20,21 +20,23 @@ async function setup(page, { token, api }) {
   return hits;
 }
 
-test('signed in + API deployed: VIX/F&G via own API only, no proxy traffic', async ({ page }) => {
+test('signed in: F&G via own API (labelled unofficial), VIX no longer requested (no free source)', async ({ page }) => {
   const hits = await setup(page, { token: true, api: (route, url) => route.fulfill({ status: 200, json: url.searchParams.get('kind') === 'feargreed'
     ? { fear_and_greed: { score: 62 } } : { chart: { result: [{ meta: { regularMarketPrice: 18.4 }, indicators: { quote: [{ close: [] }] } }] } } }) });
   await page.goto('/portfolio_manager.html#market');
-  await expect(page.locator('#vix-value')).toHaveText('18.4');
   await expect(page.locator('#fg-value')).toHaveText('62');
+  await expect(page.locator('#fg-label')).toContainText('非公式・参考');
+  await expect(page.locator('#vix-value')).toHaveText('—');
+  await expect(page.locator('#vix-label')).toContainText('自動取得なし');
   await expect(page.locator('#pm-market-source')).toContainText('自前API');
   expect(hits.proxy).toEqual([]);
-  expect(hits.api.some(s => s.includes('symbol=%5EVIX'))).toBe(true);
+  expect(hits.api.some(s => /symbol=%5E(VIX|VXN)/.test(s))).toBe(false);
 });
 
 test('API failure: the value is reported as failed and no proxy is tried', async ({ page }) => {
   const hits = await setup(page, { token: true, api: route => route.fulfill({ status: 502, json: { error: 'upstream' } }) });
   await page.goto('/portfolio_manager.html#market');
-  await expect(page.locator('#vix-label')).toContainText('取得失敗');
+  await expect(page.locator('#fg-label')).toContainText('取得失敗');
   await page.evaluate(() => fetchTechnicals('ZZTOP'));
   expect(hits.proxy).toEqual([]);
 });
@@ -47,7 +49,7 @@ test('signed out: nothing is sent to third-party proxies (index or holdings)', a
       stagedFunding: null, plans: [], trades: [], watchlist: [], company: [], preferences: {} }));
   });
   await page.goto('/portfolio_manager.html#market');
-  await expect(page.locator('#vix-label')).toContainText('ログインが必要');
+  await expect(page.locator('#fg-label')).toContainText('ログインが必要');
   const result = await page.evaluate(() => fetchTechnicals('ZZTOP'));
   expect(result).toBeNull();
   expect(hits.proxy).toEqual([]);

@@ -1,6 +1,5 @@
-// Market data for the 市場分析 screen, fetched server-side so holdings tickers are
-// no longer sent to third-party CORS proxies. Returns a trimmed Yahoo-chart-compatible
-// shape so the existing UI parsing keeps working, plus source/time.
+// Market data for the 市場分析 screen: request validation and the Fear & Greed reader.
+// Charts/quotes come from ./providers.js (Finnhub + Massive free tiers; plan B).
 import { getJson } from '../sec-gateway.js';
 
 export const SYMBOL = /^\^?[A-Z0-9][A-Z0-9.=-]{0,11}$/;
@@ -24,27 +23,6 @@ export function marketParams(q = {}) {
   return { kind: 'chart', symbol, interval, range };
 }
 
-export async function yahooChart(p, fetchJson = getJson) {
-  const qs = p.period1 !== undefined
-    ? `period1=${p.period1}&period2=${p.period2}&interval=${p.interval}`
-    : `range=${p.range}&interval=${p.interval}`;
-  const raw = await fetchJson(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(p.symbol)}?${qs}`);
-  const r = raw?.chart?.result?.[0];
-  if (!r) { const e = new Error('no market data'); e.status = 404; throw e; }
-  return {
-    chart: { result: [{
-      meta: { symbol: r.meta?.symbol ?? p.symbol, currency: r.meta?.currency ?? null,
-        regularMarketPrice: r.meta?.regularMarketPrice ?? null, regularMarketTime: r.meta?.regularMarketTime ?? null },
-      timestamp: r.timestamp ?? [],
-      indicators: {
-        quote: [Object.fromEntries(['open', 'high', 'low', 'close', 'volume']
-          .filter(k => Array.isArray(r.indicators?.quote?.[0]?.[k])).map(k => [k, r.indicators.quote[0][k]]))],
-        ...(r.indicators?.adjclose ? { adjclose: [{ adjclose: r.indicators.adjclose[0]?.adjclose ?? [] }] } : {})
-      }
-    }] },
-    source: { provider: 'Yahoo Finance chart API（非公式）', retrievedAt: new Date().toISOString() }
-  };
-}
 
 export async function fearGreed(fetchJson = getJson) {
   const raw = await fetchJson('https://production.dataviz.cnn.io/index/fearandgreed/graphdata/');

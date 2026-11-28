@@ -1,6 +1,7 @@
 // Corrected company financials from SEC EDGAR companyfacts, plus the "マシャ式"
 // evaluation. Price is optional and always labelled with its source and time.
 import { getJson } from '../sec-gateway.js';
+import { finnhubQuote } from './providers.js';
 import { analyzeFacts } from './financials.js';
 import { evaluate } from './scoring.js';
 import { entrySignals, phaseOf } from './screen.js';
@@ -15,15 +16,11 @@ export async function resolveCik(ticker, fetchJson = getJson) {
   throw err;
 }
 
-/** Latest price from Yahoo Finance chart (unofficial; same source as the legacy app). */
+/** Latest price from Finnhub /quote (free, personal use; US listings are quoted in USD). */
 export async function latestPrice(ticker, fetchJson = getJson) {
   try {
-    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?range=1d&interval=1d`;
-    const meta = (await fetchJson(url))?.chart?.result?.[0]?.meta;
-    const price = meta?.regularMarketPrice;
-    if (!(typeof price === 'number' && price > 0) || meta.currency !== 'USD') return null;
-    return { price, currency: 'USD', asOf: meta.regularMarketTime ? new Date(meta.regularMarketTime * 1000).toISOString() : null,
-      source: 'Yahoo Finance chart API（非公式・旧アプリと同じ取得元）' };
+    const q = await finnhubQuote(ticker, { fetchJson });
+    return { price: q.price, currency: 'USD', asOf: new Date(q.at).toISOString(), source: 'Finnhub /quote' };
   } catch {
     return null; // price is optional; the model then reports "株価未取得"
   }

@@ -1901,6 +1901,12 @@ function renderResult(d, isNew = false) {
   <!-- 金融業警告 -->
   ${d.isFinancial ? renderFinancialWarning(d.ticker) : ''}
 
+  <!-- 2021年の株価がデータ範囲外（無料版は直近2年） -->
+  ${d.peakUnavailable && !d.isFinancial ? `
+  <div class="rounded-2xl p-4 border border-white/15 bg-white/5 text-sm" id="pm-peak-unavailable">
+    <span class="text-white/70 font-bold">ℹ️ 2021年の株価は取得できません</span>
+    <span class="text-white/50 ml-2">無料の株価データは直近2年分のため、マシャ塾の2021年基準の株価推定は表示しません（会社の業績データはSECの公式値のまま）。</span>
+  </div>` : ''}
   <!-- IPO後通知 -->
   ${d.isPostIpoNoPeak && !d.isFinancial ? `
   <div class="rounded-2xl p-4 border border-yellow-500/30 bg-yellow-500/5 text-sm">

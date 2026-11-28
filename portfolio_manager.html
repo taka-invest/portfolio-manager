@@ -1244,16 +1244,6 @@ function getEarningsDate(ticker) {
   return PMData.date(date) && date >= new Date().toISOString().slice(0, 10) ? date : null;
 }
 
-// ── Yahoo Finance 経由 VIX / VXN 取得（複数プロキシ自動フォールバック）──
-async function fetchVixQuote(symbol) {
-  const encoded = encodeURIComponent(symbol);
-  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encoded}?interval=1d&range=1d`;
-  const data = await PMMarketData.chart(url);
-  const price = data?.chart?.result?.[0]?.meta?.regularMarketPrice;
-  if (!price || isNaN(price) || price <= 0) throw new Error('データなし');
-  return parseFloat(price);
-}
-
 // ── 市場センチメント（F&G + VIX） ──────────────────
 function fgClass(v) {
   if (v >= 75) return 'fg-extreme-greed';
@@ -1297,7 +1287,7 @@ async function fetchSentiment() {
       if (fg > 0) {
         document.getElementById('fg-value').textContent = fg;
         document.getElementById('fg-value').className = `s-value ${fgClass(fg)}`;
-        document.getElementById('fg-label').textContent = fgText(fg);
+        document.getElementById('fg-label').textContent = fgText(fg) + '（CNN・非公式・参考）';
         document.getElementById('fg-label').style.color = '';
         localStorage.setItem('pm_fg', JSON.stringify({ v: fg, t: Date.now() }));
       } else throw new Error('no score');
@@ -1309,42 +1299,14 @@ async function fetchSentiment() {
     }
   }
 
-  // VIX / VXN — PMMarketData 経由（自前API優先）
-  const [vixResult, vxnResult] = await Promise.allSettled([
-    fetchVixQuote('^VIX'),
-    fetchVixQuote('^VXN'),
-  ]);
-
-  if (vixResult.status === 'fulfilled') {
-    const vix = vixResult.value;
-    document.getElementById('vix-value').textContent = vix.toFixed(1);
-    document.getElementById('vix-label').textContent = vixLabel(vix);
-    document.getElementById('vix-label').style.color = '';
-    localStorage.setItem('pm_vix', JSON.stringify({ v: vix, t: Date.now() }));
-    updateMarketSignal(null, vix);
-  } else {
-    document.getElementById('vix-value').textContent = '—';
-    document.getElementById('vix-label').textContent = '取得失敗' + (PMMarketData.lastError ? '（' + PMMarketData.lastError + '）' : '');
-    console.warn('VIX fetch error:', vixResult.reason);
-  }
-
-  if (vxnResult.status === 'fulfilled') {
-    const vxn = vxnResult.value;
-    document.getElementById('vxn-value').textContent = vxn.toFixed(1);
-    document.getElementById('vxn-label').textContent = vxnLabel(vxn);
-    document.getElementById('vxn-label').style.color = '';
-    localStorage.setItem('pm_vxn', JSON.stringify({ v: vxn, t: Date.now() }));
-    // VXN/VIX比率を表示
-    const vixNow = freshCache('pm_vix')?.v;
-    if (vixNow) {
-      const ratio = (vxn / vixNow).toFixed(2);
-      document.getElementById('vxn-ratio').textContent = ratio + 'x';
-      document.getElementById('vxn-ratio-wrap').style.display = 'block';
-    }
-  } else {
-    document.getElementById('vxn-value').textContent = '—';
-    document.getElementById('vxn-label').textContent = '取得失敗' + (PMMarketData.lastError ? '（' + PMMarketData.lastError + '）' : '');
-    console.warn('VXN fetch error:', vxnResult.reason);
+  // VIX / VXN: no free data source allows this use (docs/research/DATA_SOURCE_MIGRATION.md, plan B),
+  // so they are no longer fetched automatically. A value entered by hand (below) is still used.
+  for (const [key, id] of [['pm_vix', 'vix'], ['pm_vxn', 'vxn']]) {
+    const manual = freshCache(key);
+    document.getElementById(id + '-value').textContent = manual ? manual.v.toFixed(1) : '—';
+    document.getElementById(id + '-label').textContent = manual
+      ? (id === 'vix' ? vixLabel(manual.v) : vxnLabel(manual.v)) + '（手入力）'
+      : '自動取得なし（無料の取得元がないため。手入力は可）';
   }
 
   // 新しい値（1時間以内）だけでシグナル更新
@@ -1382,6 +1344,7 @@ function updateMarketSignal(fg, vix) {
     el.className = 'signal-box signal-wait';
     el.textContent = '⚪ 通常域 — 待機';
   }
+  if (!hasVix) el.textContent += '（参考：CNN F&Gのみ・非公式）';
   // F&G/VIX更新後にインデックス確度を再計算（補助指標として反映）
   updateCompositeSignal();
   ['SPY','QQQ'].forEach(sym => updateConfidenceUI(sym));
@@ -2190,6 +2153,7 @@ async function fetchSpyHistoricalReturn(startDateStr) {
   const period2 = Math.floor(Date.now() / 1000);
   const url = `https://query1.finance.yahoo.com/v8/finance/chart/%5EGSPC?period1=${period1}&period2=${period2}&interval=1mo`;
   const data = await PMMarketData.chart(url);
+  if (data?.chart?.result?.[0]?.meta?.truncated) throw new Error('基準日が2年より前のため、無料のデータでは計算できません');
   const closes = data.chart.result[0].indicators.quote[0].close.filter(v => v != null);
   if (closes.length < 2) throw new Error('データ不足');
   return (closes[closes.length - 1] - closes[0]) / closes[0] * 100;

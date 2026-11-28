@@ -80,8 +80,12 @@ test('chart: normalises Yahoo closes, drops nulls, prefers adjusted closes, vali
   assert.equal(n.adjusted, true);
   assert.equal(n.currency, 'USD');
   await assert.rejects(priceHistory('NVDA', '99y', async () => json), /invalid range/);
-  await assert.rejects(priceHistory('NVDA', '1y', async () => ({ chart: { result: [] } })), e => e.status === 404);
-  const ok = await priceHistory('NVDA', '1y', async url => { assert.match(url, /range=1y&interval=1d$/); return json; });
+  process.env.MASSIVE_API_KEY = process.env.MASSIVE_API_KEY || 'test-key';
+  await assert.rejects(priceHistory('NVDA', '1y', async () => ({ results: [] })), e => e.status === 404);
+  const t0 = Date.now() - 10 * 86400000;
+  const ok = await priceHistory('NVDA', '1y', async url => { assert.match(url, /^https:\/\/api\.massive\.com\/v2\/aggs\/ticker\/NVDA\/range\/1\/day\//);
+    return { results: [{ t: t0, o: 1, h: 2, l: 1, c: 1.5, v: 10 }, { t: t0 + 86400000, o: 1.5, h: 2, l: 1, c: 1.8, v: 10 }] }; });
   assert.equal(ok.points.length, 2);
-  assert.match(ok.source.provider, /Yahoo/);
+  assert.match(ok.source.provider, /Massive/);
+  assert.match(ok.source.note, /分割調整後/);
 });

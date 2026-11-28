@@ -43,7 +43,7 @@ test('stale VIX/F&G are not used for signals; failures and a missing key are nam
   await open(page, { storage: { pm_fg: old, pm_vix: JSON.stringify({ v: 45, t: NOW - 2 * 86400000 }) }, hash: '#market' });
   await expect(page.locator('#market-signal')).not.toContainText('購入シグナル');
   await expect(page.locator('#fg-label')).toContainText('取得失敗');
-  await expect(page.locator('#vix-label')).toContainText('取得失敗');
+  await expect(page.locator('#vix-label')).toContainText('自動取得なし');      // no free VIX source; stale manual value ignored
   await expect(page.locator('#spy-signal')).toContainText('Finnhub APIキー未設定');
   // A trade recorded now must not carry the 2-day-old values.
   expect(await page.evaluate(() => captureMarketSnapshot())).toEqual({ vix: null, fg: null, spyDrawdown: null });

@@ -11,6 +11,7 @@ import { getJson } from '../sec-gateway.js';
 import { legacyBase } from '../sec/legacy-adapter.js';
 import { earningsOutlook } from '../sec/estimates.js';
 import { latestGuidance } from '../sec/guidance.js';
+import { finnhubQuote } from '../sec/providers.js';
 const fetchJson = url => getJson(url);
 
 // ── 1. CIK取得 ───────────────────────────────────
@@ -465,45 +466,11 @@ function exitSignalEngine(trend) {
 
 // ── 4. Yahoo Finance 株価データ ─────────────────
 async function getMarketData(ticker) {
-  let currentPrice = null, marketCap = null, peak2021 = null, sharesOutstanding = null;
-
-  try {
-    // FIX: 2021 peak needs history back to Jan 2021 (range=5y no longer reaches it).
-    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=10y`;
-    const data = await fetchJson(url);
-    const meta   = data?.chart?.result?.[0]?.meta ?? {};
-    const quotes = data?.chart?.result?.[0]?.indicators?.quote?.[0] ?? {};
-    const timestamps = data?.chart?.result?.[0]?.timestamp ?? [];
-
-    currentPrice      = meta.regularMarketPrice ?? meta.chartPreviousClose;
-    sharesOutstanding = meta.sharesOutstanding ?? null;
-    marketCap         = meta.marketCap ?? null;
-
-    const highs = quotes.high ?? [];
-    let max21 = 0;
-    timestamps.forEach((ts, i) => {
-      const d = new Date(ts * 1000);
-      if (d.getFullYear() === 2021 && highs[i]) max21 = Math.max(max21, highs[i]);
-    });
-    peak2021 = max21 > 0 ? max21 : null;
-  } catch (e) {
-    console.error("Yahoo chart API error:", e.message);
-  }
-
-  if (!marketCap && YAHOO_CRUMB_APIS) {
-    try {
-      const url2 = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${ticker}`;
-      const data2 = await fetchJson(url2);
-      const q = data2?.quoteResponse?.result?.[0] ?? {};
-      if (!marketCap)         marketCap         = q.marketCap ?? null;
-      if (!currentPrice)      currentPrice      = q.regularMarketPrice ?? null;
-      if (!sharesOutstanding) sharesOutstanding = q.sharesOutstanding ?? null;
-    } catch (e) {
-      console.error("Yahoo quote API error:", e.message);
-    }
-  }
-
-  return { currentPrice, marketCap, peak2021, sharesOutstanding };
+  // Plan B (docs/research/DATA_SOURCE_MIGRATION.md): price from Finnhub /quote. The free
+  // daily history covers only 2 years, so the 2021 peak is not available (null, not 0).
+  let currentPrice = null;
+  try { currentPrice = (await finnhubQuote(ticker)).price; } catch { /* reported as 株価未取得 */ }
+  return { currentPrice, marketCap: null, peak2021: null, sharesOutstanding: null };
 }
 
 // ── 5a. マシャ原価率5段階評価 ────────────────────
@@ -983,7 +950,9 @@ export const handler = async (event) => {
       ? +(psRatio / (latestYoY / 100)).toFixed(2) : null;
 
     // ── IPO後企業フラグ（2021年ピークなし）─────────
-    const isPostIpoNoPeak = !mkt.peak2021 && calc.peak21 === null;
+    // Plan B: the 2021 price is outside the free 2-year history -> say so; do not call it "post-IPO".
+    const peakUnavailable = mkt.peak2021 === null;
+    const isPostIpoNoPeak = false;
 
     return {
       statusCode: 200,
@@ -991,7 +960,7 @@ export const handler = async (event) => {
       body: JSON.stringify({
         ticker, companyName: name, cik, filings, market: mkt,
         trend: fin.trend,
-        isFinancial, companyPhase, psRatio, psgScore, isPostIpoNoPeak,
+        isFinancial, companyPhase, psRatio, psgScore, isPostIpoNoPeak, peakUnavailable,
         analyst, judgment, exitSignal,
         // Reference only (next-quarter consensus, EPS surprises); not used by judgment.
         outlook: { ...(outlook ?? { unavailable: 'サーバーにFinnhubキーが未設定です' }), guidance },

@@ -14,6 +14,9 @@ const MAX_ENTRIES = 40;          // parsed JSON objects kept in memory
 const MAX_CACHE_BYTES = 40 * 1024 * 1024;
 const SEC_TTL_MS = 10 * 60_000;
 const OTHER_TTL_MS = 2 * 60_000;
+// Massive free tier: end-of-day bars, 5 calls/min -> one call per 12.5 s, bars kept 6 h.
+const MASSIVE_TTL_MS = 6 * 60 * 60_000;
+const MASSIVE_GAP_MS = 12_500;
 const SEC_GAP_MS = 550;
 const TIMEOUT_MS = 15_000;
 const MAX_RETRIES = 2;
@@ -23,12 +26,21 @@ const YAHOO_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36';
 
 const cache = new Map(); // url -> { expires, promise }  (Map keeps insertion order => LRU)
 let nextSecAt = 0;
+let nextMassiveAt = 0;
+export const isMassive = url => /^https:\/\/api\.massive\.com\//.test(url);
+const ttlOf = url => isSec(url) ? SEC_TTL_MS : isMassive(url) ? MASSIVE_TTL_MS : OTHER_TTL_MS;
 
 export const isSec = url => /^https:\/\/(?:data|www)\.sec\.gov\//.test(url);
 const isYahoo = url => /^https:\/\/query[12]\.finance\.yahoo\.com\//.test(url);
 // CNN's Fear & Greed endpoint rejects non-browser clients; same parity rationale as Yahoo.
 const isCnn = url => /^https:\/\/production\.dataviz\.cnn\.io\//.test(url);
 const sleepReal = ms => new Promise(r => setTimeout(r, ms));
+
+export async function massivePace(now = () => Date.now(), sleep = sleepReal) {
+  const start = Math.max(now(), nextMassiveAt);
+  nextMassiveAt = start + MASSIVE_GAP_MS;
+  if (start > now()) await sleep(start - now());
+}
 
 export async function secPace(now = () => Date.now(), sleep = sleepReal) {
   const start = Math.max(now(), nextSecAt);
@@ -62,6 +74,7 @@ async function request(url, kind, options, fetcher, sleep) {
   if (sec && !contactConfigured()) throw new Error('SEC_USER_AGENT is not configured.');
   for (let attempt = 0; ; attempt++) {
     if (sec) await secPace(undefined, sleep);
+    if (isMassive(url)) await massivePace(undefined, sleep);
     let response;
     try {
       response = await fetcher(url, {
@@ -100,7 +113,7 @@ function cached(url, kind, options, fetcher, sleep) {
   const key = kind + ':' + url;
   const old = cache.get(key);
   if (old && old.expires > Date.now()) { remember(key, old); return old.promise; }
-  const entry = { expires: Date.now() + (isSec(url) ? SEC_TTL_MS : OTHER_TTL_MS), size: 0 };
+  const entry = { expires: Date.now() + ttlOf(url), size: 0 };
   entry.promise = request(url, kind, options, fetcher, sleep).then(r => {
     entry.size = r.size;
     if (cache.get(key) === entry) evict();
@@ -121,4 +134,4 @@ export function getText(url, options = {}, fetcher = fetch, sleep = sleepReal) {
 export function cacheSizeForTest() { return cache.size; }
 export function cacheBytesForTest() { return cachedBytes(); }
 export const CACHE_LIMITS = { MAX_ENTRIES, MAX_CACHE_BYTES };
-export function clearForTest() { cache.clear(); nextSecAt = 0; }
+export function clearForTest() { cache.clear(); nextSecAt = 0; nextMassiveAt = 0; }

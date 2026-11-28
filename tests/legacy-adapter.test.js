@@ -48,5 +48,6 @@ test('legacy engine source: only the data extraction was replaced; FIX markers a
   assert.match(src, /legacyBase\(data\)/);
   assert.doesNotMatch(src, /function bestConcept|function dedupeByEnd/);   // old extraction removed
   assert.match(src, /const trend = baseTrend\.map/);                         // legacy derivation kept
-  assert.equal((src.match(/\/\/ FIX:/g) || []).length, 2);
+  // One FIX marker left: the 2021-peak fix went away with the Yahoo price history (plan B).
+  assert.equal((src.match(/\/\/ FIX:/g) || []).length, 1);
 });
