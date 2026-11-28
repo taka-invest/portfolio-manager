@@ -1,5 +1,6 @@
 // Normalised price history for the chart screen (replaces raw Yahoo passthrough).
 import { getJson } from '../sec-gateway.js';
+import { providerChart } from './providers.js';
 
 export const RANGES = { '1y': '1d', '5y': '1wk', '10y': '1mo' };
 
@@ -36,14 +37,16 @@ export function normalizeChart(json) {
 
 export async function priceHistory(ticker, range = '5y', fetchJson = getJson) {
   if (!Object.hasOwn(RANGES, range)) throw new Error('invalid range');
-  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?range=${range}&interval=${RANGES[range]}`;
-  const data = normalizeChart(await fetchJson(url));
+  const raw = await providerChart({ symbol: ticker, range, interval: RANGES[range] }, { fetchJson });
+  const meta = raw.chart.result[0].meta;
+  const data = normalizeChart(raw);
   if (!data || !data.points.length) {
     const err = new Error('no price data');
     err.status = 404;
     throw err;
   }
   return { ticker, range, interval: RANGES[range], ...data,
-    source: { provider: 'Yahoo Finance chart API（非公式）', retrievedAt: new Date().toISOString(),
-      note: data.adjusted ? '分割・配当調整後の終値' : '終値（調整なし）' } };
+    truncated: meta.truncated, historyFrom: meta.historyFrom,
+    source: { provider: meta.source, retrievedAt: new Date().toISOString(),
+      note: '分割調整後の終値（配当調整なし）' + (meta.truncated ? `。無料版のため ${meta.historyFrom} 以降のみ` : '') } };
 }

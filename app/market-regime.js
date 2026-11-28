@@ -82,11 +82,12 @@
     const md = root.PMMarketData;
     if (!md) return null;
     try {
-      const [ndx, vix] = await Promise.all([
-        md.chart('https://query1.finance.yahoo.com/v8/finance/chart/%5ENDX?range=2y&interval=1d'),
-        md.chart('https://query1.finance.yahoo.com/v8/finance/chart/%5EVIX?range=5d&interval=1d')]);
+      // NASDAQ-100 daily closes (own API -> Massive I:NDX, 2 years). VIX has no free source:
+      // a value entered by hand on the market screen within the last hour is used if present.
+      const ndx = await md.chart('https://query1.finance.yahoo.com/v8/finance/chart/%5ENDX?range=2y&interval=1d');
       const closes = ndx?.chart?.result?.[0]?.indicators?.quote?.[0]?.close || [];
-      const v = (vix?.chart?.result?.[0]?.indicators?.quote?.[0]?.close || []).filter(Number.isFinite).pop();
+      let v = null;
+      try { const m = JSON.parse(localStorage.getItem('pm_vix')); if (m && Date.now() - m.t < 3600000) v = m.v; } catch { /* none */ }
       const ts = (ndx?.chart?.result?.[0]?.timestamp || []).filter(Number.isFinite).pop();
       const s = classify(closes, Number.isFinite(v) ? v : null, p);
       return s ? { state: s, at: ts ? new Date(ts * 1000) : null } : null;
@@ -105,7 +106,8 @@
         const live = await liveState(result.params);
         if (live) {
           state = live.state;
-          source = '判定に使った現在値：自前API（NASDAQ-100 日足・VIX）' + (live.at ? '・' + live.at.toLocaleDateString('ja-JP') + 'の終値まで' : '');
+          source = '判定に使った現在値：自前API（NASDAQ-100 日足）' + (live.at ? '・' + live.at.toLocaleDateString('ja-JP') + 'の終値まで' : '')
+            + (Number.isFinite(state.vix) ? '・VIXは手入力の値' : '');
         } else {
           state = result.current;
           source = `現在値を取得できないため、研究データの最終日（${result.current.date}、FRED）の状態を表示しています`;

@@ -24,7 +24,8 @@
   async function get(apiPath) {
     const out = await root.PMApi.call(apiPath, { kind: '市場データ' });
     if (out.data) { note(); return out.data; }
-    root.PMMarketData.lastError = out.code === 'login' ? 'ログインが必要' : out.code === 'network' ? '通信エラー' : '取得元エラー';
+    root.PMMarketData.lastError = out.code === 'login' ? 'ログインが必要' : out.code === 'network' ? '通信エラー'
+      : out.code === 'http-404' ? '提供元なし' : '取得元エラー';
     throw new Error(out.error || 'market data unavailable');
   }
 

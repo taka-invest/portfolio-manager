@@ -50,7 +50,7 @@ test('legacy analyze no longer calls the Yahoo endpoints that need a crumb', () 
   const src = readFileSync(join(base, 'functions/src/legacy/analyze.js'), 'utf8');
   assert.match(src, /const YAHOO_CRUMB_APIS = false;/);
   assert.match(src, /if \(!YAHOO_CRUMB_APIS\) throw/);
-  assert.match(src, /if \(!marketCap && YAHOO_CRUMB_APIS\)/);
+  assert.doesNotMatch(src, /v7\/finance\/quote/);           // the whole Yahoo price path is gone (plan B)
 });
 
 test('screener page sends one batch at a time to the single-instance backend', () => {

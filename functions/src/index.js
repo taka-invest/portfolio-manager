@@ -13,7 +13,8 @@ import { ticker, tickers } from './input.js';
 import { companyFinancials } from './sec/company.js';
 import { screenTickers } from './sec/screen.js';
 import { priceHistory, RANGES } from './sec/chart.js';
-import { marketParams, yahooChart, fearGreed } from './sec/market.js';
+import { marketParams, fearGreed } from './sec/market.js';
+import { providerChart } from './sec/providers.js';
 
 initializeApp();
 setGlobalOptions({
@@ -154,8 +155,9 @@ export const marketApi = secure('market', {
   },
   async run(p) {
     try {
-      return { statusCode: 200, body: p.kind === 'feargreed' ? await fearGreed() : await yahooChart(p) };
+      return { statusCode: 200, body: p.kind === 'feargreed' ? await fearGreed() : await providerChart(p) };
     } catch (err) {
+      if (err.code === 'no-source') return { statusCode: 404, body: { error: 'No free data source', code: 'no-source' } };
       if (err.status === 404) return { statusCode: 404, body: { error: 'No market data' } };
       throw err;
     }
